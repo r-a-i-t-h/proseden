@@ -6,7 +6,7 @@ import {
   canRead,
   canReadArtefact,
 } from "../access/permissions.js";
-import { negotiateFormat } from "../render/format.js";
+import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
   renderArtefactBodyHtml,
   renderHtmlPage,
@@ -76,7 +76,7 @@ worldRoutes.get("/n/:id", (c) => {
     );
   }
 
-  const detail = c.req.query("detail") ?? undefined;
+  const detail = queryDetailName(c);
   const exits = world.getExits(id);
   const artefacts = world.artefactsAt(id);
   const assetBase = c.get("assetBase");
@@ -120,7 +120,7 @@ worldRoutes.get("/a/:id", (c) => {
     );
   }
 
-  const detail = c.req.query("detail") ?? undefined;
+  const detail = queryDetailName(c);
   const assetBase = c.get("assetBase");
   const collected = !!user?.inventory.some((i) => i.artefactId === id);
 

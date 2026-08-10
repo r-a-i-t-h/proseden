@@ -37,7 +37,7 @@ Seed login: **gardener** / **garden**
 curl -s -H 'Accept: text/plain' http://127.0.0.1:8787/n/1
 
 # Examine a detail
-curl -s -H 'Accept: text/plain' 'http://127.0.0.1:8787/n/1?detail=card'
+curl -s -H 'Accept: text/plain' 'http://127.0.0.1:8787/n/1?card'
 
 # Artefact
 curl -s -H 'Accept: text/plain' http://127.0.0.1:8787/a/1
@@ -65,7 +65,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/n/:id` | Node; `?detail=` examines a detail |
+| `GET` | `/n/:id` | Node; `?<name>` examines a detail (e.g. `?card`) |
 | `GET` | `/a/:id` | Artefact |
 | `GET` | `/inv` | Inventory (auth) |
 | `POST` | `/auth/register` `/auth/login` `/auth/logout` | Session cookie + optional JSON token |

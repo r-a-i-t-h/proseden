@@ -137,8 +137,9 @@ A very simple authentication scheme should be used.
 
 ## v1 HTTP model (implemented)
 
-Each `GET` delivers a node (`/n/:id`) or artefact (`/a/:id`). A `detail`
-querystring examines a named closer description.
+Each `GET` delivers a node (`/n/:id`) or artefact (`/a/:id`). A querystring
+key that is the detail name examines that closer description (e.g. `?card`).
+Reserved keys such as `format` are not treated as detail names.
 
 If the request asks for HTML, the description is wrapped in a page with CSS;
 artefacts and destinations are hyperlinked. If it asks for text (`Accept:

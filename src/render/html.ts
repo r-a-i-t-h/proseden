@@ -165,7 +165,7 @@ export function renderNodeBodyHtml(opts: {
     .sort()
     .map(
       (name) =>
-        `<li><a href="${base}/n/${node.id}?detail=${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
+        `<li><a href="${base}/n/${node.id}?${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
     )
     .join("");
 
@@ -209,7 +209,7 @@ export function renderArtefactBodyHtml(opts: {
     .sort()
     .map(
       (name) =>
-        `<li><a href="${base}/a/${artefact.id}?detail=${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
+        `<li><a href="${base}/a/${artefact.id}?${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
     )
     .join("");
 

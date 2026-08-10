@@ -26,7 +26,7 @@ export function renderNodeText(opts: {
     if (detailNames.length) {
       lines.push("Details:");
       for (const name of detailNames) {
-        lines.push(`  - ${name}  ${base}/n/${node.id}?detail=${encodeURIComponent(name)}`);
+        lines.push(`  - ${name}  ${base}/n/${node.id}?${encodeURIComponent(name)}`);
       }
       lines.push("");
     }
@@ -80,7 +80,7 @@ export function renderArtefactText(opts: {
       lines.push("Details:");
       for (const name of detailNames) {
         lines.push(
-          `  - ${name}  ${base}/a/${artefact.id}?detail=${encodeURIComponent(name)}`,
+          `  - ${name}  ${base}/a/${artefact.id}?${encodeURIComponent(name)}`,
         );
       }
     }
