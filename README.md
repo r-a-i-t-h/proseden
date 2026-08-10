@@ -2,7 +2,7 @@
 
 A prose-driven textual world served over HTTP. Scenes and artefacts are plain descriptions with optional closer details. Public scenes are open to anyone; private scenes and edits require authentication.
 
-See [SPEC.md](SPEC.md) for the product vision and [NAVIGATION.md](NAVIGATION.md) for teleport vs exit navigation, entrance groups, and access rules. This README covers the v1 implementation.
+See [SPEC.md](SPEC.md) for the product vision, [NAVIGATION.md](NAVIGATION.md) for teleport vs exit navigation, and [MULTI_INSTANCE.md](MULTI_INSTANCE.md) for hosting several worlds under one domain. This README covers the v1 implementation.
 
 ## Quick start
 
@@ -24,15 +24,25 @@ Environment:
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` | `8787` | Listen port |
-| `PROSEDEN_DATA` | `./data` | Live world files (created from `seed/` on first boot) |
+| `PROSEDEN_DATA` | `./data` | Live world files (created from `seed/` on first boot); use a distinct directory per instance |
 | `PROSEDEN_SEED` | `./seed` | Seed copied when `data/meta.json` is missing |
-| `PROSEDEN_BASE_PATH` | _(empty)_ | URL prefix for subdirectory deploy, e.g. `proseden` |
+| `PROSEDEN_BASE_PATH` | _(empty)_ | URL prefix for subdirectory deploy, e.g. `proseden` or `worlds/alpha` |
 | `PROSEDEN_MANAGERS` | _(empty)_ | Comma-separated usernames granted `manager` on boot |
 
 Seed login: **gardener** / **garden**
 
 Demo invite: **visitor** / **visit** can read the Private Study (`/s/3`) via a scene grant.
 
+### Subdirectory / multiple copies
+
+See [MULTI_INSTANCE.md](MULTI_INSTANCE.md) for reverse-proxy examples, cookie isolation, and a checklist. Short version:
+
+```bash
+PROSEDEN_BASE_PATH=garden PROSEDEN_DATA=./data-garden PORT=8787 npm start
+PROSEDEN_BASE_PATH=attic  PROSEDEN_DATA=./data-attic  PORT=8788 npm start
+```
+
+Proxy `/garden/` and `/attic/` to those processes **without stripping the prefix**.
 ## Playing with curl
 
 ```bash

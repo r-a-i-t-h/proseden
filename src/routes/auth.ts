@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { deleteCookie, setCookie } from "hono/cookie";
 import { hashPassword, verifyPassword } from "../auth/password.js";
-import { sessionCookieName } from "../middleware/auth.js";
 import { negotiateFormat } from "../render/format.js";
 import { renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
@@ -34,7 +33,8 @@ authRoutes.post("/register", async (c) => {
   const { hash, salt } = await hashPassword(body.password);
   const user = await world.createUser(body.username, hash, salt);
   const session = sessions.create(user.username);
-  setCookie(c, sessionCookieName, session.token, {
+  const cookieName = c.get("sessionCookieName");
+  setCookie(c, cookieName, session.token, {
     httpOnly: true,
     sameSite: "Lax",
     path: c.get("assetBase") || "/",
@@ -59,7 +59,8 @@ authRoutes.post("/login", async (c) => {
     return respond(c, 401, "Login", "Invalid username or password.");
   }
   const session = sessions.create(user.username);
-  setCookie(c, sessionCookieName, session.token, {
+  const cookieName = c.get("sessionCookieName");
+  setCookie(c, cookieName, session.token, {
     httpOnly: true,
     sameSite: "Lax",
     path: c.get("assetBase") || "/",
@@ -73,11 +74,12 @@ authRoutes.post("/login", async (c) => {
 
 authRoutes.post("/logout", async (c) => {
   const sessions = c.get("sessions");
+  const cookieName = c.get("sessionCookieName");
   const bearer = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
   const cookieHeader = c.req.header("cookie") ?? "";
-  const match = cookieHeader.match(new RegExp(`${sessionCookieName}=([^;]+)`));
+  const match = cookieHeader.match(new RegExp(`${cookieName}=([^;]+)`));
   sessions.destroy(bearer ?? match?.[1]);
-  deleteCookie(c, sessionCookieName, { path: c.get("assetBase") || "/" });
+  deleteCookie(c, cookieName, { path: c.get("assetBase") || "/" });
 
   if (wantsJson(c)) return c.json({ ok: true });
   return c.redirect(`${c.get("assetBase")}/`);

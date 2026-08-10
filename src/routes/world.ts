@@ -893,7 +893,7 @@ worldRoutes.get("/s/:id/history", async (c) => {
     ? `<ul class="link-list">${log
         .map((e) => {
           const link = e.versionId
-            ? ` <a href="${assetBase}/s/${id}/history/${encodeURIComponent(e.versionId)}">view</a>`
+            ? ` <a href="s/${id}/history/${encodeURIComponent(e.versionId)}">view</a>`
             : "";
           return `<li>${escapeHtml(e.at)} · ${escapeHtml(e.by)} · ${escapeHtml(e.fields.join(", ") || "—")}${e.retained ? " · retained" : ""}${link}</li>`;
         })
@@ -903,7 +903,7 @@ worldRoutes.get("/s/:id/history", async (c) => {
     c,
     200,
     `History · Scene ${id}`,
-    `<p class="crumb"><a href="${assetBase}/s/${id}">← Scene ${id}</a></p><h1>History</h1>${htmlList}`,
+    `<p class="crumb"><a href="s/${id}">← Scene ${id}</a></p><h1>History</h1>${htmlList}`,
     renderMessageText(`History · Scene ${id}`, lines),
     {
       kind: "scene",
@@ -934,7 +934,7 @@ worldRoutes.get("/s/:id/history/:version", async (c) => {
     c,
     200,
     `Snapshot ${versionId}`,
-    `<p class="crumb"><a href="${assetBase}/s/${id}/history">← History</a></p>
+    `<p class="crumb"><a href="s/${id}/history">← History</a></p>
       <h1>Snapshot <span class="sub">${escapeHtml(versionId)}</span></h1>
       <p class="meta">${escapeHtml(snap.title ?? `Scene ${id}`)}</p>
       <div class="desc">${snap.body
@@ -943,7 +943,7 @@ worldRoutes.get("/s/:id/history/:version", async (c) => {
         .join("")}</div>
       ${
         manage
-          ? `<form method="post" action="${assetBase}/s/${id}/history/${encodeURIComponent(versionId)}/restore" class="stack"><button type="submit">Restore this version</button></form>`
+          ? `<form method="post" action="s/${id}/history/${encodeURIComponent(versionId)}/restore" class="stack"><button type="submit">Restore this version</button></form>`
           : ""
       }`,
     renderMessageText(
@@ -998,7 +998,7 @@ worldRoutes.get("/a/:id/history", async (c) => {
     c,
     200,
     `History · Artefact ${id}`,
-    `<p class="crumb"><a href="${assetBase}/a/${id}">← Artefact ${id}</a></p><h1>History</h1><pre>${escapeHtml(lines)}</pre>`,
+    `<p class="crumb"><a href="a/${id}">← Artefact ${id}</a></p><h1>History</h1><pre>${escapeHtml(lines)}</pre>`,
     renderMessageText(`History · Artefact ${id}`, lines),
   );
 });
@@ -1024,7 +1024,7 @@ worldRoutes.get("/a/:id/history/:version", async (c) => {
     c,
     200,
     `Snapshot ${versionId}`,
-    `<p class="crumb"><a href="${assetBase}/a/${id}/history">← History</a></p>
+    `<p class="crumb"><a href="a/${id}/history">← History</a></p>
       <h1>Snapshot <span class="sub">${escapeHtml(versionId)}</span></h1>
       <div class="desc">${snap.body
         .split(/\n{2,}/)
@@ -1032,7 +1032,7 @@ worldRoutes.get("/a/:id/history/:version", async (c) => {
         .join("")}</div>
       ${
         canRestore
-          ? `<form method="post" action="${assetBase}/a/${id}/history/${encodeURIComponent(versionId)}/restore" class="stack"><button type="submit">Restore this version</button></form>`
+          ? `<form method="post" action="a/${id}/history/${encodeURIComponent(versionId)}/restore" class="stack"><button type="submit">Restore this version</button></form>`
           : ""
       }`,
     renderMessageText(`Snapshot ${versionId}`, snap.body),
