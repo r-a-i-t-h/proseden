@@ -858,7 +858,37 @@ worldRoutes.get("/staff", (c) => {
     c,
     200,
     "Staff",
-    `<h1>Staff</h1>${rows ? `<ul class="link-list">${rows}</ul>` : `<p class="muted">No staff roles assigned.</p>`}`,
+    `<h1>Staff</h1>
+      ${rows ? `<ul class="link-list">${rows}</ul>` : `<p class="muted">No staff roles assigned.</p>`}
+      <h2>Assign staff role</h2>
+      <form method="post" action="staff/" class="stack" id="staff-form">
+        <label>Username <input name="username" required /></label>
+        <label>Roles (comma: moderator, organiser, manager) <input name="roles" placeholder="moderator" /></label>
+        <button type="submit">Save roles</button>
+      </form>
+      <script>
+        (function () {
+          var form = document.getElementById("staff-form");
+          if (!form) return;
+          form.addEventListener("submit", function (ev) {
+            ev.preventDefault();
+            var username = form.querySelector('input[name="username"]').value.trim();
+            var roles = form.querySelector('input[name="roles"]').value;
+            if (!username) return;
+            form.action = "staff/" + encodeURIComponent(username);
+            var body = new URLSearchParams();
+            body.set("roles", roles);
+            fetch(form.action, {
+              method: "POST",
+              headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+              body: body,
+            }).then(function (r) {
+              if (r.ok) window.location.reload();
+              else r.json().then(function (err) { alert(err.error || "Failed"); });
+            });
+          });
+        })();
+      </script>`,
     renderMessageText("Staff", JSON.stringify(world.staff.roles, null, 2)),
   );
 });
@@ -885,7 +915,7 @@ async function setStaff(c: Context) {
   try {
     const staff = await world.setStaffRoles(username, roles);
     if (wantsJson(c)) return c.json({ username, roles: staff.roles[username] ?? [] });
-    return c.redirect(`${c.get("assetBase")}/`);
+    return c.redirect(`${c.get("assetBase")}/staff`);
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Could not set roles");
   }

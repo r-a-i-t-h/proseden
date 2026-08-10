@@ -440,42 +440,6 @@ function manageSidebar(
     );
   }
 
-  if (isManager) {
-    sections.push(
-      manageSection(
-        "Assign staff role",
-        `<form method="post" action="staff/" class="stack" id="staff-form">
-      <label>Username <input name="username" required /></label>
-      <label>Roles (comma: moderator, organiser, manager) <input name="roles" placeholder="moderator" /></label>
-      <button type="submit">Save roles</button>
-    </form>
-    <script>
-      (function () {
-        var form = document.getElementById("staff-form");
-        if (!form) return;
-        form.addEventListener("submit", function (ev) {
-          ev.preventDefault();
-          var username = form.querySelector('input[name="username"]').value.trim();
-          var roles = form.querySelector('input[name="roles"]').value;
-          if (!username) return;
-          form.action = "staff/" + encodeURIComponent(username);
-          var body = new URLSearchParams();
-          body.set("roles", roles);
-          fetch(form.action, {
-            method: "POST",
-            headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-            body: body,
-          }).then(function (r) {
-            if (r.ok) window.location.reload();
-            else r.json().then(function (err) { alert(err.error || "Failed"); });
-          });
-        });
-      })();
-    </script>`,
-      ),
-    );
-  }
-
   sections.push(`<p class="muted"><a href="inv">Open inventory</a></p>`);
 
   return `<aside class="manage" id="manage-sidebar">${sections.join("\n")}</aside>`;
