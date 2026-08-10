@@ -78,6 +78,11 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `POST` | `/s/:id/exits` | Add directed exit (edit) |
 | `GET`/`PUT`/`POST` | `/s/:id/access` | Scene grants/denies (manage) |
 | `GET`/`PUT`/`POST` | `/u/:username/access` | User-level share-all (self or manager) |
+| `POST` | `/g` | Create group (auth) |
+| `GET`/`PUT`/`POST` | `/g/:id` | Group details / update (manage) |
+| `GET`/`PUT`/`POST` | `/g/:id/access` | Group grants/denies |
+| `POST` | `/g/:id/scenes` | Add scene to group |
+| `POST` | `/s/:id/group` | Assign/clear scene group |
 | `POST` | `/a` | Create artefact (auth, edit rights on home) |
 | `PUT`/`POST` | `/a/:id` | Update artefact |
 | `POST` | `/a/:id/collect` | Collect (inventory link) |
@@ -90,7 +95,10 @@ On boot the server loads `data/` into memory and write-throughs on every mutatio
 ```
 data/
   meta.json
+  staff.json
   users/<username>.json
+  groups/<id>.json
+  entrance-groups/<id>.json
   scenes/<id>.md
   scenes/<id>.exits.json
   artefacts/<id>.md
@@ -102,4 +110,4 @@ Prose files use YAML frontmatter plus `## detail:<slug>` sections.
 
 ## Deferred (later phases)
 
-Groups, public junctions, entrance-group teleport rules, moderator/organiser/manager roles, and historical snapshot browsing. Access helpers already consult group/role hooks so these can be enabled without rewiring callers.
+Public junctions, entrance-group teleport rules, moderator/organiser/manager roles, and historical snapshot browsing.

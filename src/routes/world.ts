@@ -5,8 +5,10 @@ import {
   canEdit,
   canEditArtefact,
   canManage,
+  canManageGroup,
   canRead,
   canReadArtefact,
+  canReadGroup,
 } from "../access/permissions.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
@@ -65,6 +67,12 @@ worldRoutes.get("/s/:id", (c) => {
   const accessSummary = manage
     ? formatAccessSummary(scene.grants, scene.denies)
     : undefined;
+  const groups = user
+    ? world
+        .listGroups()
+        .filter((g) => canManageGroup(user, g, world))
+        .map((g) => ({ id: g.id, title: g.title }))
+    : [];
 
   return page(
     c,
@@ -79,6 +87,7 @@ worldRoutes.get("/s/:id", (c) => {
       canManage: manage,
       userGrants: user?.grants,
       userDenies: user?.denies,
+      groups,
     },
   );
 });
@@ -332,6 +341,179 @@ function canManageUserAccess(
   if (user.username === username) return true;
   return world.rolesFor(user.username).includes("manager");
 }
+
+// --- groups ---
+
+worldRoutes.post("/g", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const body = await readBody(c);
+  const title = String(body.title ?? "").trim();
+  if (!title) return apiError(c, 400, "Title is required");
+  const access = parseAccessPayload(body);
+  const group = await world.createGroup({
+    owner: user.username,
+    title,
+    grants: access.grants ?? [],
+    denies: access.denies ?? [],
+  });
+  if (wantsJson(c)) return c.json(group, 201);
+  return c.redirect(`${c.get("assetBase")}/g/${group.id}`);
+});
+
+worldRoutes.get("/g/:id", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  const id = String(c.req.param("id") ?? "");
+  const group = world.getGroup(id);
+  if (!group) return apiError(c, 404, "Group not found");
+  if (!canReadGroup(user, group, world)) {
+    return apiError(c, user ? 403 : 401, "Not allowed to view this group");
+  }
+  if (wantsJson(c)) return c.json(group);
+  const summary = [
+    `title: ${group.title}`,
+    `owner: ${group.owner}`,
+    `scenes: ${group.sceneIds.join(", ") || "(none)"}`,
+    "",
+    formatAccessSummary(group.grants, group.denies),
+  ].join("\n");
+  return page(
+    c,
+    200,
+    group.title,
+    renderMessageBodyHtml(group.title, summary.replace(/\n/g, "<br />")),
+    renderMessageText(`Group ${group.id}`, summary),
+    {
+      kind: "home",
+      userGrants: user?.grants,
+      userDenies: user?.denies,
+    },
+  );
+});
+
+worldRoutes.put("/g/:id", async (c) => updateGroup(c));
+worldRoutes.post("/g/:id", async (c) => updateGroup(c));
+
+async function updateGroup(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = String(c.req.param("id") ?? "");
+  const group = world.getGroup(id);
+  if (!group) return apiError(c, 404, "Group not found");
+  if (!canManageGroup(user, group, world)) return apiError(c, 403, "Manage rights required");
+
+  const body = await readBody(c);
+  const access = parseAccessPayload(body);
+  const updated = await world.updateGroup(id, {
+    title: body.title !== undefined ? String(body.title).trim() || group.title : group.title,
+    grants: access.grants,
+    denies: access.denies,
+  });
+  if (wantsJson(c)) return c.json(updated);
+  return c.redirect(`${c.get("assetBase")}/g/${id}`);
+}
+
+worldRoutes.get("/g/:id/access", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  const id = String(c.req.param("id") ?? "");
+  const group = world.getGroup(id);
+  if (!group) return apiError(c, 404, "Group not found");
+  if (!canManageGroup(user, group, world)) {
+    return apiError(c, user ? 403 : 401, "Manage rights required");
+  }
+  const payload = { grants: group.grants, denies: group.denies };
+  if (wantsJson(c)) return c.json(payload);
+  return c.text(
+    renderMessageText(`Group ${id} access`, formatAccessSummary(payload.grants, payload.denies)),
+  );
+});
+
+worldRoutes.put("/g/:id/access", async (c) => updateGroupAccess(c));
+worldRoutes.post("/g/:id/access", async (c) => updateGroupAccess(c));
+
+async function updateGroupAccess(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = String(c.req.param("id") ?? "");
+  const group = world.getGroup(id);
+  if (!group) return apiError(c, 404, "Group not found");
+  if (!canManageGroup(user, group, world)) return apiError(c, 403, "Manage rights required");
+  const body = await readBody(c);
+  try {
+    const patch = parseAccessPayload(body);
+    if (patch.grants === undefined && patch.denies === undefined) {
+      return apiError(c, 400, "grants and/or denies required");
+    }
+    const updated = await world.updateGroupAccess(id, patch);
+    if (wantsJson(c)) return c.json({ grants: updated.grants, denies: updated.denies });
+    return c.redirect(`${c.get("assetBase")}/g/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Invalid access payload");
+  }
+}
+
+worldRoutes.post("/g/:id/scenes", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = String(c.req.param("id") ?? "");
+  const group = world.getGroup(id);
+  if (!group) return apiError(c, 404, "Group not found");
+  if (!canManageGroup(user, group, world)) return apiError(c, 403, "Manage rights required");
+
+  const body = await readBody(c);
+  const sceneId = Number(body.sceneId);
+  if (!Number.isFinite(sceneId)) return apiError(c, 400, "sceneId is required");
+  const scene = world.getScene(sceneId);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canManage(user, scene, world)) {
+    return apiError(c, 403, "Manage rights required on the scene");
+  }
+
+  try {
+    const updated = await world.setSceneGroup(sceneId, id);
+    if (wantsJson(c)) return c.json({ group: world.getGroup(id), scene: updated });
+    return c.redirect(`${c.get("assetBase")}/s/${sceneId}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not assign scene");
+  }
+});
+
+worldRoutes.post("/s/:id/group", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const sceneId = Number(c.req.param("id"));
+  const scene = world.getScene(sceneId);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canManage(user, scene, world)) return apiError(c, 403, "Manage rights required");
+
+  const body = await readBody(c);
+  const raw = body.groupId;
+  const groupId =
+    raw === undefined || raw === null || raw === "" || raw === "none" ? null : String(raw);
+
+  if (groupId) {
+    const group = world.getGroup(groupId);
+    if (!group) return apiError(c, 404, "Group not found");
+    if (!canManageGroup(user, group, world)) {
+      return apiError(c, 403, "Manage rights required on the group");
+    }
+  }
+
+  try {
+    const updated = await world.setSceneGroup(sceneId, groupId);
+    if (wantsJson(c)) return c.json(updated);
+    return c.redirect(`${c.get("assetBase")}/s/${sceneId}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not set group");
+  }
+});
 
 worldRoutes.post("/s/:id/exits", async (c) => {
   const world = c.get("world");

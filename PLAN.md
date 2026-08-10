@@ -67,7 +67,7 @@ flowchart TD
 - Routes + HTML sidebar panels for scene access; text mode shows access summary only to managers
 - Seed: keep Threshold public; Private Study demonstrates invite (visitor read grant)
 
-### Phase 3 — Groups
+### Phase 3 — Groups ✅
 
 - On disk: `data/groups/<id>.json` `{ id, owner, title, sceneIds[], grants, denies, createdAt }`
 - Scene `groupId` set exclusively (clear old group membership on move)

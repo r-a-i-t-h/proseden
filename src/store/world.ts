@@ -218,6 +218,92 @@ export class WorldStore implements AccessWorld {
     return updated;
   }
 
+  async createGroup(input: {
+    owner: string;
+    title: string;
+    grants?: Grant[];
+    denies?: Deny[];
+  }): Promise<GroupRecord> {
+    const id = String(this.meta.nextGroupId ?? 1);
+    this.meta.nextGroupId = (this.meta.nextGroupId ?? 1) + 1;
+    const group: GroupRecord = {
+      id,
+      owner: input.owner,
+      title: input.title,
+      sceneIds: [],
+      grants: input.grants ?? [],
+      denies: input.denies ?? [],
+      createdAt: nowIso(),
+    };
+    await this.saveGroup(group);
+    await this.saveMeta();
+    return group;
+  }
+
+  async updateGroup(
+    id: string,
+    patch: Partial<Pick<GroupRecord, "title" | "grants" | "denies">>,
+  ): Promise<GroupRecord> {
+    const existing = this.groups.get(id);
+    if (!existing) throw new Error("Group not found");
+    const updated: GroupRecord = {
+      ...existing,
+      ...patch,
+      grants: patch.grants ?? existing.grants,
+      denies: patch.denies ?? existing.denies,
+    };
+    await this.saveGroup(updated);
+    return updated;
+  }
+
+  async updateGroupAccess(
+    id: string,
+    patch: { grants?: Grant[]; denies?: Deny[] },
+  ): Promise<GroupRecord> {
+    return this.updateGroup(id, patch);
+  }
+
+  /** Assign scene to a group exclusively (or clear with null). */
+  async setSceneGroup(sceneId: number, groupId: string | null): Promise<SceneRecord> {
+    const scene = this.scenes.get(sceneId);
+    if (!scene) throw new Error("Scene not found");
+
+    const previousId = scene.groupId ?? null;
+    if (previousId === groupId) return scene;
+
+    if (previousId) {
+      const prev = this.groups.get(previousId);
+      if (prev) {
+        await this.saveGroup({
+          ...prev,
+          sceneIds: prev.sceneIds.filter((id) => id !== sceneId),
+        });
+      }
+    }
+
+    if (groupId) {
+      const group = this.groups.get(groupId);
+      if (!group) throw new Error("Group not found");
+      if (!group.sceneIds.includes(sceneId)) {
+        await this.saveGroup({
+          ...group,
+          sceneIds: [...group.sceneIds, sceneId],
+        });
+      }
+    }
+
+    const updated: SceneRecord = {
+      ...scene,
+      groupId,
+    };
+    await this.saveScene(updated);
+    return updated;
+  }
+
+  listGroups(): GroupRecord[] {
+    return [...this.groups.values()].sort((a, b) => Number(a.id) - Number(b.id));
+  }
+
   private applyManagerBootstrap(): void {
     const env = process.env.PROSEDEN_MANAGERS ?? "";
     for (const name of env.split(",").map((s) => s.trim()).filter(Boolean)) {

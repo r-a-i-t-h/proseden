@@ -129,6 +129,23 @@ function manageSidebar(
         <label>Denies (JSON) <textarea name="deniesJson" rows="4">${escapeHtml(JSON.stringify(scene.denies ?? [], null, 2))}</textarea></label>
         <button type="submit">Save access</button>
       </form>`);
+      const groupOptions = [
+        `<option value="none"${!scene.groupId ? " selected" : ""}>(none)</option>`,
+        ...(manage.groups ?? []).map(
+          (g) =>
+            `<option value="${escapeAttr(g.id)}"${scene.groupId === g.id ? " selected" : ""}>${escapeHtml(g.title)} (#${escapeHtml(g.id)})</option>`,
+        ),
+      ].join("");
+      sections.push(`<form method="post" action="${assetBase}/s/${scene.id}/group" class="stack">
+        <h3>Scene group</h3>
+        <label>Group <select name="groupId">${groupOptions}</select></label>
+        <button type="submit">Assign group</button>
+      </form>`);
+      sections.push(`<form method="post" action="${assetBase}/g" class="stack">
+        <h3>New group</h3>
+        <label>Title <input name="title" required /></label>
+        <button type="submit">Create group</button>
+      </form>`);
     }
   }
 

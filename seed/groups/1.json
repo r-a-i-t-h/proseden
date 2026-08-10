@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "owner": "gardener",
+  "title": "Garden Rooms",
+  "sceneIds": [1, 2],
+  "grants": [],
+  "denies": [],
+  "createdAt": "2026-08-10T20:15:00.000Z"
+}
