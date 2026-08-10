@@ -68,6 +68,20 @@ export function canManage(
   return hasRight(user, scene, "manage", world);
 }
 
+/**
+ * Add an exit originating at `scene`.
+ * Managers/organisers always may; anyone signed in may when the scene is a public junction.
+ */
+export function canAddExit(
+  user: UserRecord | undefined,
+  scene: SceneRecord,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  if (canManage(user, scene, world) || canOrganise(user, world)) return true;
+  return Boolean(scene.isJunction && scene.visibility === "public");
+}
+
 export function canReadArtefact(
   user: UserRecord | undefined,
   artefact: ArtefactRecord,

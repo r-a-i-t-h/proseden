@@ -45,7 +45,7 @@ export interface SceneMeta {
   grants?: Grant[];
   denies?: Deny[];
   entranceGroupId?: string | null;
-  /** Public junction: others may attach exits to/from when they manage their own end. */
+  /** Public junction: any signed-in user may add exits originating from this scene. */
   isJunction?: boolean;
   /** @deprecated migrated to grants on load */
   invites?: string[];

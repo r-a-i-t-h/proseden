@@ -15,6 +15,8 @@ export interface ManageContext {
   artefact?: ArtefactRecord;
   canEdit?: boolean;
   canManage?: boolean;
+  /** Add exit from this scene (manage/organise, or public junction). */
+  canAddExit?: boolean;
   canOrganise?: boolean;
   canDelete?: boolean;
   isManager?: boolean;
@@ -127,7 +129,7 @@ function manageSidebar(
     } else {
       sections.push(`<p class="muted">You can read this scene but not edit it.</p>`);
     }
-    if (manage.canManage || manage.canOrganise) {
+    if (manage.canAddExit) {
       sections.push(`<form method="post" action="s/${scene.id}/exits" class="stack">
         <h3>Add exit</h3>
         <label>Nickname <input name="nickname" required /></label>

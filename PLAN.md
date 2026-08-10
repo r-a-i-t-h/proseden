@@ -80,7 +80,7 @@ flowchart TD
 - **Go:** `GET /s/:id/go/:exit` where `:exit` is numeric `exitId` or nickname → redirect to destination (access-checked)
 - **Teleport:** `GET /s/:id` already is teleport; add HTML/text “Travel to id” control; resolve **entrance groups**: if requester is outside the group, redirect to the group’s entrance scene (still require `canRead` on entrance; deny if entrance unreadable)
 - On disk: `data/entrance-groups/<id>.json` `{ id, title, entranceSceneId, sceneIds[] }`; scene `entranceGroupId`
-- **Public junctions:** `isJunction: true` on a public scene; any writer with a scene they can manage may `POST` an exit *to* that junction (and optionally from it if they also manage the junction). Non-junction private/public scenes: only managers of the from-scene add exits, and destination must be readable or a junction
+- **Public junctions:** `isJunction: true` on a public scene; any signed-in writer may `POST` an exit *from* that junction. Non-junction scenes: only managers of the from-scene (or organisers) add exits. Destination must be readable (public scenes are always linkable as destinations).
 - List exits in text/HTML with go URLs (`/s/1/go/2`, `/s/1/go/reading%20nook`)
 
 ### Phase 5 — Admin roles ✅

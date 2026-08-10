@@ -41,8 +41,9 @@ Every reader may create an account and become a writer. All creations are
 private by default but others can be invited, or a space made public. Editing
 may also be extended by invitation which can include full public access.
 
-Certain scenes can be marked as public junctions, to/from which other scenes
-can be attached. The graph is directional.
+Certain scenes can be marked as public junctions, from which other writers may
+attach outbound exits without managing the junction itself. Any readable (e.g.
+public) scene can be linked to as a destination. The graph is directional.
 
 Each scene has a numeric id (incremental in creation order) by which it can be
 navigated to (if the user has access rights). Essentially teleporting around

@@ -87,7 +87,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `POST` | `/auth/register` `/auth/login` `/auth/logout` | Session cookie + optional JSON token |
 | `POST` | `/s` | Create scene (auth) |
 | `PUT`/`POST` | `/s/:id` | Update scene (owner) |
-| `POST` | `/s/:id/exits` | Add directed exit (edit) |
+| `POST` | `/s/:id/exits` | Add directed exit (manage origin, or any user from a public junction) |
 | `GET`/`PUT`/`POST` | `/s/:id/access` | Scene grants/denies (manage) |
 | `GET`/`PUT`/`POST` | `/u/:username/access` | User-level share-all (self or manager) |
 | `POST` | `/g` | Create group (auth) |

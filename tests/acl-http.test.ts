@@ -221,7 +221,7 @@ describe("HTTP ACL enforcement", () => {
     expect(addSceneDenied.status).toBe(403);
   });
 
-  it("requires manage or organise to add exits; junctions are attachable", async () => {
+  it("requires manage or organise to add exits; public junctions allow outbound attaches", async () => {
     const { app, tokens, world } = harness;
 
     const bobExit = await app.request("/s/2/exits", {
@@ -251,12 +251,29 @@ describe("HTTP ACL enforcement", () => {
     });
     expect(unreadableDest.status).toBe(403);
 
-    const toJunction = await app.request("/s/4/exits", {
+    // Public destination does not require junction status.
+    const toPublic = await app.request("/s/4/exits", {
       method: "POST",
       headers: { ...auth(tokens.carol), "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: "hub", toSceneId: 3 }),
+      body: JSON.stringify({ nickname: "hall", toSceneId: 1 }),
     });
-    expect(toJunction.status).toBe(201);
+    expect(toPublic.status).toBe(201);
+
+    // Non-manager may add an exit *from* a public junction.
+    const fromJunction = await app.request("/s/3/exits", {
+      method: "POST",
+      headers: { ...auth(tokens.carol), "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname: "carol-wing", toSceneId: 4 }),
+    });
+    expect(fromJunction.status).toBe(201);
+
+    // Non-junction public origin still requires manage.
+    const fromPublicHall = await app.request("/s/1/exits", {
+      method: "POST",
+      headers: { ...auth(tokens.carol), "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname: "nope", toSceneId: 4 }),
+    });
+    expect(fromPublicHall.status).toBe(403);
 
     await world.setStaffRoles("bob", ["organiser"]);
     const organise = await app.request("/s/2/exits", {

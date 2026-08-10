@@ -4,6 +4,7 @@ import { formatAccessSummary, parseAccessPayload } from "../access/acl.js";
 import {
   canEdit,
   canEditArtefact,
+  canAddExit,
   canManage,
   canManageGroup,
   canOrganise,
@@ -108,6 +109,7 @@ worldRoutes.get("/s/:id", (c) => {
       scene,
       canEdit: canEdit(user, scene, world),
       canManage: manage,
+      canAddExit: canAddExit(user, scene, world),
       canOrganise: canOrganise(user, world),
       canDelete: manage || isModerator(user, world),
       isManager: isManager(user, world),
@@ -606,8 +608,8 @@ worldRoutes.post("/s/:id/exits", async (c) => {
   const id = Number(c.req.param("id"));
   const scene = world.getScene(id);
   if (!scene) return apiError(c, 404, "Scene not found");
-  if (!canManage(user, scene, world) && !canOrganise(user, world)) {
-    return apiError(c, 403, "Manage rights required to add exits");
+  if (!canAddExit(user, scene, world)) {
+    return apiError(c, 403, "Not allowed to add exits from this scene");
   }
 
   const body = await readBody(c);
@@ -618,11 +620,8 @@ worldRoutes.post("/s/:id/exits", async (c) => {
 
   const dest = world.getScene(toSceneId);
   if (!dest) return apiError(c, 404, "Destination scene not found");
-  if (!dest.isJunction && !canRead(user, dest, world)) {
-    return apiError(c, 403, "Destination must be readable or a public junction");
-  }
-  if (dest.isJunction && dest.visibility !== "public") {
-    return apiError(c, 400, "Junction scenes must be public");
+  if (!canRead(user, dest, world)) {
+    return apiError(c, 403, "Destination must be readable");
   }
 
   try {
