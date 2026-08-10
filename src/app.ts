@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { SessionStore } from "./auth/sessions.js";
 import { loadUser, sessionCookieNameForBase } from "./middleware/auth.js";
+import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { worldRoutes } from "./routes/world.js";
 import type { WorldStore } from "./store/world.js";
@@ -34,6 +35,7 @@ export function createApp(opts: {
   app.get("/health", (c) => c.json({ ok: true, name: "proseden" }));
 
   app.route("/auth", authRoutes);
+  app.route("/admin", adminRoutes);
   app.route("/", worldRoutes);
 
   if (opts.staticRoot) {

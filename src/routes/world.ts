@@ -835,7 +835,23 @@ worldRoutes.get("/staff", (c) => {
     return apiError(c, user ? 403 : 401, "Manager role required");
   }
   if (wantsJson(c)) return c.json(world.staff);
-  return c.text(renderMessageText("Staff", JSON.stringify(world.staff.roles, null, 2)));
+  if (negotiateFormat(c) === "text") {
+    return c.text(renderMessageText("Staff", JSON.stringify(world.staff.roles, null, 2)));
+  }
+  const rows = Object.entries(world.staff.roles)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(
+      ([username, roles]) =>
+        `<li><strong>${escapeHtml(username)}</strong> — ${escapeHtml(roles.join(", ") || "(none)")}</li>`,
+    )
+    .join("");
+  return page(
+    c,
+    200,
+    "Staff",
+    `<h1>Staff</h1>${rows ? `<ul class="link-list">${rows}</ul>` : `<p class="muted">No staff roles assigned.</p>`}`,
+    renderMessageText("Staff", JSON.stringify(world.staff.roles, null, 2)),
+  );
 });
 
 worldRoutes.put("/staff/:username", async (c) => setStaff(c));
@@ -1078,13 +1094,16 @@ function page(
   if (format === "text") {
     return c.text(textBody, status as 200);
   }
+  const user = c.get("user");
+  const world = c.get("world");
   return c.html(
     renderHtmlPage({
       title,
       bodyHtml: htmlBody,
-      user: c.get("user"),
+      user,
       assetBase: c.get("assetBase"),
       manage,
+      isManager: isManager(user, world),
     }),
     status as 200,
   );
@@ -1095,12 +1114,15 @@ function apiError(c: Context, status: 400 | 401 | 403 | 404, message: string) {
     if (wantsJson(c)) return c.json({ error: message }, status);
     return c.text(renderMessageText("Error", message), status);
   }
+  const user = c.get("user");
+  const world = c.get("world");
   return c.html(
     renderHtmlPage({
       title: "Error",
       bodyHtml: renderMessageBodyHtml("Error", message),
-      user: c.get("user"),
+      user,
       assetBase: c.get("assetBase"),
+      isManager: isManager(user, world),
     }),
     status,
   );

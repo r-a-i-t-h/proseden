@@ -37,6 +37,19 @@ export class WorldStore implements AccessWorld {
     this.dataDir = dataDir;
   }
 
+  /** Drop in-memory state and re-read everything from disk (no seed copy). */
+  async reload(): Promise<void> {
+    this.meta = { nextSceneId: 1, nextArtefactId: 1, nextGroupId: 1, nextEntranceGroupId: 1 };
+    this.staff = { roles: {} };
+    this.users.clear();
+    this.scenes.clear();
+    this.exits.clear();
+    this.artefacts.clear();
+    this.groups.clear();
+    this.entranceGroups.clear();
+    await this.load();
+  }
+
   async load(seedDir?: string): Promise<void> {
     await mkdir(this.dataDir, { recursive: true });
     const metaPath = join(this.dataDir, "meta.json");

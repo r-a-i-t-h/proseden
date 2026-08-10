@@ -6,6 +6,8 @@ export interface HtmlShellOptions {
   user?: UserRecord;
   assetBase?: string;
   manage?: ManageContext;
+  /** Staff manager — shows /admin and /staff links in the sidebar. */
+  isManager?: boolean;
   flash?: string;
 }
 
@@ -54,12 +56,19 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
         ${opts.flash ? `<p class="flash">${escapeHtml(opts.flash)}</p>` : ""}
         ${opts.bodyHtml}
       </main>
-      ${user ? manageSidebar(opts.manage, user) : ""}
+      ${user ? manageSidebar(opts.manage, user, opts.isManager ?? opts.manage?.isManager) : ""}
     </div>
   </div>
   <script type="module" src="assets/manage.js"></script>
 </body>
 </html>`;
+}
+
+function manageSection(title: string, inner: string): string {
+  return `<details class="manage-section">
+    <summary>${escapeHtml(title)}</summary>
+    <div class="manage-section-body">${inner}</div>
+  </details>`;
 }
 
 function authLoggedIn(user: UserRecord): string {
@@ -89,22 +98,37 @@ function authLoggedOut(): string {
 function manageSidebar(
   manage: ManageContext | undefined,
   user?: UserRecord,
+  isManager = false,
 ): string {
   const sections: string[] = [];
-  sections.push(`<h2>Manage</h2>
-    <form method="post" action="s" class="stack">
-      <h3>New scene</h3>
+  sections.push(`<h2>Manage</h2>`);
+
+  if (isManager) {
+    sections.push(`<nav class="manage-links" aria-label="Manager">
+      <a href="admin">Admin</a>
+      <a href="staff">Staff</a>
+    </nav>`);
+  }
+
+  sections.push(
+    manageSection(
+      "New scene",
+      `<form method="post" action="s" class="stack">
       <label>Title <input name="title" /></label>
       <label>Body <textarea name="body" rows="4" required></textarea></label>
       <label><input type="checkbox" name="visibility" value="public" /> Public</label>
       <button type="submit">Create scene</button>
-    </form>`);
+    </form>`,
+    ),
+  );
 
   if (manage?.kind === "scene" && manage.scene) {
     const scene = manage.scene;
     if (manage.canEdit) {
-      sections.push(`<form method="post" action="s/${scene.id}" class="stack" data-method="PUT">
-        <h3>Edit scene ${scene.id}</h3>
+      sections.push(
+        manageSection(
+          `Edit scene ${scene.id}`,
+          `<form method="post" action="s/${scene.id}" class="stack" data-method="PUT">
         <label>Title <input name="title" value="${escapeAttr(scene.title ?? "")}" /></label>
         <label>Body <textarea name="body" rows="8" required>${escapeHtml(scene.body)}</textarea></label>
         <label>Details (JSON map) <textarea name="detailsJson" rows="4">${escapeHtml(JSON.stringify(scene.details, null, 2))}</textarea></label>
@@ -116,35 +140,49 @@ function manageSidebar(
         }
         <label><input type="checkbox" name="retainSnapshot" value="true" /> Keep version snapshot</label>
         <button type="submit">Save scene</button>
-      </form>`);
-      sections.push(`<p class="muted"><a href="s/${scene.id}/history">Scene history</a></p>`);
-      sections.push(`<form method="post" action="a" class="stack">
-        <h3>New artefact here</h3>
+      </form>
+      <p class="muted"><a href="s/${scene.id}/history">Scene history</a></p>`,
+        ),
+      );
+      sections.push(
+        manageSection(
+          "New artefact here",
+          `<form method="post" action="a" class="stack">
         <input type="hidden" name="homeSceneId" value="${scene.id}" />
         <label>Title <input name="title" /></label>
         <label>Body <textarea name="body" rows="4" required></textarea></label>
         <label>Tags (comma) <input name="tags" /></label>
         <button type="submit">Create artefact</button>
-      </form>`);
+      </form>`,
+        ),
+      );
     } else {
       sections.push(`<p class="muted">You can read this scene but not edit it.</p>`);
     }
     if (manage.canAddExit) {
-      sections.push(`<form method="post" action="s/${scene.id}/exits" class="stack">
-        <h3>Add exit</h3>
+      sections.push(
+        manageSection(
+          "Add exit",
+          `<form method="post" action="s/${scene.id}/exits" class="stack">
         <label>Nickname <input name="nickname" required /></label>
         <label>To scene id <input name="toSceneId" type="number" min="1" required /></label>
         <button type="submit">Add exit</button>
-      </form>`);
+      </form>`,
+        ),
+      );
     }
     if (manage.canManage) {
-      sections.push(`<form method="post" action="s/${scene.id}/access" class="stack" data-method="PUT">
-        <h3>Scene access</h3>
+      sections.push(
+        manageSection(
+          "Scene access",
+          `<form method="post" action="s/${scene.id}/access" class="stack" data-method="PUT">
         <p class="muted">Grants: who + rights (read/edit/manage). Use <code>*</code> for everyone.</p>
         <label>Grants (JSON) <textarea name="grantsJson" rows="5">${escapeHtml(JSON.stringify(scene.grants ?? [], null, 2))}</textarea></label>
         <label>Denies (JSON) <textarea name="deniesJson" rows="4">${escapeHtml(JSON.stringify(scene.denies ?? [], null, 2))}</textarea></label>
         <button type="submit">Save access</button>
-      </form>`);
+      </form>`,
+        ),
+      );
       const groupOptions = [
         `<option value="none"${!scene.groupId ? " selected" : ""}>(none)</option>`,
         ...(manage.groups ?? []).map(
@@ -152,59 +190,95 @@ function manageSidebar(
             `<option value="${escapeAttr(g.id)}"${scene.groupId === g.id ? " selected" : ""}>${escapeHtml(g.title)} (#${escapeHtml(g.id)})</option>`,
         ),
       ].join("");
-      sections.push(`<form method="post" action="s/${scene.id}/group" class="stack">
-        <h3>Scene group</h3>
+      sections.push(
+        manageSection(
+          "Scene group",
+          `<form method="post" action="s/${scene.id}/group" class="stack">
         <label>Group <select name="groupId">${groupOptions}</select></label>
         <button type="submit">Assign group</button>
-      </form>`);
-      sections.push(`<form method="post" action="g" class="stack">
-        <h3>New group</h3>
+      </form>`,
+        ),
+      );
+      sections.push(
+        manageSection(
+          "New group",
+          `<form method="post" action="g" class="stack">
         <label>Title <input name="title" required /></label>
         <button type="submit">Create group</button>
-      </form>`);
-      sections.push(`<form method="post" action="eg" class="stack">
-        <h3>Entrance group</h3>
+      </form>`,
+        ),
+      );
+      sections.push(
+        manageSection(
+          "Entrance group",
+          `<form method="post" action="eg" class="stack">
         <p class="muted">Teleporting into this set from outside lands at the entrance scene.</p>
         <label>Title <input name="title" required /></label>
         <input type="hidden" name="entranceSceneId" value="${scene.id}" />
         <button type="submit">Create with this scene as entrance</button>
-      </form>`);
+      </form>`,
+        ),
+      );
     } else if (manage.canOrganise) {
-      sections.push(`<form method="post" action="g" class="stack">
-        <h3>New group</h3>
+      sections.push(
+        manageSection(
+          "New group",
+          `<form method="post" action="g" class="stack">
         <label>Title <input name="title" required /></label>
         <button type="submit">Create group</button>
-      </form>`);
-      sections.push(`<form method="post" action="eg" class="stack">
-        <h3>Entrance group</h3>
+      </form>`,
+        ),
+      );
+      sections.push(
+        manageSection(
+          "Entrance group",
+          `<form method="post" action="eg" class="stack">
         <label>Title <input name="title" required /></label>
         <input type="hidden" name="entranceSceneId" value="${scene.id}" />
         <button type="submit">Create with this scene as entrance</button>
-      </form>`);
+      </form>`,
+        ),
+      );
     }
     if (manage.canDelete) {
-      sections.push(`<form method="post" action="s/${scene.id}/delete" class="stack">
-        <h3>Delete scene</h3>
+      sections.push(
+        manageSection(
+          "Delete scene",
+          `<form method="post" action="s/${scene.id}/delete" class="stack">
         <button type="submit">Delete scene ${scene.id}</button>
-      </form>`);
+      </form>`,
+        ),
+      );
     }
   }
 
   if (manage?.kind === "artefact" && manage.artefact) {
     const a = manage.artefact;
     if (manage.collected) {
-      sections.push(`<form method="post" action="a/${a.id}/collect/drop" class="stack">
+      sections.push(
+        manageSection(
+          "Inventory",
+          `<form method="post" action="a/${a.id}/collect/drop" class="stack">
         <button type="submit">Remove from inventory</button>
-      </form>`);
+      </form>`,
+        ),
+      );
     } else {
-      sections.push(`<form method="post" action="a/${a.id}/collect" class="stack">
+      sections.push(
+        manageSection(
+          "Collect",
+          `<form method="post" action="a/${a.id}/collect" class="stack">
         <label>Tags (comma) <input name="tags" /></label>
         <button type="submit">Collect</button>
-      </form>`);
+      </form>`,
+        ),
+      );
     }
     if (manage.canEdit) {
-      sections.push(`<form method="post" action="a/${a.id}" class="stack" data-method="PUT">
-        <h3>Edit artefact ${a.id}</h3>
+      sections.push(
+        manageSection(
+          `Edit artefact ${a.id}`,
+          `<form method="post" action="a/${a.id}" class="stack" data-method="PUT">
         <label>Title <input name="title" value="${escapeAttr(a.title ?? "")}" /></label>
         <label>Body <textarea name="body" rows="6" required>${escapeHtml(a.body)}</textarea></label>
         <label>Home scene <input name="homeSceneId" type="number" value="${a.homeSceneId}" required /></label>
@@ -212,29 +286,42 @@ function manageSidebar(
         <label>Details (JSON map) <textarea name="detailsJson" rows="4">${escapeHtml(JSON.stringify(a.details, null, 2))}</textarea></label>
         <label><input type="checkbox" name="retainSnapshot" value="true" /> Keep version snapshot</label>
         <button type="submit">Save artefact</button>
-      </form>`);
-      sections.push(`<p class="muted"><a href="a/${a.id}/history">Artefact history</a></p>`);
+      </form>
+      <p class="muted"><a href="a/${a.id}/history">Artefact history</a></p>`,
+        ),
+      );
     }
     if (manage.canDelete) {
-      sections.push(`<form method="post" action="a/${a.id}/delete" class="stack">
+      sections.push(
+        manageSection(
+          "Delete artefact",
+          `<form method="post" action="a/${a.id}/delete" class="stack">
         <button type="submit">Delete artefact</button>
-      </form>`);
+      </form>`,
+        ),
+      );
     }
   }
 
   if (user) {
-    sections.push(`<form method="post" action="u/${encodeURIComponent(user.username)}/access" class="stack" data-method="PUT">
-      <h3>Share all my work</h3>
+    sections.push(
+      manageSection(
+        "Share all my work",
+        `<form method="post" action="u/${encodeURIComponent(user.username)}/access" class="stack" data-method="PUT">
       <p class="muted">User-level grants/denies apply to every scene and group you own.</p>
       <label>Grants (JSON) <textarea name="grantsJson" rows="4">${escapeHtml(JSON.stringify(manage?.userGrants ?? user.grants ?? [], null, 2))}</textarea></label>
       <label>Denies (JSON) <textarea name="deniesJson" rows="3">${escapeHtml(JSON.stringify(manage?.userDenies ?? user.denies ?? [], null, 2))}</textarea></label>
       <button type="submit">Save share-all</button>
-    </form>`);
+    </form>`,
+      ),
+    );
   }
 
-  if (manage?.isManager) {
-    sections.push(`<form method="post" action="staff/" class="stack" id="staff-form">
-      <h3>Assign staff role</h3>
+  if (isManager) {
+    sections.push(
+      manageSection(
+        "Assign staff role",
+        `<form method="post" action="staff/" class="stack" id="staff-form">
       <label>Username <input name="username" required /></label>
       <label>Roles (comma: moderator, organiser, manager) <input name="roles" placeholder="moderator" /></label>
       <button type="submit">Save roles</button>
@@ -261,7 +348,9 @@ function manageSidebar(
           });
         });
       })();
-    </script>`);
+    </script>`,
+      ),
+    );
   }
 
   sections.push(`<p class="muted"><a href="inv">Open inventory</a></p>`);

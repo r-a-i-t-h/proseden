@@ -101,6 +101,8 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `DELETE`/`POST` | `/a/:id/delete` | Delete artefact (owner/manage/moderator) |
 | `GET` | `/staff` | List staff roles (manager) |
 | `PUT`/`POST` | `/staff/:username` | Set roles (manager) |
+| `GET` | `/admin` | Admin endpoint index (manager) |
+| `POST` | `/admin/reload` | Reload in-memory world cache from disk (manager) |
 | `GET` | `/s/:id/history` | Edit log (readers) |
 | `GET` | `/s/:id/history/:version` | View retained snapshot |
 | `POST` | `/s/:id/history/:version/restore` | Restore snapshot (manage) |

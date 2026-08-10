@@ -212,6 +212,57 @@ button:hover {
   color: var(--ink);
 }
 
+.manage-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin: 0 0 0.85rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.95rem;
+}
+
+.manage-section {
+  margin: 0 0 0.35rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.manage-section > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 0.35rem 0;
+}
+
+.manage-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.manage-section > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.manage-section[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.manage-section-body {
+  padding: 0.35rem 0 0.65rem;
+}
+
+.manage-section .stack {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
 .stack {
   display: flex;
   flex-direction: column;
