@@ -134,3 +134,24 @@ The server should actually serve all of this from memory, accessing the
 filesystem only to pre-populate the in-memory cache and to save edited versions.
 
 A very simple authentication scheme should be used.
+
+## v1 HTTP model (implemented)
+
+Each `GET` delivers a node (`/n/:id`) or artefact (`/a/:id`). A `detail`
+querystring examines a named closer description.
+
+If the request asks for HTML, the description is wrapped in a page with CSS;
+artefacts and destinations are hyperlinked. If it asks for text (`Accept:
+text/plain`, `?format=text`, or curl-like clients), a non-markup version is
+served so the world can be played with `curl`.
+
+Public spaces need no authentication. Private nodes require an authenticated
+reader with access (v1: owner only). Editing uses `PUT`/`POST` and always
+requires authentication. The HTML shell includes login/register and, when
+signed in, a management sidebar for CMS actions.
+
+Artefacts are collected as inventory *links* to the original; collecting does
+not remove them from their home node.
+
+On-disk world data lives as text/JSON files under `data/`, loaded fully into
+memory at boot, with write-through on edit. See [README.md](README.md).

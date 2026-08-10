@@ -1,0 +1,14 @@
+[
+  {
+    "exitId": 1,
+    "nickname": "reading nook",
+    "toNodeId": 2,
+    "createdAt": "2026-08-10T20:00:00.000Z"
+  },
+  {
+    "exitId": 2,
+    "nickname": "private study",
+    "toNodeId": 3,
+    "createdAt": "2026-08-10T20:00:00.000Z"
+  }
+]

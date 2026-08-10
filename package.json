@@ -1,0 +1,29 @@
+{
+  "name": "proseden",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite build && tsx watch src/server.ts",
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "build:client": "vite build",
+    "start": "node dist/server.js",
+    "seed:user": "tsx scripts/make-seed-user.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.4",
+    "gray-matter": "^4.0.3",
+    "hono": "^4.8.5",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.14",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.4"
+  }
+}
