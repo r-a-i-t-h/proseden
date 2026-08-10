@@ -12,61 +12,40 @@ import {
   renderHtmlPage,
   renderInventoryBodyHtml,
   renderMessageBodyHtml,
-  renderNodeBodyHtml,
+  renderSceneBodyHtml,
 } from "../render/html.js";
 import {
   renderArtefactText,
   renderInventoryText,
   renderMessageText,
-  renderNodeText,
+  renderSceneText,
 } from "../render/text.js";
 
 export const worldRoutes = new Hono();
 
-worldRoutes.get("/", (c) => {
-  const world = c.get("world");
-  const base = c.get("assetBase");
-  // Prefer lowest public node id as entrance
-  const publicNodes = [...world.nodes.values()]
-    .filter((n) => n.visibility === "public")
-    .sort((a, b) => a.id - b.id);
-  if (publicNodes[0]) {
-    return c.redirect(`${base}/n/${publicNodes[0].id}`);
-  }
-  return page(
-    c,
-    200,
-    "Proseden",
-    renderMessageBodyHtml(
-      "Proseden",
-      "No public nodes yet. Register, then create one from the sidebar.",
-    ),
-    renderMessageText(
-      "Proseden",
-      "No public nodes yet. Register via POST /auth/register then POST /n.",
-    ),
-    { kind: "home" },
-  );
-});
+const ENTRANCE_SCENE_ID = 1;
 
-worldRoutes.get("/n/:id", (c) => {
+worldRoutes.get("/", (c) => c.redirect(`${c.get("assetBase")}/s/${ENTRANCE_SCENE_ID}`));
+worldRoutes.get("/s", (c) => c.redirect(`${c.get("assetBase")}/s/${ENTRANCE_SCENE_ID}`));
+
+worldRoutes.get("/s/:id", (c) => {
   const world = c.get("world");
   const user = c.get("user");
   const id = Number(c.req.param("id"));
-  const node = world.getNode(id);
-  if (!node) {
+  const scene = world.getScene(id);
+  if (!scene) {
     return page(
       c,
       404,
       "Not found",
-      renderMessageBodyHtml("Not found", `No node ${id}.`),
-      renderMessageText("Not found", `No node ${id}.`),
+      renderMessageBodyHtml("Not found", `No scene ${id}.`),
+      renderMessageText("Not found", `No scene ${id}.`),
     );
   }
-  if (!canRead(user, node)) {
+  if (!canRead(user, scene)) {
     const msg = user
-      ? "This node is private and you do not have access."
-      : "This node is private. Authenticate and retry.";
+      ? "This scene is private and you do not have access."
+      : "This scene is private. Authenticate and retry.";
     return page(
       c,
       user ? 403 : 401,
@@ -84,13 +63,13 @@ worldRoutes.get("/n/:id", (c) => {
   return page(
     c,
     200,
-    node.title ?? `Node ${node.id}`,
-    renderNodeBodyHtml({ node, exits, artefacts, detail, assetBase }),
-    renderNodeText({ node, exits, artefacts, detail, basePath: assetBase }),
+    scene.title ?? `Scene ${scene.id}`,
+    renderSceneBodyHtml({ scene, exits, artefacts, detail, assetBase }),
+    renderSceneText({ scene, exits, artefacts, detail, basePath: assetBase }),
     {
-      kind: "node",
-      node,
-      canEdit: canEdit(user, node),
+      kind: "scene",
+      scene,
+      canEdit: canEdit(user, scene),
     },
   );
 });
@@ -109,7 +88,7 @@ worldRoutes.get("/a/:id", (c) => {
       renderMessageText("Not found", `No artefact ${id}.`),
     );
   }
-  const home = world.getNode(artefact.homeNodeId);
+  const home = world.getScene(artefact.homeSceneId);
   if (!home || !canReadArtefact(user, artefact, home)) {
     return page(
       c,
@@ -172,7 +151,7 @@ worldRoutes.get("/inv", (c) => {
 
 // --- mutations ---
 
-worldRoutes.post("/n", async (c) => {
+worldRoutes.post("/s", async (c) => {
   const world = c.get("world");
   const user = c.get("user");
   if (!user) return apiError(c, 401, "Authentication required");
@@ -181,7 +160,7 @@ worldRoutes.post("/n", async (c) => {
   const text = String(body.body ?? "");
   if (!text.trim()) return apiError(c, 400, "Body is required");
 
-  const node = await world.createNode({
+  const scene = await world.createScene({
     owner: user.username,
     title: optionalString(body.title),
     body: text,
@@ -189,25 +168,25 @@ worldRoutes.post("/n", async (c) => {
     visibility: body.visibility === "public" || body.visibility === true ? "public" : "private",
   });
 
-  if (wantsJson(c)) return c.json(node, 201);
-  return c.redirect(`${c.get("assetBase")}/n/${node.id}`);
+  if (wantsJson(c)) return c.json(scene, 201);
+  return c.redirect(`${c.get("assetBase")}/s/${scene.id}`);
 });
 
-worldRoutes.put("/n/:id", async (c) => updateNode(c));
-worldRoutes.post("/n/:id", async (c) => {
+worldRoutes.put("/s/:id", async (c) => updateScene(c));
+worldRoutes.post("/s/:id", async (c) => {
   // HTML forms use POST + _method/data-method; also accept POST as update
-  return updateNode(c);
+  return updateScene(c);
 });
 
-async function updateNode(c: Context) {
+async function updateScene(c: Context) {
   const world = c.get("world");
   const user = c.get("user");
   if (!user) return apiError(c, 401, "Authentication required");
 
   const id = Number(c.req.param("id"));
-  const node = world.getNode(id);
-  if (!node) return apiError(c, 404, "Node not found");
-  if (!canEdit(user, node)) return apiError(c, 403, "Not allowed to edit this node");
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canEdit(user, scene)) return apiError(c, 403, "Not allowed to edit this scene");
 
   const body = await readBody(c);
   const details =
@@ -215,7 +194,7 @@ async function updateNode(c: Context) {
       ? parseDetails(body.detailsJson ?? body.details)
       : undefined;
 
-  let visibility = node.visibility;
+  let visibility = scene.visibility;
   if (body.visibility !== undefined) {
     visibility =
       body.visibility === "public" || body.visibility === true || body.visibility === "on"
@@ -223,37 +202,37 @@ async function updateNode(c: Context) {
         : "private";
   }
 
-  const updated = await world.updateNode(id, {
-    title: body.title !== undefined ? optionalString(body.title) : node.title,
-    body: body.body !== undefined ? String(body.body) : node.body,
+  const updated = await world.updateScene(id, {
+    title: body.title !== undefined ? optionalString(body.title) : scene.title,
+    body: body.body !== undefined ? String(body.body) : scene.body,
     details,
     visibility,
   });
 
   if (wantsJson(c)) return c.json(updated);
-  return c.redirect(`${c.get("assetBase")}/n/${id}`);
+  return c.redirect(`${c.get("assetBase")}/s/${id}`);
 }
 
-worldRoutes.post("/n/:id/exits", async (c) => {
+worldRoutes.post("/s/:id/exits", async (c) => {
   const world = c.get("world");
   const user = c.get("user");
   if (!user) return apiError(c, 401, "Authentication required");
 
   const id = Number(c.req.param("id"));
-  const node = world.getNode(id);
-  if (!node) return apiError(c, 404, "Node not found");
-  if (!canEdit(user, node)) return apiError(c, 403, "Not allowed to edit this node");
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canEdit(user, scene)) return apiError(c, 403, "Not allowed to edit this scene");
 
   const body = await readBody(c);
   const nickname = String(body.nickname ?? "").trim();
-  const toNodeId = Number(body.toNodeId);
+  const toSceneId = Number(body.toSceneId);
   if (!nickname) return apiError(c, 400, "Nickname is required");
-  if (!Number.isFinite(toNodeId)) return apiError(c, 400, "toNodeId is required");
+  if (!Number.isFinite(toSceneId)) return apiError(c, 400, "toSceneId is required");
 
   try {
-    const exit = await world.addExit(id, nickname, toNodeId);
+    const exit = await world.addExit(id, nickname, toSceneId);
     if (wantsJson(c)) return c.json(exit, 201);
-    return c.redirect(`${c.get("assetBase")}/n/${id}`);
+    return c.redirect(`${c.get("assetBase")}/s/${id}`);
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Could not add exit");
   }
@@ -265,18 +244,18 @@ worldRoutes.post("/a", async (c) => {
   if (!user) return apiError(c, 401, "Authentication required");
 
   const body = await readBody(c);
-  const homeNodeId = Number(body.homeNodeId);
+  const homeSceneId = Number(body.homeSceneId);
   const text = String(body.body ?? "");
-  if (!Number.isFinite(homeNodeId)) return apiError(c, 400, "homeNodeId is required");
+  if (!Number.isFinite(homeSceneId)) return apiError(c, 400, "homeSceneId is required");
   if (!text.trim()) return apiError(c, 400, "Body is required");
 
-  const home = world.getNode(homeNodeId);
-  if (!home) return apiError(c, 404, "Home node not found");
+  const home = world.getScene(homeSceneId);
+  if (!home) return apiError(c, 404, "Home scene not found");
   if (!canEdit(user, home)) return apiError(c, 403, "Not allowed to place artefacts here");
 
   const artefact = await world.createArtefact({
     owner: user.username,
-    homeNodeId,
+    homeSceneId,
     title: optionalString(body.title),
     body: text,
     details: parseDetails(body.detailsJson ?? body.details),
@@ -298,7 +277,7 @@ async function updateArtefact(c: Context) {
   const id = Number(c.req.param("id"));
   const artefact = world.getArtefact(id);
   if (!artefact) return apiError(c, 404, "Artefact not found");
-  const home = world.getNode(artefact.homeNodeId);
+  const home = world.getScene(artefact.homeSceneId);
   if (!home || !canEditArtefact(user, artefact, home)) {
     return apiError(c, 403, "Not allowed to edit this artefact");
   }
@@ -313,7 +292,7 @@ async function updateArtefact(c: Context) {
           ? parseDetails(body.detailsJson ?? body.details)
           : undefined,
       tags: body.tags !== undefined ? parseTags(body.tags) : undefined,
-      homeNodeId: body.homeNodeId !== undefined ? Number(body.homeNodeId) : undefined,
+      homeSceneId: body.homeSceneId !== undefined ? Number(body.homeSceneId) : undefined,
     });
     if (wantsJson(c)) return c.json(updated);
     return c.redirect(`${c.get("assetBase")}/a/${id}`);
@@ -330,7 +309,7 @@ worldRoutes.post("/a/:id/collect", async (c) => {
   const id = Number(c.req.param("id"));
   const artefact = world.getArtefact(id);
   if (!artefact) return apiError(c, 404, "Artefact not found");
-  const home = world.getNode(artefact.homeNodeId);
+  const home = world.getScene(artefact.homeSceneId);
   if (!home || !canReadArtefact(user, artefact, home)) {
     return apiError(c, 403, "Cannot collect an unreadable artefact");
   }

@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, access } from "node:fs/promises";
+import { cp, mkdir, readdir, access, rename } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   ArtefactMeta,
@@ -6,8 +6,8 @@ import type {
   ExitRecord,
   InventoryItem,
   MetaFile,
-  NodeMeta,
-  NodeRecord,
+  SceneMeta,
+  SceneRecord,
   UserRecord,
 } from "../model/types.js";
 import { readJson, readText, writeJsonAtomic, writeTextAtomic } from "./fs.js";
@@ -15,9 +15,9 @@ import { parseProseDocument, serializeProseDocument } from "./markdown.js";
 
 export class WorldStore {
   readonly dataDir: string;
-  meta: MetaFile = { nextNodeId: 1, nextArtefactId: 1 };
+  meta: MetaFile = { nextSceneId: 1, nextArtefactId: 1 };
   users = new Map<string, UserRecord>();
-  nodes = new Map<number, NodeRecord>();
+  scenes = new Map<number, SceneRecord>();
   exits = new Map<number, ExitRecord[]>();
   artefacts = new Map<number, ArtefactRecord>();
 
@@ -33,12 +33,14 @@ export class WorldStore {
       await cp(seedDir, this.dataDir, { recursive: true });
     }
 
+    await this.migrateLegacyLayout();
+
     await mkdir(join(this.dataDir, "users"), { recursive: true });
-    await mkdir(join(this.dataDir, "nodes"), { recursive: true });
+    await mkdir(join(this.dataDir, "scenes"), { recursive: true });
     await mkdir(join(this.dataDir, "artefacts"), { recursive: true });
 
     if (await exists(metaPath)) {
-      this.meta = await readJson<MetaFile>(metaPath);
+      this.meta = normalizeMeta(await readJson<Record<string, unknown>>(metaPath));
     }
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".json")) {
@@ -46,16 +48,17 @@ export class WorldStore {
       this.users.set(user.username, user);
     }
 
-    for (const file of await listFiles(join(this.dataDir, "nodes"), ".md")) {
+    for (const file of await listFiles(join(this.dataDir, "scenes"), ".md")) {
       const id = Number(file.replace(/\.md$/, ""));
       if (!Number.isFinite(id)) continue;
-      const raw = await readText(join(this.dataDir, "nodes", file));
-      const { meta, body, details } = parseProseDocument<NodeMeta>(raw);
-      this.nodes.set(id, { ...meta, id, body, details });
+      const raw = await readText(join(this.dataDir, "scenes", file));
+      const { meta, body, details } = parseProseDocument<SceneMeta>(raw);
+      this.scenes.set(id, { ...meta, id, body, details });
 
-      const exitsPath = join(this.dataDir, "nodes", `${id}.exits.json`);
+      const exitsPath = join(this.dataDir, "scenes", `${id}.exits.json`);
       if (await exists(exitsPath)) {
-        this.exits.set(id, await readJson<ExitRecord[]>(exitsPath));
+        const rawExits = await readJson<Array<Record<string, unknown>>>(exitsPath);
+        this.exits.set(id, rawExits.map(normalizeExit));
       } else {
         this.exits.set(id, []);
       }
@@ -65,31 +68,41 @@ export class WorldStore {
       const id = Number(file.replace(/\.md$/, ""));
       if (!Number.isFinite(id)) continue;
       const raw = await readText(join(this.dataDir, "artefacts", file));
-      const { meta, body, details } = parseProseDocument<ArtefactMeta>(raw);
+      const { meta, body, details } = parseProseDocument<Record<string, unknown>>(raw);
+      const normalised = normalizeArtefactMeta(meta);
       this.artefacts.set(id, {
-        ...meta,
+        ...normalised,
         id,
-        tags: meta.tags ?? [],
+        tags: normalised.tags ?? [],
         body,
         details,
       });
     }
   }
 
-  getNode(id: number): NodeRecord | undefined {
-    return this.nodes.get(id);
+  /** One-time rename from v1 "nodes" layout if present. */
+  private async migrateLegacyLayout(): Promise<void> {
+    const legacy = join(this.dataDir, "nodes");
+    const next = join(this.dataDir, "scenes");
+    if ((await exists(legacy)) && !(await exists(next))) {
+      await rename(legacy, next);
+    }
+  }
+
+  getScene(id: number): SceneRecord | undefined {
+    return this.scenes.get(id);
   }
 
   getArtefact(id: number): ArtefactRecord | undefined {
     return this.artefacts.get(id);
   }
 
-  getExits(fromNodeId: number): ExitRecord[] {
-    return this.exits.get(fromNodeId) ?? [];
+  getExits(fromSceneId: number): ExitRecord[] {
+    return this.exits.get(fromSceneId) ?? [];
   }
 
-  artefactsAt(nodeId: number): ArtefactRecord[] {
-    return [...this.artefacts.values()].filter((a) => a.homeNodeId === nodeId);
+  artefactsAt(sceneId: number): ArtefactRecord[] {
+    return [...this.artefacts.values()].filter((a) => a.homeSceneId === sceneId);
   }
 
   getUser(username: string): UserRecord | undefined {
@@ -105,16 +118,16 @@ export class WorldStore {
     await writeJsonAtomic(join(this.dataDir, "users", `${user.username}.json`), user);
   }
 
-  async saveNode(node: NodeRecord): Promise<void> {
-    this.nodes.set(node.id, node);
-    const { body, details, ...meta } = node;
+  async saveScene(scene: SceneRecord): Promise<void> {
+    this.scenes.set(scene.id, scene);
+    const { body, details, ...meta } = scene;
     const raw = serializeProseDocument(meta, body, details);
-    await writeTextAtomic(join(this.dataDir, "nodes", `${node.id}.md`), raw);
+    await writeTextAtomic(join(this.dataDir, "scenes", `${scene.id}.md`), raw);
   }
 
-  async saveExits(fromNodeId: number, exits: ExitRecord[]): Promise<void> {
-    this.exits.set(fromNodeId, exits);
-    await writeJsonAtomic(join(this.dataDir, "nodes", `${fromNodeId}.exits.json`), exits);
+  async saveExits(fromSceneId: number, exits: ExitRecord[]): Promise<void> {
+    this.exits.set(fromSceneId, exits);
+    await writeJsonAtomic(join(this.dataDir, "scenes", `${fromSceneId}.exits.json`), exits);
   }
 
   async saveArtefact(artefact: ArtefactRecord): Promise<void> {
@@ -139,16 +152,16 @@ export class WorldStore {
     return user;
   }
 
-  async createNode(input: {
+  async createScene(input: {
     owner: string;
     title?: string;
     body: string;
     details?: Record<string, string>;
-    visibility?: NodeRecord["visibility"];
-  }): Promise<NodeRecord> {
-    const id = this.meta.nextNodeId++;
+    visibility?: SceneRecord["visibility"];
+  }): Promise<SceneRecord> {
+    const id = this.meta.nextSceneId++;
     const createdAt = nowIso();
-    const node: NodeRecord = {
+    const scene: SceneRecord = {
       id,
       owner: input.owner,
       title: input.title,
@@ -158,63 +171,63 @@ export class WorldStore {
       body: input.body,
       details: input.details ?? {},
     };
-    await this.saveNode(node);
+    await this.saveScene(scene);
     await this.saveExits(id, []);
     await this.saveMeta();
-    return node;
+    return scene;
   }
 
-  async updateNode(
+  async updateScene(
     id: number,
-    patch: Partial<Pick<NodeRecord, "title" | "body" | "details" | "visibility">>,
-  ): Promise<NodeRecord> {
-    const existing = this.nodes.get(id);
-    if (!existing) throw new Error("Node not found");
-    const updated: NodeRecord = {
+    patch: Partial<Pick<SceneRecord, "title" | "body" | "details" | "visibility">>,
+  ): Promise<SceneRecord> {
+    const existing = this.scenes.get(id);
+    if (!existing) throw new Error("Scene not found");
+    const updated: SceneRecord = {
       ...existing,
       ...patch,
       details: patch.details ?? existing.details,
       modifiedAt: [...existing.modifiedAt, nowIso()],
     };
-    await this.saveNode(updated);
+    await this.saveScene(updated);
     return updated;
   }
 
   async addExit(
-    fromNodeId: number,
+    fromSceneId: number,
     nickname: string,
-    toNodeId: number,
+    toSceneId: number,
   ): Promise<ExitRecord> {
-    if (!this.nodes.has(fromNodeId)) throw new Error("From node not found");
-    if (!this.nodes.has(toNodeId)) throw new Error("To node not found");
-    const exits = [...this.getExits(fromNodeId)];
+    if (!this.scenes.has(fromSceneId)) throw new Error("From scene not found");
+    if (!this.scenes.has(toSceneId)) throw new Error("To scene not found");
+    const exits = [...this.getExits(fromSceneId)];
     const exitId = exits.reduce((max, e) => Math.max(max, e.exitId), 0) + 1;
     const exit: ExitRecord = {
       exitId,
       nickname,
-      toNodeId,
+      toSceneId,
       createdAt: nowIso(),
     };
     exits.push(exit);
-    await this.saveExits(fromNodeId, exits);
+    await this.saveExits(fromSceneId, exits);
     return exit;
   }
 
   async createArtefact(input: {
     owner: string;
-    homeNodeId: number;
+    homeSceneId: number;
     title?: string;
     body: string;
     details?: Record<string, string>;
     tags?: string[];
   }): Promise<ArtefactRecord> {
-    if (!this.nodes.has(input.homeNodeId)) throw new Error("Home node not found");
+    if (!this.scenes.has(input.homeSceneId)) throw new Error("Home scene not found");
     const id = this.meta.nextArtefactId++;
     const createdAt = nowIso();
     const artefact: ArtefactRecord = {
       id,
       owner: input.owner,
-      homeNodeId: input.homeNodeId,
+      homeSceneId: input.homeSceneId,
       title: input.title,
       tags: input.tags ?? [],
       createdAt,
@@ -229,12 +242,12 @@ export class WorldStore {
 
   async updateArtefact(
     id: number,
-    patch: Partial<Pick<ArtefactRecord, "title" | "body" | "details" | "tags" | "homeNodeId">>,
+    patch: Partial<Pick<ArtefactRecord, "title" | "body" | "details" | "tags" | "homeSceneId">>,
   ): Promise<ArtefactRecord> {
     const existing = this.artefacts.get(id);
     if (!existing) throw new Error("Artefact not found");
-    if (patch.homeNodeId !== undefined && !this.nodes.has(patch.homeNodeId)) {
-      throw new Error("Home node not found");
+    if (patch.homeSceneId !== undefined && !this.scenes.has(patch.homeSceneId)) {
+      throw new Error("Home scene not found");
     }
     const updated: ArtefactRecord = {
       ...existing,
@@ -273,6 +286,38 @@ export class WorldStore {
     await this.saveUser(updated);
     return updated;
   }
+}
+
+function normalizeMeta(raw: Record<string, unknown>): MetaFile {
+  const nextSceneId = Number(raw.nextSceneId ?? raw.nextNodeId ?? 1);
+  const nextArtefactId = Number(raw.nextArtefactId ?? 1);
+  return {
+    nextSceneId: Number.isFinite(nextSceneId) ? nextSceneId : 1,
+    nextArtefactId: Number.isFinite(nextArtefactId) ? nextArtefactId : 1,
+  };
+}
+
+function normalizeExit(raw: Record<string, unknown>): ExitRecord {
+  const toSceneId = Number(raw.toSceneId ?? raw.toNodeId);
+  return {
+    exitId: Number(raw.exitId),
+    nickname: String(raw.nickname ?? ""),
+    toSceneId,
+    createdAt: String(raw.createdAt ?? nowIso()),
+  };
+}
+
+function normalizeArtefactMeta(raw: Record<string, unknown>): ArtefactMeta {
+  const homeSceneId = Number(raw.homeSceneId ?? raw.homeNodeId);
+  return {
+    id: Number(raw.id),
+    owner: String(raw.owner ?? ""),
+    homeSceneId,
+    title: raw.title !== undefined ? String(raw.title) : undefined,
+    tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
+    createdAt: String(raw.createdAt ?? nowIso()),
+    modifiedAt: Array.isArray(raw.modifiedAt) ? raw.modifiedAt.map(String) : [],
+  };
 }
 
 function nowIso(): string {

@@ -1,32 +1,32 @@
-import type { ArtefactRecord, ExitRecord, NodeRecord } from "../model/types.js";
+import type { ArtefactRecord, ExitRecord, SceneRecord } from "../model/types.js";
 
-export function renderNodeText(opts: {
-  node: NodeRecord;
+export function renderSceneText(opts: {
+  scene: SceneRecord;
   exits: ExitRecord[];
   artefacts: ArtefactRecord[];
   detail?: string;
   basePath?: string;
 }): string {
   const base = opts.basePath ?? "";
-  const { node, exits, artefacts, detail } = opts;
+  const { scene, exits, artefacts, detail } = opts;
   const lines: string[] = [];
 
   if (detail) {
-    const text = node.details[detail];
-    lines.push(`[Node ${node.id}${node.title ? `: ${node.title}` : ""} — detail:${detail}]`);
+    const text = scene.details[detail];
+    lines.push(`[Scene ${scene.id}${scene.title ? `: ${scene.title}` : ""} — detail:${detail}]`);
     lines.push("");
     lines.push(text ?? `(No detail named "${detail}".)`);
   } else {
-    lines.push(`[Node ${node.id}${node.title ? `: ${node.title}` : ""}]`);
-    lines.push(`visibility: ${node.visibility}`);
+    lines.push(`[Scene ${scene.id}${scene.title ? `: ${scene.title}` : ""}]`);
+    lines.push(`visibility: ${scene.visibility}`);
     lines.push("");
-    lines.push(node.body);
+    lines.push(scene.body);
     lines.push("");
-    const detailNames = Object.keys(node.details).sort();
+    const detailNames = Object.keys(scene.details).sort();
     if (detailNames.length) {
       lines.push("Details:");
       for (const name of detailNames) {
-        lines.push(`  - ${name}  ${base}/n/${node.id}?${encodeURIComponent(name)}`);
+        lines.push(`  - ${name}  ${base}/s/${scene.id}?${encodeURIComponent(name)}`);
       }
       lines.push("");
     }
@@ -42,7 +42,7 @@ export function renderNodeText(opts: {
       lines.push("Exits:");
       for (const e of exits) {
         lines.push(
-          `  ${e.exitId}. ${e.nickname} -> node ${e.toNodeId}  ${base}/n/${e.toNodeId}`,
+          `  ${e.exitId}. ${e.nickname} -> scene ${e.toSceneId}  ${base}/s/${e.toSceneId}`,
         );
       }
       lines.push("");
@@ -70,7 +70,7 @@ export function renderArtefactText(opts: {
     lines.push(text ?? `(No detail named "${detail}".)`);
   } else {
     lines.push(`[Artefact ${artefact.id}${artefact.title ? `: ${artefact.title}` : ""}]`);
-    lines.push(`home: ${base}/n/${artefact.homeNodeId}`);
+    lines.push(`home: ${base}/s/${artefact.homeSceneId}`);
     if (artefact.tags.length) lines.push(`tags: ${artefact.tags.join(", ")}`);
     lines.push("");
     lines.push(artefact.body);

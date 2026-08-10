@@ -1,4 +1,4 @@
-import type { ArtefactRecord, ExitRecord, NodeRecord, UserRecord } from "../model/types.js";
+import type { ArtefactRecord, ExitRecord, SceneRecord, UserRecord } from "../model/types.js";
 
 export interface HtmlShellOptions {
   title: string;
@@ -10,8 +10,8 @@ export interface HtmlShellOptions {
 }
 
 export interface ManageContext {
-  kind: "node" | "artefact" | "inventory" | "home";
-  node?: NodeRecord;
+  kind: "scene" | "artefact" | "inventory" | "home";
+  scene?: SceneRecord;
   artefact?: ArtefactRecord;
   canEdit?: boolean;
   collected?: boolean;
@@ -76,41 +76,41 @@ function authLoggedOut(assetBase: string): string {
 function manageSidebar(manage: ManageContext | undefined, assetBase: string): string {
   const sections: string[] = [];
   sections.push(`<h2>Manage</h2>
-    <form method="post" action="${assetBase}/n" class="stack">
-      <h3>New node</h3>
+    <form method="post" action="${assetBase}/s" class="stack">
+      <h3>New scene</h3>
       <label>Title <input name="title" /></label>
       <label>Body <textarea name="body" rows="4" required></textarea></label>
       <label><input type="checkbox" name="visibility" value="public" /> Public</label>
-      <button type="submit">Create node</button>
+      <button type="submit">Create scene</button>
     </form>`);
 
-  if (manage?.kind === "node" && manage.node) {
-    const node = manage.node;
+  if (manage?.kind === "scene" && manage.scene) {
+    const scene = manage.scene;
     if (manage.canEdit) {
-      sections.push(`<form method="post" action="${assetBase}/n/${node.id}" class="stack" data-method="PUT">
-        <h3>Edit node ${node.id}</h3>
-        <label>Title <input name="title" value="${escapeAttr(node.title ?? "")}" /></label>
-        <label>Body <textarea name="body" rows="8" required>${escapeHtml(node.body)}</textarea></label>
-        <label>Details (JSON map) <textarea name="detailsJson" rows="4">${escapeHtml(JSON.stringify(node.details, null, 2))}</textarea></label>
-        <label><input type="checkbox" name="visibility" value="public" ${node.visibility === "public" ? "checked" : ""} /> Public</label>
-        <button type="submit">Save node</button>
+      sections.push(`<form method="post" action="${assetBase}/s/${scene.id}" class="stack" data-method="PUT">
+        <h3>Edit scene ${scene.id}</h3>
+        <label>Title <input name="title" value="${escapeAttr(scene.title ?? "")}" /></label>
+        <label>Body <textarea name="body" rows="8" required>${escapeHtml(scene.body)}</textarea></label>
+        <label>Details (JSON map) <textarea name="detailsJson" rows="4">${escapeHtml(JSON.stringify(scene.details, null, 2))}</textarea></label>
+        <label><input type="checkbox" name="visibility" value="public" ${scene.visibility === "public" ? "checked" : ""} /> Public</label>
+        <button type="submit">Save scene</button>
       </form>`);
-      sections.push(`<form method="post" action="${assetBase}/n/${node.id}/exits" class="stack">
+      sections.push(`<form method="post" action="${assetBase}/s/${scene.id}/exits" class="stack">
         <h3>Add exit</h3>
         <label>Nickname <input name="nickname" required /></label>
-        <label>To node id <input name="toNodeId" type="number" min="1" required /></label>
+        <label>To scene id <input name="toSceneId" type="number" min="1" required /></label>
         <button type="submit">Add exit</button>
       </form>`);
       sections.push(`<form method="post" action="${assetBase}/a" class="stack">
         <h3>New artefact here</h3>
-        <input type="hidden" name="homeNodeId" value="${node.id}" />
+        <input type="hidden" name="homeSceneId" value="${scene.id}" />
         <label>Title <input name="title" /></label>
         <label>Body <textarea name="body" rows="4" required></textarea></label>
         <label>Tags (comma) <input name="tags" /></label>
         <button type="submit">Create artefact</button>
       </form>`);
     } else {
-      sections.push(`<p class="muted">You can read this node but not edit it.</p>`);
+      sections.push(`<p class="muted">You can read this scene but not edit it.</p>`);
     }
   }
 
@@ -131,7 +131,7 @@ function manageSidebar(manage: ManageContext | undefined, assetBase: string): st
         <h3>Edit artefact ${a.id}</h3>
         <label>Title <input name="title" value="${escapeAttr(a.title ?? "")}" /></label>
         <label>Body <textarea name="body" rows="6" required>${escapeHtml(a.body)}</textarea></label>
-        <label>Home node <input name="homeNodeId" type="number" value="${a.homeNodeId}" required /></label>
+        <label>Home scene <input name="homeSceneId" type="number" value="${a.homeSceneId}" required /></label>
         <label>Tags (comma) <input name="tags" value="${escapeAttr(a.tags.join(", "))}" /></label>
         <label>Details (JSON map) <textarea name="detailsJson" rows="4">${escapeHtml(JSON.stringify(a.details, null, 2))}</textarea></label>
         <button type="submit">Save artefact</button>
@@ -144,28 +144,28 @@ function manageSidebar(manage: ManageContext | undefined, assetBase: string): st
   return `<aside class="manage" id="manage-sidebar">${sections.join("\n")}</aside>`;
 }
 
-export function renderNodeBodyHtml(opts: {
-  node: NodeRecord;
+export function renderSceneBodyHtml(opts: {
+  scene: SceneRecord;
   exits: ExitRecord[];
   artefacts: ArtefactRecord[];
   detail?: string;
   assetBase?: string;
 }): string {
   const base = opts.assetBase ?? "";
-  const { node, exits, artefacts, detail } = opts;
+  const { scene, exits, artefacts, detail } = opts;
 
   if (detail) {
-    const text = node.details[detail];
-    return `<p class="crumb"><a href="${base}/n/${node.id}">← Node ${node.id}</a></p>
-      <h1>${escapeHtml(node.title ?? `Node ${node.id}`)} <span class="sub">detail:${escapeHtml(detail)}</span></h1>
+    const text = scene.details[detail];
+    return `<p class="crumb"><a href="${base}/s/${scene.id}">← Scene ${scene.id}</a></p>
+      <h1>${escapeHtml(scene.title ?? `Scene ${scene.id}`)} <span class="sub">detail:${escapeHtml(detail)}</span></h1>
       <div class="desc">${formatProse(text ?? `No detail named “${detail}”.`)}</div>`;
   }
 
-  const detailLinks = Object.keys(node.details)
+  const detailLinks = Object.keys(scene.details)
     .sort()
     .map(
       (name) =>
-        `<li><a href="${base}/n/${node.id}?${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
+        `<li><a href="${base}/s/${scene.id}?${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
     )
     .join("");
 
@@ -178,13 +178,13 @@ export function renderNodeBodyHtml(opts: {
 
   const exitLinks = exits
     .map((e) => {
-      return `<li><a href="${base}/n/${e.toNodeId}"><span class="exit-id">${e.exitId}</span> ${escapeHtml(e.nickname)}</a></li>`;
+      return `<li><a href="${base}/s/${e.toSceneId}"><span class="exit-id">${e.exitId}</span> ${escapeHtml(e.nickname)}</a></li>`;
     })
     .join("");
 
-  return `<h1>${escapeHtml(node.title ?? `Node ${node.id}`)} <span class="sub">#${node.id}</span></h1>
-    <p class="meta">${escapeHtml(node.visibility)}</p>
-    <div class="desc">${formatProse(node.body)}</div>
+  return `<h1>${escapeHtml(scene.title ?? `Scene ${scene.id}`)} <span class="sub">#${scene.id}</span></h1>
+    <p class="meta">${escapeHtml(scene.visibility)}</p>
+    <div class="desc">${formatProse(scene.body)}</div>
     ${detailLinks ? `<section><h2>Details</h2><ul class="link-list">${detailLinks}</ul></section>` : ""}
     ${artefactLinks ? `<section><h2>Artefacts</h2><ul class="link-list">${artefactLinks}</ul></section>` : ""}
     ${exitLinks ? `<section><h2>Exits</h2><ul class="link-list">${exitLinks}</ul></section>` : ""}`;
@@ -214,7 +214,7 @@ export function renderArtefactBodyHtml(opts: {
     .join("");
 
   return `<h1>${escapeHtml(artefact.title ?? `Artefact ${artefact.id}`)} <span class="sub">#${artefact.id}</span></h1>
-    <p class="meta">Homed at <a href="${base}/n/${artefact.homeNodeId}">node ${artefact.homeNodeId}</a>${
+    <p class="meta">Homed at <a href="${base}/s/${artefact.homeSceneId}">scene ${artefact.homeSceneId}</a>${
       artefact.tags.length ? ` · ${escapeHtml(artefact.tags.join(", "))}` : ""
     }</p>
     <div class="desc">${formatProse(artefact.body)}</div>

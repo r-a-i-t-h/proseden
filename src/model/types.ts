@@ -16,7 +16,7 @@ export interface UserRecord {
   denies?: string[];
 }
 
-export interface NodeMeta {
+export interface SceneMeta {
   id: number;
   owner: string;
   visibility: Visibility;
@@ -30,7 +30,7 @@ export interface NodeMeta {
   entranceGroupId?: string | null;
 }
 
-export interface NodeRecord extends NodeMeta {
+export interface SceneRecord extends SceneMeta {
   body: string;
   details: Record<string, string>;
 }
@@ -38,14 +38,14 @@ export interface NodeRecord extends NodeMeta {
 export interface ExitRecord {
   exitId: number;
   nickname: string;
-  toNodeId: number;
+  toSceneId: number;
   createdAt: string;
 }
 
 export interface ArtefactMeta {
   id: number;
   owner: string;
-  homeNodeId: number;
+  homeSceneId: number;
   title?: string;
   tags: string[];
   createdAt: string;
@@ -58,7 +58,7 @@ export interface ArtefactRecord extends ArtefactMeta {
 }
 
 export interface MetaFile {
-  nextNodeId: number;
+  nextSceneId: number;
   nextArtefactId: number;
 }
 

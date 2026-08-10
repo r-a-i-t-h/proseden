@@ -2,7 +2,7 @@
   {
     "exitId": 1,
     "nickname": "threshold",
-    "toNodeId": 1,
+    "toSceneId": 1,
     "createdAt": "2026-08-10T20:05:00.000Z"
   }
 ]

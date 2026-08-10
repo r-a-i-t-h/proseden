@@ -23,7 +23,7 @@ export function negotiateFormat(c: Context): OutputFormat {
   return "html";
 }
 
-/** Detail name is the query key itself, e.g. `/n/1?card` or `/n/1?card&format=text`. */
+/** Detail name is the query key itself, e.g. `/s/1?card` or `/s/1?card&format=text`. */
 export function queryDetailName(c: Context): string | undefined {
   const url = new URL(c.req.url);
   for (const key of url.searchParams.keys()) {
