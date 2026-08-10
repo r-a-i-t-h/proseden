@@ -274,6 +274,95 @@ button:hover {
   border-bottom: none;
 }
 
+.json-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.json-field-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.json-field-label label {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.json-format-help {
+  position: relative;
+  display: inline-block;
+}
+
+.json-format-info {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.65);
+  font-family: Fraunces, Georgia, serif;
+  font-size: 0.72rem;
+  font-style: italic;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1;
+  padding: 0;
+  user-select: none;
+}
+
+.json-format-info::-webkit-details-marker {
+  display: none;
+}
+
+.json-format-info::marker {
+  content: "";
+}
+
+.json-format-help[open] > .json-format-info {
+  color: var(--moss);
+  border-color: var(--moss);
+}
+
+.json-format-example {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  top: calc(100% + 0.3rem);
+  width: min(16.5rem, calc(100vw - 3rem));
+  padding: 0.55rem 0.65rem;
+  background: #f7faf5;
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.json-format-example .muted {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.json-format-example pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
 .stack {
   display: flex;
   flex-direction: column;

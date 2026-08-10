@@ -78,6 +78,50 @@ function manageSection(title: string, inner: string): string {
   </details>`;
 }
 
+const DETAILS_JSON_EXAMPLE = `{
+  "card": "Closer look at the mantel card.",
+  "window": "Rain beads on the glass."
+}`;
+
+const GRANTS_JSON_EXAMPLE = `[
+  { "who": "visitor", "rights": ["read"] },
+  { "who": "*", "rights": ["read", "edit"] }
+]`;
+
+const DENIES_JSON_EXAMPLE = `[
+  { "who": "bob", "rights": ["edit"] },
+  { "who": "carol" }
+]`;
+
+let jsonFieldSeq = 0;
+
+function jsonEditorField(opts: {
+  label: string;
+  name: string;
+  rows: number;
+  value: unknown;
+  example: string;
+  exampleNote?: string;
+}): string {
+  const note = opts.exampleNote
+    ? `<p class="muted">${escapeHtml(opts.exampleNote)}</p>`
+    : "";
+  const fieldId = `json-field-${++jsonFieldSeq}`;
+  return `<div class="json-field">
+    <div class="json-field-label">
+      <label for="${escapeAttr(fieldId)}">${escapeHtml(opts.label)}</label>
+      <details class="json-format-help">
+        <summary class="json-format-info" aria-label="Example ${escapeAttr(opts.label)} format" title="Show example format">i</summary>
+        <div class="json-format-example">
+          ${note}
+          <pre>${escapeHtml(opts.example)}</pre>
+        </div>
+      </details>
+    </div>
+    <textarea id="${escapeAttr(fieldId)}" name="${escapeAttr(opts.name)}" rows="${opts.rows}">${escapeHtml(JSON.stringify(opts.value, null, 2))}</textarea>
+  </div>`;
+}
+
 function authLoggedIn(user: UserRecord): string {
   return `<span class="who">Signed in as <strong>${escapeHtml(user.username)}</strong></span>
     <a href="inv">Inventory</a>
@@ -152,7 +196,14 @@ function manageSidebar(
           `<form method="post" action="s/${scene.id}" class="stack" data-method="PUT">
         <label>Title <input name="title" value="${escapeAttr(scene.title ?? "")}" /></label>
         <label>Body <textarea name="body" rows="8" required>${escapeHtml(scene.body)}</textarea></label>
-        <label>Details (JSON map) <textarea name="detailsJson" rows="4">${escapeHtml(JSON.stringify(scene.details, null, 2))}</textarea></label>
+        ${jsonEditorField({
+          label: "Details (JSON map)",
+          name: "detailsJson",
+          rows: 4,
+          value: scene.details,
+          example: DETAILS_JSON_EXAMPLE,
+          exampleNote: "Object of named closer-look texts (string values).",
+        })}
         <label><input type="checkbox" name="visibility" value="public" ${scene.visibility === "public" ? "checked" : ""} /> Public</label>
         ${
           manage.canManage
@@ -198,8 +249,22 @@ function manageSidebar(
           "Scene access",
           `<form method="post" action="s/${scene.id}/access" class="stack" data-method="PUT">
         <p class="muted">Grants: who + rights (read/edit/manage). Use <code>*</code> for everyone.</p>
-        <label>Grants (JSON) <textarea name="grantsJson" rows="5">${escapeHtml(JSON.stringify(scene.grants ?? [], null, 2))}</textarea></label>
-        <label>Denies (JSON) <textarea name="deniesJson" rows="4">${escapeHtml(JSON.stringify(scene.denies ?? [], null, 2))}</textarea></label>
+        ${jsonEditorField({
+          label: "Grants (JSON)",
+          name: "grantsJson",
+          rows: 5,
+          value: scene.grants ?? [],
+          example: GRANTS_JSON_EXAMPLE,
+          exampleNote: "Array of { who, rights }. Rights: read, edit, manage.",
+        })}
+        ${jsonEditorField({
+          label: "Denies (JSON)",
+          name: "deniesJson",
+          rows: 4,
+          value: scene.denies ?? [],
+          example: DENIES_JSON_EXAMPLE,
+          exampleNote: "Array of { who, rights? }. Omit rights to deny all.",
+        })}
         <button type="submit">Save access</button>
       </form>`,
         ),
@@ -303,7 +368,14 @@ function manageSidebar(
         <label>Body <textarea name="body" rows="6" required>${escapeHtml(a.body)}</textarea></label>
         <label>Home scene <input name="homeSceneId" type="number" value="${a.homeSceneId}" required /></label>
         <label>Tags (comma) <input name="tags" value="${escapeAttr(a.tags.join(", "))}" /></label>
-        <label>Details (JSON map) <textarea name="detailsJson" rows="4">${escapeHtml(JSON.stringify(a.details, null, 2))}</textarea></label>
+        ${jsonEditorField({
+          label: "Details (JSON map)",
+          name: "detailsJson",
+          rows: 4,
+          value: a.details,
+          example: DETAILS_JSON_EXAMPLE,
+          exampleNote: "Object of named closer-look texts (string values).",
+        })}
         <label><input type="checkbox" name="retainSnapshot" value="true" /> Keep version snapshot</label>
         <button type="submit">Save artefact</button>
       </form>
@@ -329,8 +401,22 @@ function manageSidebar(
         "Share all my work",
         `<form method="post" action="u/${encodeURIComponent(user.username)}/access" class="stack" data-method="PUT">
       <p class="muted">User-level grants/denies apply to every scene and group you own.</p>
-      <label>Grants (JSON) <textarea name="grantsJson" rows="4">${escapeHtml(JSON.stringify(manage?.userGrants ?? user.grants ?? [], null, 2))}</textarea></label>
-      <label>Denies (JSON) <textarea name="deniesJson" rows="3">${escapeHtml(JSON.stringify(manage?.userDenies ?? user.denies ?? [], null, 2))}</textarea></label>
+      ${jsonEditorField({
+        label: "Grants (JSON)",
+        name: "grantsJson",
+        rows: 4,
+        value: manage?.userGrants ?? user.grants ?? [],
+        example: GRANTS_JSON_EXAMPLE,
+        exampleNote: "Array of { who, rights }. Rights: read, edit, manage.",
+      })}
+      ${jsonEditorField({
+        label: "Denies (JSON)",
+        name: "deniesJson",
+        rows: 3,
+        value: manage?.userDenies ?? user.denies ?? [],
+        example: DENIES_JSON_EXAMPLE,
+        exampleNote: "Array of { who, rights? }. Omit rights to deny all.",
+      })}
       <button type="submit">Save share-all</button>
     </form>`,
       ),
