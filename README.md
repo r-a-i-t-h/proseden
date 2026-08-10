@@ -2,7 +2,7 @@
 
 A prose-driven textual world served over HTTP. Scenes and artefacts are plain descriptions with optional closer details. Public scenes are open to anyone; private scenes and edits require authentication.
 
-See [SPEC.md](SPEC.md) for the product vision. This README covers the v1 implementation.
+See [SPEC.md](SPEC.md) for the product vision and [NAVIGATION.md](NAVIGATION.md) for teleport vs exit navigation, entrance groups, and access rules. This README covers the v1 implementation.
 
 ## Quick start
 
