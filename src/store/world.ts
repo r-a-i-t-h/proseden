@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, access, rename } from "node:fs/promises";
+import { cp, mkdir, readdir, access, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { AccessWorld } from "../access/permissions.js";
 import { normalizeDenies, normalizeGrants, stripLegacyInvites } from "../access/acl.js";
@@ -60,7 +60,10 @@ export class WorldStore implements AccessWorld {
     if (await exists(staffPath)) {
       this.staff = normalizeStaff(await readJson<Record<string, unknown>>(staffPath));
     }
-    this.applyManagerBootstrap();
+    const bootstrapped = this.applyManagerBootstrap();
+    if (bootstrapped || !(await exists(staffPath))) {
+      await this.saveStaff();
+    }
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".json")) {
       const raw = await readJson<Record<string, unknown>>(join(this.dataDir, "users", file));
@@ -416,13 +419,82 @@ export class WorldStore implements AccessWorld {
     return { sceneId: eg.entranceSceneId, redirected: true };
   }
 
-  private applyManagerBootstrap(): void {
+  async setStaffRoles(username: string, roles: StaffRole[]): Promise<StaffFile> {
+    if (!this.users.has(username)) throw new Error("User not found");
+    const cleaned = [...new Set(roles)].filter(
+      (r): r is StaffRole => r === "moderator" || r === "organiser" || r === "manager",
+    );
+    if (cleaned.length) this.staff.roles[username] = cleaned;
+    else delete this.staff.roles[username];
+    await this.saveStaff();
+    return this.staff;
+  }
+
+  async deleteScene(id: number): Promise<void> {
+    if (!this.scenes.has(id)) throw new Error("Scene not found");
+    const groupId = this.scenes.get(id)?.groupId;
+    const egId = this.scenes.get(id)?.entranceGroupId;
+    this.scenes.delete(id);
+    this.exits.delete(id);
+    const scenePath = join(this.dataDir, "scenes", `${id}.md`);
+    const exitsPath = join(this.dataDir, "scenes", `${id}.exits.json`);
+    try {
+      await unlink(scenePath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      await unlink(exitsPath);
+    } catch {
+      /* ignore */
+    }
+    if (groupId) {
+      const g = this.groups.get(groupId);
+      if (g) {
+        await this.saveGroup({ ...g, sceneIds: g.sceneIds.filter((s) => s !== id) });
+      }
+    }
+    if (egId) {
+      const eg = this.entranceGroups.get(egId);
+      if (eg) {
+        await this.saveEntranceGroup({
+          ...eg,
+          sceneIds: eg.sceneIds.filter((s) => s !== id),
+        });
+      }
+    }
+  }
+
+  async deleteArtefact(id: number): Promise<void> {
+    if (!this.artefacts.has(id)) throw new Error("Artefact not found");
+    this.artefacts.delete(id);
+    try {
+      await unlink(join(this.dataDir, "artefacts", `${id}.md`));
+    } catch {
+      /* ignore */
+    }
+    for (const user of this.users.values()) {
+      if (user.inventory.some((i) => i.artefactId === id)) {
+        await this.saveUser({
+          ...user,
+          inventory: user.inventory.filter((i) => i.artefactId !== id),
+        });
+      }
+    }
+  }
+
+  private applyManagerBootstrap(): boolean {
     const env = process.env.PROSEDEN_MANAGERS ?? "";
+    let changed = false;
     for (const name of env.split(",").map((s) => s.trim()).filter(Boolean)) {
       const roles = new Set(this.staff.roles[name] ?? []);
-      roles.add("manager");
+      if (!roles.has("manager")) {
+        roles.add("manager");
+        changed = true;
+      }
       this.staff.roles[name] = [...roles];
     }
+    return changed;
   }
 
   async saveExits(fromSceneId: number, exits: ExitRecord[]): Promise<void> {

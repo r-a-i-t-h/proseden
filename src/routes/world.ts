@@ -6,10 +6,14 @@ import {
   canEditArtefact,
   canManage,
   canManageGroup,
+  canOrganise,
   canRead,
   canReadArtefact,
   canReadGroup,
+  isManager,
+  isModerator,
 } from "../access/permissions.js";
+import type { StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
   renderArtefactBodyHtml,
@@ -103,6 +107,9 @@ worldRoutes.get("/s/:id", (c) => {
       scene,
       canEdit: canEdit(user, scene, world),
       canManage: manage,
+      canOrganise: canOrganise(user, world),
+      canDelete: manage || isModerator(user, world),
+      isManager: isManager(user, world),
       userGrants: user?.grants,
       userDenies: user?.denies,
       groups,
@@ -170,6 +177,12 @@ worldRoutes.get("/a/:id", (c) => {
       kind: "artefact",
       artefact,
       canEdit: canEditArtefact(user, artefact, home, world),
+      canDelete:
+        !!user &&
+        (user.username === artefact.owner ||
+          isModerator(user, world) ||
+          canManage(user, home, world)),
+      isManager: isManager(user, world),
       collected,
       userGrants: user?.grants,
       userDenies: user?.denies,
@@ -208,6 +221,7 @@ worldRoutes.get("/inv", (c) => {
       kind: "inventory",
       userGrants: user.grants,
       userDenies: user.denies,
+      isManager: isManager(user, world),
     },
   );
 });
@@ -385,15 +399,7 @@ function canManageUserAccess(
 ): boolean {
   if (!user) return false;
   if (user.username === username) return true;
-  return world.rolesFor(user.username).includes("manager");
-}
-
-function isOrganiser(
-  user: import("../model/types.js").UserRecord,
-  world: import("../store/world.js").WorldStore,
-): boolean {
-  const roles = world.rolesFor(user.username);
-  return roles.includes("organiser") || roles.includes("manager");
+  return isManager(user, world);
 }
 
 function parseFromScene(c: Context): number | undefined {
@@ -592,7 +598,7 @@ worldRoutes.post("/s/:id/exits", async (c) => {
   const id = Number(c.req.param("id"));
   const scene = world.getScene(id);
   if (!scene) return apiError(c, 404, "Scene not found");
-  if (!canManage(user, scene, world)) {
+  if (!canManage(user, scene, world) && !canOrganise(user, world)) {
     return apiError(c, 403, "Manage rights required to add exits");
   }
 
@@ -631,7 +637,7 @@ worldRoutes.post("/eg", async (c) => {
   if (!Number.isFinite(entranceSceneId)) return apiError(c, 400, "entranceSceneId is required");
   const entrance = world.getScene(entranceSceneId);
   if (!entrance) return apiError(c, 404, "Entrance scene not found");
-  if (!canManage(user, entrance, world) && !isOrganiser(user, world)) {
+  if (!canManage(user, entrance, world) && !canOrganise(user, world)) {
     return apiError(c, 403, "Manage rights required on entrance scene");
   }
   try {
@@ -656,7 +662,7 @@ worldRoutes.post("/s/:id/entrance-group", async (c) => {
   const sceneId = Number(c.req.param("id"));
   const scene = world.getScene(sceneId);
   if (!scene) return apiError(c, 404, "Scene not found");
-  if (!canManage(user, scene, world) && !isOrganiser(user, world)) {
+  if (!canManage(user, scene, world) && !canOrganise(user, world)) {
     return apiError(c, 403, "Manage rights required");
   }
   const body = await readBody(c);
@@ -767,6 +773,83 @@ async function dropCollect(c: Context) {
   c.set("user", updated);
   if (wantsJson(c)) return c.json({ ok: true, inventory: updated.inventory });
   return c.redirect(`${c.get("assetBase")}/a/${id}`);
+}
+
+worldRoutes.delete("/s/:id", async (c) => deleteScene(c));
+worldRoutes.post("/s/:id/delete", async (c) => deleteScene(c));
+
+async function deleteScene(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = Number(c.req.param("id"));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canManage(user, scene, world) && !isModerator(user, world)) {
+    return apiError(c, 403, "Not allowed to delete this scene");
+  }
+  await world.deleteScene(id);
+  if (wantsJson(c)) return c.json({ ok: true });
+  return c.redirect(`${c.get("assetBase")}/`);
+}
+
+worldRoutes.delete("/a/:id", async (c) => deleteArtefact(c));
+worldRoutes.post("/a/:id/delete", async (c) => deleteArtefact(c));
+
+async function deleteArtefact(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = Number(c.req.param("id"));
+  const artefact = world.getArtefact(id);
+  if (!artefact) return apiError(c, 404, "Artefact not found");
+  const home = world.getScene(artefact.homeSceneId);
+  const allowed =
+    user.username === artefact.owner ||
+    isModerator(user, world) ||
+    (!!home && canManage(user, home, world));
+  if (!allowed) return apiError(c, 403, "Not allowed to delete this artefact");
+  await world.deleteArtefact(id);
+  if (wantsJson(c)) return c.json({ ok: true });
+  return c.redirect(`${c.get("assetBase")}/`);
+}
+
+worldRoutes.get("/staff", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!isManager(user, world)) {
+    return apiError(c, user ? 403 : 401, "Manager role required");
+  }
+  if (wantsJson(c)) return c.json(world.staff);
+  return c.text(renderMessageText("Staff", JSON.stringify(world.staff.roles, null, 2)));
+});
+
+worldRoutes.put("/staff/:username", async (c) => setStaff(c));
+worldRoutes.post("/staff/:username", async (c) => setStaff(c));
+
+async function setStaff(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!isManager(user, world)) {
+    return apiError(c, user ? 403 : 401, "Manager role required");
+  }
+  const username = String(c.req.param("username") ?? "");
+  const body = await readBody(c);
+  let roles: StaffRole[] = [];
+  if (Array.isArray(body.roles)) {
+    roles = body.roles.map(String) as StaffRole[];
+  } else if (typeof body.roles === "string") {
+    roles = body.roles.split(",").map((s) => s.trim()).filter(Boolean) as StaffRole[];
+  } else if (typeof body.rolesJson === "string") {
+    roles = JSON.parse(body.rolesJson) as StaffRole[];
+  }
+  try {
+    const staff = await world.setStaffRoles(username, roles);
+    if (wantsJson(c)) return c.json({ username, roles: staff.roles[username] ?? [] });
+    return c.redirect(`${c.get("assetBase")}/`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not set roles");
+  }
 }
 
 function page(

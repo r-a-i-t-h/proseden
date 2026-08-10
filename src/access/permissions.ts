@@ -169,9 +169,9 @@ function isGranted(
 
 /**
  * Staff roles (Phase 5):
- * - moderator: edit (prose), not manage
- * - organiser: treated as manage for graph/structure (exits/groups); also edit
- * - manager: manage (personnel / access)
+ * - moderator: edit (prose) worldwide, not manage / restructure
+ * - organiser: graph structure via canOrganise (not full ACL manage)
+ * - manager: full manage + personnel APIs
  */
 function staffCovers(user: UserRecord, right: Right, world: AccessWorld): boolean {
   const roles = world.rolesFor?.(user.username) ?? [];
@@ -182,7 +182,38 @@ function staffCovers(user: UserRecord, right: Right, world: AccessWorld): boolea
     }
   }
   if (right === "manage") {
-    if (roles.includes("manager") || roles.includes("organiser")) return true;
+    if (roles.includes("manager")) return true;
   }
   return false;
+}
+
+/** Organisers (and managers) may restructure graph worldwide. */
+export function canOrganise(
+  user: UserRecord | undefined,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  const roles = world.rolesFor?.(user.username) ?? [];
+  return roles.includes("organiser") || roles.includes("manager");
+}
+
+export function isModerator(
+  user: UserRecord | undefined,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  const roles = world.rolesFor?.(user.username) ?? [];
+  return (
+    roles.includes("moderator") ||
+    roles.includes("organiser") ||
+    roles.includes("manager")
+  );
+}
+
+export function isManager(
+  user: UserRecord | undefined,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  return (world.rolesFor?.(user.username) ?? []).includes("manager");
 }

@@ -15,6 +15,9 @@ export interface ManageContext {
   artefact?: ArtefactRecord;
   canEdit?: boolean;
   canManage?: boolean;
+  canOrganise?: boolean;
+  canDelete?: boolean;
+  isManager?: boolean;
   collected?: boolean;
   /** Current user's share-all ACL (for sidebar). */
   userGrants?: import("../model/types.js").Grant[];
@@ -120,13 +123,15 @@ function manageSidebar(
     } else {
       sections.push(`<p class="muted">You can read this scene but not edit it.</p>`);
     }
-    if (manage.canManage) {
+    if (manage.canManage || manage.canOrganise) {
       sections.push(`<form method="post" action="${assetBase}/s/${scene.id}/exits" class="stack">
         <h3>Add exit</h3>
         <label>Nickname <input name="nickname" required /></label>
         <label>To scene id <input name="toSceneId" type="number" min="1" required /></label>
         <button type="submit">Add exit</button>
       </form>`);
+    }
+    if (manage.canManage) {
       sections.push(`<form method="post" action="${assetBase}/s/${scene.id}/access" class="stack" data-method="PUT">
         <h3>Scene access</h3>
         <p class="muted">Grants: who + rights (read/edit/manage). Use <code>*</code> for everyone.</p>
@@ -158,6 +163,24 @@ function manageSidebar(
         <input type="hidden" name="entranceSceneId" value="${scene.id}" />
         <button type="submit">Create with this scene as entrance</button>
       </form>`);
+    } else if (manage.canOrganise) {
+      sections.push(`<form method="post" action="${assetBase}/g" class="stack">
+        <h3>New group</h3>
+        <label>Title <input name="title" required /></label>
+        <button type="submit">Create group</button>
+      </form>`);
+      sections.push(`<form method="post" action="${assetBase}/eg" class="stack">
+        <h3>Entrance group</h3>
+        <label>Title <input name="title" required /></label>
+        <input type="hidden" name="entranceSceneId" value="${scene.id}" />
+        <button type="submit">Create with this scene as entrance</button>
+      </form>`);
+    }
+    if (manage.canDelete) {
+      sections.push(`<form method="post" action="${assetBase}/s/${scene.id}/delete" class="stack">
+        <h3>Delete scene</h3>
+        <button type="submit">Delete scene ${scene.id}</button>
+      </form>`);
     }
   }
 
@@ -184,6 +207,11 @@ function manageSidebar(
         <button type="submit">Save artefact</button>
       </form>`);
     }
+    if (manage.canDelete) {
+      sections.push(`<form method="post" action="${assetBase}/a/${a.id}/delete" class="stack">
+        <button type="submit">Delete artefact</button>
+      </form>`);
+    }
   }
 
   if (user) {
@@ -194,6 +222,38 @@ function manageSidebar(
       <label>Denies (JSON) <textarea name="deniesJson" rows="3">${escapeHtml(JSON.stringify(manage?.userDenies ?? user.denies ?? [], null, 2))}</textarea></label>
       <button type="submit">Save share-all</button>
     </form>`);
+  }
+
+  if (manage?.isManager) {
+    sections.push(`<form method="post" action="${assetBase}/staff/" class="stack" id="staff-form">
+      <h3>Assign staff role</h3>
+      <label>Username <input name="username" required /></label>
+      <label>Roles (comma: moderator, organiser, manager) <input name="roles" placeholder="moderator" /></label>
+      <button type="submit">Save roles</button>
+    </form>
+    <script>
+      (function () {
+        var form = document.getElementById("staff-form");
+        if (!form) return;
+        form.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var username = form.querySelector('input[name="username"]').value.trim();
+          var roles = form.querySelector('input[name="roles"]').value;
+          if (!username) return;
+          form.action = ${JSON.stringify(assetBase)} + "/staff/" + encodeURIComponent(username);
+          var body = new URLSearchParams();
+          body.set("roles", roles);
+          fetch(form.action, {
+            method: "POST",
+            headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+            body: body,
+          }).then(function (r) {
+            if (r.ok) window.location.reload();
+            else r.json().then(function (err) { alert(err.error || "Failed"); });
+          });
+        });
+      })();
+    </script>`);
   }
 
   sections.push(`<p class="muted"><a href="${assetBase}/inv">Open inventory</a></p>`);

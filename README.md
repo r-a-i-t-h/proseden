@@ -27,6 +27,7 @@ Environment:
 | `PROSEDEN_DATA` | `./data` | Live world files (created from `seed/` on first boot) |
 | `PROSEDEN_SEED` | `./seed` | Seed copied when `data/meta.json` is missing |
 | `PROSEDEN_BASE_PATH` | _(empty)_ | URL prefix for subdirectory deploy, e.g. `proseden` |
+| `PROSEDEN_MANAGERS` | _(empty)_ | Comma-separated usernames granted `manager` on boot |
 
 Seed login: **gardener** / **garden**
 
@@ -86,6 +87,10 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `POST` | `/s/:id/group` | Assign/clear scene group |
 | `POST` | `/eg` | Create entrance group (entrance = scene id) |
 | `POST` | `/s/:id/entrance-group` | Assign/clear entrance group on scene |
+| `DELETE`/`POST` | `/s/:id/delete` | Delete scene (manage or moderator) |
+| `DELETE`/`POST` | `/a/:id/delete` | Delete artefact (owner/manage/moderator) |
+| `GET` | `/staff` | List staff roles (manager) |
+| `PUT`/`POST` | `/staff/:username` | Set roles (manager) |
 | `POST` | `/a` | Create artefact (auth, edit rights on home) |
 | `PUT`/`POST` | `/a/:id` | Update artefact |
 | `POST` | `/a/:id/collect` | Collect (inventory link) |
@@ -113,4 +118,4 @@ Prose files use YAML frontmatter plus `## detail:<slug>` sections.
 
 ## Deferred (later phases)
 
-Moderator/organiser/manager roles and historical snapshot browsing.
+Historical snapshot browsing (edit log lands with Phase 6).

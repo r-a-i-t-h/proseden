@@ -83,7 +83,7 @@ flowchart TD
 - **Public junctions:** `isJunction: true` on a public scene; any writer with a scene they can manage may `POST` an exit *to* that junction (and optionally from it if they also manage the junction). Non-junction private/public scenes: only managers of the from-scene add exits, and destination must be readable or a junction
 - List exits in text/HTML with go URLs (`/s/1/go/2`, `/s/1/go/reading%20nook`)
 
-### Phase 5 — Admin roles
+### Phase 5 — Admin roles ✅
 
 - `data/staff.json` (or per-user `roles[]`): `moderator` | `organiser` | `manager`
 - **Moderator:** edit/delete any scene/artefact prose (not necessarily restructure graph)
