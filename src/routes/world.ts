@@ -14,7 +14,7 @@ import {
   isManager,
   isModerator,
 } from "../access/permissions.js";
-import type { StaffRole } from "../model/types.js";
+import type { StaffRole, UserRecord } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
   escapeHtml,
@@ -23,6 +23,7 @@ import {
   renderInventoryBodyHtml,
   renderMessageBodyHtml,
   renderSceneBodyHtml,
+  type OwnedSceneLink,
 } from "../render/html.js";
 import {
   renderArtefactText,
@@ -30,6 +31,7 @@ import {
   renderMessageText,
   renderSceneText,
 } from "../render/text.js";
+import type { WorldStore } from "../store/world.js";
 
 export const worldRoutes = new Hono();
 
@@ -43,7 +45,9 @@ worldRoutes.get("/s/:id", (c) => {
   const user = c.get("user");
   const id = Number(c.req.param("id"));
   const fromHint = parseFromScene(c);
-  const resolved = world.resolveTeleportTarget(id, fromHint);
+  const resolved = world.resolveTeleportTarget(id, fromHint, {
+    asOwnerUsername: user?.username,
+  });
   if (resolved.redirected) {
     const entrance = world.getScene(resolved.sceneId);
     if (!entrance || !canRead(user, entrance, world)) {
@@ -1103,10 +1107,19 @@ function page(
       user,
       assetBase: c.get("assetBase"),
       manage,
+      ownedScenes: ownedSceneLinks(world, user),
       isManager: isManager(user, world),
     }),
     status as 200,
   );
+}
+
+function ownedSceneLinks(world: WorldStore, user: UserRecord | undefined): OwnedSceneLink[] {
+  if (!user) return [];
+  return world.listScenesOwnedBy(user.username).map((s) => ({
+    id: s.id,
+    title: s.title,
+  }));
 }
 
 function apiError(c: Context, status: 400 | 401 | 403 | 404, message: string) {
@@ -1122,6 +1135,7 @@ function apiError(c: Context, status: 400 | 401 | 403 | 404, message: string) {
       bodyHtml: renderMessageBodyHtml("Error", message),
       user,
       assetBase: c.get("assetBase"),
+      ownedScenes: ownedSceneLinks(world, user),
       isManager: isManager(user, world),
     }),
     status,

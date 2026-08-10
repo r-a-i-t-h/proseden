@@ -1,11 +1,18 @@
 import type { ArtefactRecord, ExitRecord, SceneRecord, UserRecord } from "../model/types.js";
 
+export interface OwnedSceneLink {
+  id: number;
+  title?: string;
+}
+
 export interface HtmlShellOptions {
   title: string;
   bodyHtml: string;
   user?: UserRecord;
   assetBase?: string;
   manage?: ManageContext;
+  /** Scenes owned by the signed-in user (sidebar jump list). */
+  ownedScenes?: OwnedSceneLink[];
   /** Staff manager — shows /admin and /staff links in the sidebar. */
   isManager?: boolean;
   flash?: string;
@@ -56,7 +63,7 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
         ${opts.flash ? `<p class="flash">${escapeHtml(opts.flash)}</p>` : ""}
         ${opts.bodyHtml}
       </main>
-      ${user ? manageSidebar(opts.manage, user, opts.isManager ?? opts.manage?.isManager) : ""}
+      ${user ? manageSidebar(opts.manage, user, opts.isManager ?? opts.manage?.isManager, opts.ownedScenes ?? []) : ""}
     </div>
   </div>
   <script type="module" src="assets/manage.js"></script>
@@ -99,6 +106,7 @@ function manageSidebar(
   manage: ManageContext | undefined,
   user?: UserRecord,
   isManager = false,
+  ownedScenes: OwnedSceneLink[] = [],
 ): string {
   const sections: string[] = [];
   sections.push(`<h2>Manage</h2>`);
@@ -109,6 +117,19 @@ function manageSidebar(
       <a href="staff">Staff</a>
     </nav>`);
   }
+
+  const currentSceneId = manage?.kind === "scene" ? manage.scene?.id : undefined;
+  const sceneNav =
+    ownedScenes.length === 0
+      ? `<p class="muted">No scenes yet.</p>`
+      : `<ul class="link-list manage-scene-list">${ownedScenes
+          .map((s) => {
+            const label = s.title?.trim() ? s.title : `Scene ${s.id}`;
+            const current = currentSceneId === s.id ? ` class="is-current"` : "";
+            return `<li${current}><a href="s/${s.id}"><span class="exit-id">${s.id}</span> ${escapeHtml(label)}</a></li>`;
+          })
+          .join("")}</ul>`;
+  sections.push(manageSection("My scenes", sceneNav));
 
   sections.push(
     manageSection(

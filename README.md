@@ -74,7 +74,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
   http://127.0.0.1:8787/inv
 ```
 
-`?format=text` or `?format=html` overrides `Accept` negotiation. Browsers get HTML with linked exits/artefacts, login, and (when signed in) a management sidebar.
+`?format=text` or `?format=html` overrides `Accept` negotiation. Browsers get HTML with linked exits/artefacts, login, and (when signed in) a management sidebar — including a collapsible **My scenes** list for immediate jumps to every scene you own (entrance groups do not redirect owners on teleport).
 
 ## URL surface (v1)
 

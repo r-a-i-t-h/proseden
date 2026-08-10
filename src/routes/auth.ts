@@ -122,7 +122,18 @@ function respond(c: Context, status: 400 | 401 | 409, title: string, message: st
       bodyHtml: renderMessageBodyHtml(title, message),
       user: c.get("user"),
       assetBase: c.get("assetBase"),
+      ownedScenes: ownedSceneLinksFor(c),
     }),
     status,
   );
+}
+
+function ownedSceneLinksFor(c: Context) {
+  const user = c.get("user");
+  const world = c.get("world");
+  if (!user) return [];
+  return world.listScenesOwnedBy(user.username).map((s) => ({
+    id: s.id,
+    title: s.title,
+  }));
 }

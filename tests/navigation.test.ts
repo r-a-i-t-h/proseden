@@ -213,6 +213,22 @@ describe("resolveTeleportTarget", () => {
       redirected: false,
     });
   });
+
+  it("lets the destination owner skip entrance-group redirection", () => {
+    const { world, ids } = harness;
+    expect(
+      world.resolveTeleportTarget(ids.inner, undefined, { asOwnerUsername: "alice" }),
+    ).toEqual({
+      sceneId: ids.inner,
+      redirected: false,
+    });
+    expect(
+      world.resolveTeleportTarget(ids.inner, undefined, { asOwnerUsername: "bob" }),
+    ).toEqual({
+      sceneId: ids.entrance,
+      redirected: true,
+    });
+  });
 });
 
 describe("HTTP teleport vs rights", () => {
@@ -264,6 +280,32 @@ describe("HTTP teleport vs rights", () => {
     });
     expect(res.status).toBe(302);
     expect(location(res)).toBe(`/s/${ids.entrance}`);
+  });
+
+  it("lets the owner teleport straight into their inner room", async () => {
+    const { app, tokens, ids } = harness;
+    const res = await app.request(`/s/${ids.inner}`, {
+      headers: auth(tokens.alice),
+      redirect: "manual",
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Inner Chamber");
+  });
+
+  it("lists owned scenes in the HTML manage sidebar", async () => {
+    const { app, tokens, ids } = harness;
+    const res = await app.request(`/s/${ids.hall}`, {
+      headers: {
+        Authorization: `Bearer ${tokens.alice}`,
+        Accept: "text/html",
+      },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("My scenes");
+    expect(html).toContain(`href="s/${ids.inner}"`);
+    expect(html).toContain("Inner Chamber");
+    expect(html).toMatch(new RegExp(`<li class="is-current">.*s/${ids.hall}`));
   });
 
   it("denies outsider teleport into a group when the entrance is unreadable", async () => {

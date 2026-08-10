@@ -37,6 +37,7 @@ adminRoutes.get("/", (c) => {
         </form>`,
       user: c.get("user"),
       assetBase: c.get("assetBase"),
+      ownedScenes: ownedSceneLinksFor(c),
       isManager: true,
     }),
   );
@@ -69,6 +70,7 @@ adminRoutes.post("/reload", async (c) => {
       bodyHtml: renderMessageBodyHtml("Reload", message),
       user: c.get("user"),
       assetBase: c.get("assetBase"),
+      ownedScenes: ownedSceneLinksFor(c),
       isManager: true,
     }),
   );
@@ -94,10 +96,21 @@ function apiError(c: Context, status: 401 | 403, message: string) {
       bodyHtml: renderMessageBodyHtml("Error", message),
       user: c.get("user"),
       assetBase: c.get("assetBase"),
+      ownedScenes: ownedSceneLinksFor(c),
       isManager: false,
     }),
     status,
   );
+}
+
+function ownedSceneLinksFor(c: Context) {
+  const user = c.get("user");
+  const world = c.get("world");
+  if (!user) return [];
+  return world.listScenesOwnedBy(user.username).map((s) => ({
+    id: s.id,
+    title: s.title,
+  }));
 }
 
 function wantsJson(c: Context): boolean {

@@ -257,6 +257,17 @@ button:hover {
   padding: 0.35rem 0 0.65rem;
 }
 
+.manage-scene-list {
+  font-size: 0.92rem;
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.manage-scene-list .is-current a {
+  font-weight: 600;
+  color: var(--moss);
+}
+
 .manage-section .stack {
   margin-bottom: 0;
   padding-bottom: 0;

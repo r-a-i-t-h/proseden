@@ -404,16 +404,28 @@ export class WorldStore implements AccessWorld {
     return [...this.entranceGroups.values()].sort((a, b) => Number(a.id) - Number(b.id));
   }
 
+  listScenesOwnedBy(username: string): SceneRecord[] {
+    return [...this.scenes.values()]
+      .filter((s) => s.owner === username)
+      .sort((a, b) => a.id - b.id);
+  }
+
   /**
    * Resolve teleport target: if destination is in an entrance group and the
    * requester is not already "inside" that group, redirect to the entrance.
+   * Owners teleporting to their own scenes skip entrance-group redirection
+   * (CMS / “my scenes” navigation).
    */
   resolveTeleportTarget(
     requestedSceneId: number,
     fromSceneId: number | undefined,
+    opts?: { asOwnerUsername?: string },
   ): { sceneId: number; redirected: boolean } {
     const scene = this.scenes.get(requestedSceneId);
     if (!scene?.entranceGroupId) {
+      return { sceneId: requestedSceneId, redirected: false };
+    }
+    if (opts?.asOwnerUsername && scene.owner === opts.asOwnerUsername) {
       return { sceneId: requestedSceneId, redirected: false };
     }
     const eg = this.entranceGroups.get(scene.entranceGroupId);
