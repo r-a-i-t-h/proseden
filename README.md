@@ -69,7 +69,8 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/s/:id` | Scene; `?<name>` examines a detail (e.g. `?card`) |
+| `GET` | `/s/:id` | Scene; `?<name>` examines a detail; entrance-group teleport may redirect |
+| `GET` | `/s/:id/go/:exit` | Follow exit by id or nickname (access-checked) |
 | `GET` | `/a/:id` | Artefact |
 | `GET` | `/inv` | Inventory (auth) |
 | `POST` | `/auth/register` `/auth/login` `/auth/logout` | Session cookie + optional JSON token |
@@ -83,6 +84,8 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `GET`/`PUT`/`POST` | `/g/:id/access` | Group grants/denies |
 | `POST` | `/g/:id/scenes` | Add scene to group |
 | `POST` | `/s/:id/group` | Assign/clear scene group |
+| `POST` | `/eg` | Create entrance group (entrance = scene id) |
+| `POST` | `/s/:id/entrance-group` | Assign/clear entrance group on scene |
 | `POST` | `/a` | Create artefact (auth, edit rights on home) |
 | `PUT`/`POST` | `/a/:id` | Update artefact |
 | `POST` | `/a/:id/collect` | Collect (inventory link) |
@@ -110,4 +113,4 @@ Prose files use YAML frontmatter plus `## detail:<slug>` sections.
 
 ## Deferred (later phases)
 
-Public junctions, entrance-group teleport rules, moderator/organiser/manager roles, and historical snapshot browsing.
+Moderator/organiser/manager roles and historical snapshot browsing.

@@ -304,6 +304,118 @@ export class WorldStore implements AccessWorld {
     return [...this.groups.values()].sort((a, b) => Number(a.id) - Number(b.id));
   }
 
+  async createEntranceGroup(input: {
+    title: string;
+    entranceSceneId: number;
+    sceneIds?: number[];
+  }): Promise<EntranceGroupRecord> {
+    if (!this.scenes.has(input.entranceSceneId)) throw new Error("Entrance scene not found");
+    const id = String(this.meta.nextEntranceGroupId ?? 1);
+    this.meta.nextEntranceGroupId = (this.meta.nextEntranceGroupId ?? 1) + 1;
+    const sceneIds = [...new Set([input.entranceSceneId, ...(input.sceneIds ?? [])])];
+    const group: EntranceGroupRecord = {
+      id,
+      title: input.title,
+      entranceSceneId: input.entranceSceneId,
+      sceneIds,
+    };
+    await this.saveEntranceGroup(group);
+    for (const sceneId of sceneIds) {
+      const scene = this.scenes.get(sceneId);
+      if (!scene) continue;
+      if (scene.entranceGroupId !== id) {
+        await this.saveScene({ ...scene, entranceGroupId: id });
+      }
+    }
+    await this.saveMeta();
+    return group;
+  }
+
+  async setSceneEntranceGroup(
+    sceneId: number,
+    entranceGroupId: string | null,
+  ): Promise<SceneRecord> {
+    const scene = this.scenes.get(sceneId);
+    if (!scene) throw new Error("Scene not found");
+    const previousId = scene.entranceGroupId ?? null;
+    if (previousId === entranceGroupId) return scene;
+
+    if (previousId) {
+      const prev = this.entranceGroups.get(previousId);
+      if (prev) {
+        await this.saveEntranceGroup({
+          ...prev,
+          sceneIds: prev.sceneIds.filter((id) => id !== sceneId),
+        });
+      }
+    }
+
+    if (entranceGroupId) {
+      const group = this.entranceGroups.get(entranceGroupId);
+      if (!group) throw new Error("Entrance group not found");
+      if (!group.sceneIds.includes(sceneId)) {
+        await this.saveEntranceGroup({
+          ...group,
+          sceneIds: [...group.sceneIds, sceneId],
+        });
+      }
+    }
+
+    const updated: SceneRecord = { ...scene, entranceGroupId };
+    await this.saveScene(updated);
+    return updated;
+  }
+
+  async updateSceneFlags(
+    id: number,
+    patch: Partial<Pick<SceneRecord, "isJunction" | "visibility" | "title" | "body" | "details">>,
+  ): Promise<SceneRecord> {
+    return this.updateScene(id, patch);
+  }
+
+  findExit(fromSceneId: number, exitKey: string): ExitRecord | undefined {
+    const exits = this.getExits(fromSceneId);
+    const asNum = Number(exitKey);
+    if (Number.isFinite(asNum) && String(asNum) === exitKey.trim()) {
+      return exits.find((e) => e.exitId === asNum);
+    }
+    const needle = exitKey.trim().toLowerCase();
+    return exits.find((e) => e.nickname.toLowerCase() === needle);
+  }
+
+  listEntranceGroups(): EntranceGroupRecord[] {
+    return [...this.entranceGroups.values()].sort((a, b) => Number(a.id) - Number(b.id));
+  }
+
+  /**
+   * Resolve teleport target: if destination is in an entrance group and the
+   * requester is not already "inside" that group, redirect to the entrance.
+   */
+  resolveTeleportTarget(
+    requestedSceneId: number,
+    fromSceneId: number | undefined,
+  ): { sceneId: number; redirected: boolean } {
+    const scene = this.scenes.get(requestedSceneId);
+    if (!scene?.entranceGroupId) {
+      return { sceneId: requestedSceneId, redirected: false };
+    }
+    const eg = this.entranceGroups.get(scene.entranceGroupId);
+    if (!eg) return { sceneId: requestedSceneId, redirected: false };
+
+    const fromInside =
+      fromSceneId !== undefined &&
+      (() => {
+        const from = this.scenes.get(fromSceneId);
+        return from?.entranceGroupId === eg.id;
+      })();
+
+    if (fromInside) return { sceneId: requestedSceneId, redirected: false };
+    if (requestedSceneId === eg.entranceSceneId) {
+      return { sceneId: requestedSceneId, redirected: false };
+    }
+    return { sceneId: eg.entranceSceneId, redirected: true };
+  }
+
   private applyManagerBootstrap(): void {
     const env = process.env.PROSEDEN_MANAGERS ?? "";
     for (const name of env.split(",").map((s) => s.trim()).filter(Boolean)) {
@@ -367,7 +479,9 @@ export class WorldStore implements AccessWorld {
 
   async updateScene(
     id: number,
-    patch: Partial<Pick<SceneRecord, "title" | "body" | "details" | "visibility">>,
+    patch: Partial<
+      Pick<SceneRecord, "title" | "body" | "details" | "visibility" | "isJunction">
+    >,
   ): Promise<SceneRecord> {
     const existing = this.scenes.get(id);
     if (!existing) throw new Error("Scene not found");

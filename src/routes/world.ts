@@ -36,6 +36,24 @@ worldRoutes.get("/s/:id", (c) => {
   const world = c.get("world");
   const user = c.get("user");
   const id = Number(c.req.param("id"));
+  const fromHint = parseFromScene(c);
+  const resolved = world.resolveTeleportTarget(id, fromHint);
+  if (resolved.redirected) {
+    const entrance = world.getScene(resolved.sceneId);
+    if (!entrance || !canRead(user, entrance, world)) {
+      const msg = "Entrance to this area is not readable.";
+      return page(
+        c,
+        user ? 403 : 401,
+        "Forbidden",
+        renderMessageBodyHtml("Forbidden", msg),
+        renderMessageText("Forbidden", msg),
+      );
+    }
+    const dest = `${c.get("assetBase")}/s/${resolved.sceneId}`;
+    return c.redirect(dest);
+  }
+
   const scene = world.getScene(id);
   if (!scene) {
     return page(
@@ -90,6 +108,27 @@ worldRoutes.get("/s/:id", (c) => {
       groups,
     },
   );
+});
+
+worldRoutes.get("/s/:id/go/:exit", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  const fromId = Number(c.req.param("id"));
+  const exitKey = decodeURIComponent(String(c.req.param("exit") ?? ""));
+  const from = world.getScene(fromId);
+  if (!from) return apiError(c, 404, "Scene not found");
+  if (!canRead(user, from, world)) {
+    return apiError(c, user ? 403 : 401, "Cannot leave from an unreadable scene");
+  }
+  const exit = world.findExit(fromId, exitKey);
+  if (!exit) return apiError(c, 404, `No exit matching "${exitKey}"`);
+
+  const resolved = world.resolveTeleportTarget(exit.toSceneId, fromId);
+  const dest = world.getScene(resolved.sceneId);
+  if (!dest || !canRead(user, dest, world)) {
+    return apiError(c, user ? 403 : 401, "Destination is not readable");
+  }
+  return c.redirect(`${c.get("assetBase")}/s/${resolved.sceneId}?from=${fromId}`);
 });
 
 worldRoutes.get("/a/:id", (c) => {
@@ -226,11 +265,18 @@ async function updateScene(c: Context) {
         : "private";
   }
 
+  let isJunction = scene.isJunction;
+  if (body.isJunction !== undefined && canManage(user, scene, world)) {
+    isJunction =
+      body.isJunction === true || body.isJunction === "true" || body.isJunction === "on";
+  }
+
   const updated = await world.updateScene(id, {
     title: body.title !== undefined ? optionalString(body.title) : scene.title,
     body: body.body !== undefined ? String(body.body) : scene.body,
     details,
     visibility,
+    isJunction,
   });
 
   if (wantsJson(c)) return c.json(updated);
@@ -340,6 +386,29 @@ function canManageUserAccess(
   if (!user) return false;
   if (user.username === username) return true;
   return world.rolesFor(user.username).includes("manager");
+}
+
+function isOrganiser(
+  user: import("../model/types.js").UserRecord,
+  world: import("../store/world.js").WorldStore,
+): boolean {
+  const roles = world.rolesFor(user.username);
+  return roles.includes("organiser") || roles.includes("manager");
+}
+
+function parseFromScene(c: Context): number | undefined {
+  const q = c.req.query("from");
+  if (q !== undefined) {
+    const n = Number(q);
+    if (Number.isFinite(n)) return n;
+  }
+  const referer = c.req.header("referer") ?? "";
+  const match = referer.match(/\/s\/(\d+)/);
+  if (match) {
+    const n = Number(match[1]);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
 }
 
 // --- groups ---
@@ -523,7 +592,9 @@ worldRoutes.post("/s/:id/exits", async (c) => {
   const id = Number(c.req.param("id"));
   const scene = world.getScene(id);
   if (!scene) return apiError(c, 404, "Scene not found");
-  if (!canEdit(user, scene, world)) return apiError(c, 403, "Not allowed to edit this scene");
+  if (!canManage(user, scene, world)) {
+    return apiError(c, 403, "Manage rights required to add exits");
+  }
 
   const body = await readBody(c);
   const nickname = String(body.nickname ?? "").trim();
@@ -531,12 +602,73 @@ worldRoutes.post("/s/:id/exits", async (c) => {
   if (!nickname) return apiError(c, 400, "Nickname is required");
   if (!Number.isFinite(toSceneId)) return apiError(c, 400, "toSceneId is required");
 
+  const dest = world.getScene(toSceneId);
+  if (!dest) return apiError(c, 404, "Destination scene not found");
+  if (!dest.isJunction && !canRead(user, dest, world)) {
+    return apiError(c, 403, "Destination must be readable or a public junction");
+  }
+  if (dest.isJunction && dest.visibility !== "public") {
+    return apiError(c, 400, "Junction scenes must be public");
+  }
+
   try {
     const exit = await world.addExit(id, nickname, toSceneId);
     if (wantsJson(c)) return c.json(exit, 201);
     return c.redirect(`${c.get("assetBase")}/s/${id}`);
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Could not add exit");
+  }
+});
+
+worldRoutes.post("/eg", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const body = await readBody(c);
+  const title = String(body.title ?? "").trim();
+  const entranceSceneId = Number(body.entranceSceneId);
+  if (!title) return apiError(c, 400, "Title is required");
+  if (!Number.isFinite(entranceSceneId)) return apiError(c, 400, "entranceSceneId is required");
+  const entrance = world.getScene(entranceSceneId);
+  if (!entrance) return apiError(c, 404, "Entrance scene not found");
+  if (!canManage(user, entrance, world) && !isOrganiser(user, world)) {
+    return apiError(c, 403, "Manage rights required on entrance scene");
+  }
+  try {
+    const eg = await world.createEntranceGroup({
+      title,
+      entranceSceneId,
+      sceneIds: Array.isArray(body.sceneIds)
+        ? body.sceneIds.map(Number).filter(Number.isFinite)
+        : undefined,
+    });
+    if (wantsJson(c)) return c.json(eg, 201);
+    return c.redirect(`${c.get("assetBase")}/s/${entranceSceneId}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not create entrance group");
+  }
+});
+
+worldRoutes.post("/s/:id/entrance-group", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const sceneId = Number(c.req.param("id"));
+  const scene = world.getScene(sceneId);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canManage(user, scene, world) && !isOrganiser(user, world)) {
+    return apiError(c, 403, "Manage rights required");
+  }
+  const body = await readBody(c);
+  const raw = body.entranceGroupId;
+  const entranceGroupId =
+    raw === undefined || raw === null || raw === "" || raw === "none" ? null : String(raw);
+  try {
+    const updated = await world.setSceneEntranceGroup(sceneId, entranceGroupId);
+    if (wantsJson(c)) return c.json(updated);
+    return c.redirect(`${c.get("assetBase")}/s/${sceneId}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not set entrance group");
   }
 });
 

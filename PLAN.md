@@ -75,7 +75,7 @@ flowchart TD
 - APIs: `POST /g`, `GET/PUT /g/:id`, `POST /g/:id/scenes`, access endpoints
 - Sidebar: assign/remove current scene’s group (owner/manage)
 
-### Phase 4 — Navigation
+### Phase 4 — Navigation ✅
 
 - **Go:** `GET /s/:id/go/:exit` where `:exit` is numeric `exitId` or nickname → redirect to destination (access-checked)
 - **Teleport:** `GET /s/:id` already is teleport; add HTML/text “Travel to id” control; resolve **entrance groups**: if requester is outside the group, redirect to the group’s entrance scene (still require `canRead` on entrance; deny if entrance unreadable)

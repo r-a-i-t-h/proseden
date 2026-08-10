@@ -43,11 +43,16 @@ export function renderSceneText(opts: {
       lines.push("Exits:");
       for (const e of exits) {
         lines.push(
-          `  ${e.exitId}. ${e.nickname} -> scene ${e.toSceneId}  ${base}/s/${e.toSceneId}`,
+          `  ${e.exitId}. ${e.nickname} -> scene ${e.toSceneId}  ${base}/s/${scene.id}/go/${e.exitId}`,
+        );
+        lines.push(
+          `     also: ${base}/s/${scene.id}/go/${encodeURIComponent(e.nickname)}`,
         );
       }
       lines.push("");
     }
+    lines.push(`Travel: GET ${base}/s/<id>?from=${scene.id}`);
+    lines.push("");
     if (opts.accessSummary) {
       lines.push("Access:");
       for (const line of opts.accessSummary.split("\n")) {

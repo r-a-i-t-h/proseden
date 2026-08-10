@@ -21,6 +21,12 @@ function enhanceForms(): void {
         )?.checked;
         payload.visibility = checked ? "public" : "private";
       }
+      if (form.querySelector('input[name="isJunction"][type="checkbox"]')) {
+        const checked = form.querySelector<HTMLInputElement>(
+          'input[name="isJunction"][type="checkbox"]',
+        )?.checked;
+        payload.isJunction = !!checked;
+      }
 
       const response = await fetch(action, {
         method,

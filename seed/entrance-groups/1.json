@@ -1,0 +1,6 @@
+{
+  "id": "1",
+  "title": "The Public Wing",
+  "entranceSceneId": 1,
+  "sceneIds": [1, 2]
+}

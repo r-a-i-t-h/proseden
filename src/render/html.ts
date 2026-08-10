@@ -102,13 +102,12 @@ function manageSidebar(
         <label>Body <textarea name="body" rows="8" required>${escapeHtml(scene.body)}</textarea></label>
         <label>Details (JSON map) <textarea name="detailsJson" rows="4">${escapeHtml(JSON.stringify(scene.details, null, 2))}</textarea></label>
         <label><input type="checkbox" name="visibility" value="public" ${scene.visibility === "public" ? "checked" : ""} /> Public</label>
+        ${
+          manage.canManage
+            ? `<label><input type="checkbox" name="isJunction" value="true" ${scene.isJunction ? "checked" : ""} /> Public junction</label>`
+            : ""
+        }
         <button type="submit">Save scene</button>
-      </form>`);
-      sections.push(`<form method="post" action="${assetBase}/s/${scene.id}/exits" class="stack">
-        <h3>Add exit</h3>
-        <label>Nickname <input name="nickname" required /></label>
-        <label>To scene id <input name="toSceneId" type="number" min="1" required /></label>
-        <button type="submit">Add exit</button>
       </form>`);
       sections.push(`<form method="post" action="${assetBase}/a" class="stack">
         <h3>New artefact here</h3>
@@ -122,6 +121,12 @@ function manageSidebar(
       sections.push(`<p class="muted">You can read this scene but not edit it.</p>`);
     }
     if (manage.canManage) {
+      sections.push(`<form method="post" action="${assetBase}/s/${scene.id}/exits" class="stack">
+        <h3>Add exit</h3>
+        <label>Nickname <input name="nickname" required /></label>
+        <label>To scene id <input name="toSceneId" type="number" min="1" required /></label>
+        <button type="submit">Add exit</button>
+      </form>`);
       sections.push(`<form method="post" action="${assetBase}/s/${scene.id}/access" class="stack" data-method="PUT">
         <h3>Scene access</h3>
         <p class="muted">Grants: who + rights (read/edit/manage). Use <code>*</code> for everyone.</p>
@@ -145,6 +150,13 @@ function manageSidebar(
         <h3>New group</h3>
         <label>Title <input name="title" required /></label>
         <button type="submit">Create group</button>
+      </form>`);
+      sections.push(`<form method="post" action="${assetBase}/eg" class="stack">
+        <h3>Entrance group</h3>
+        <p class="muted">Teleporting into this set from outside lands at the entrance scene.</p>
+        <label>Title <input name="title" required /></label>
+        <input type="hidden" name="entranceSceneId" value="${scene.id}" />
+        <button type="submit">Create with this scene as entrance</button>
       </form>`);
     }
   }
@@ -223,16 +235,40 @@ export function renderSceneBodyHtml(opts: {
 
   const exitLinks = exits
     .map((e) => {
-      return `<li><a href="${base}/s/${e.toSceneId}"><span class="exit-id">${e.exitId}</span> ${escapeHtml(e.nickname)}</a></li>`;
+      const goNick = `${base}/s/${scene.id}/go/${encodeURIComponent(e.nickname)}`;
+      return `<li><a href="${base}/s/${scene.id}/go/${e.exitId}"><span class="exit-id">${e.exitId}</span> ${escapeHtml(e.nickname)}</a> <span class="muted">→ ${e.toSceneId}</span> <span class="muted">(<a href="${goNick}">by name</a>)</span></li>`;
     })
     .join("");
 
   return `<h1>${escapeHtml(scene.title ?? `Scene ${scene.id}`)} <span class="sub">#${scene.id}</span></h1>
-    <p class="meta">${escapeHtml(scene.visibility)}</p>
+    <p class="meta">${escapeHtml(scene.visibility)}${scene.isJunction ? " · junction" : ""}${
+      scene.groupId ? ` · group ${escapeHtml(scene.groupId)}` : ""
+    }</p>
     <div class="desc">${formatProse(scene.body)}</div>
     ${detailLinks ? `<section><h2>Details</h2><ul class="link-list">${detailLinks}</ul></section>` : ""}
     ${artefactLinks ? `<section><h2>Artefacts</h2><ul class="link-list">${artefactLinks}</ul></section>` : ""}
-    ${exitLinks ? `<section><h2>Exits</h2><ul class="link-list">${exitLinks}</ul></section>` : ""}`;
+    ${exitLinks ? `<section><h2>Exits</h2><ul class="link-list">${exitLinks}</ul></section>` : ""}
+    <section>
+      <h2>Travel</h2>
+      <form method="get" action="${base}/s/" class="travel-form" id="travel-form">
+        <label>Scene id <input name="to" type="number" min="1" required /></label>
+        <input type="hidden" name="from" value="${scene.id}" />
+        <button type="submit">Go</button>
+      </form>
+    </section>
+    <script>
+      (function () {
+        var form = document.getElementById("travel-form");
+        if (!form) return;
+        form.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var to = form.querySelector('input[name="to"]').value;
+          var from = form.querySelector('input[name="from"]').value;
+          if (!to) return;
+          window.location.href = ${JSON.stringify(base)} + "/s/" + encodeURIComponent(to) + "?from=" + encodeURIComponent(from);
+        });
+      })();
+    </script>`;
 }
 
 export function renderArtefactBodyHtml(opts: {
