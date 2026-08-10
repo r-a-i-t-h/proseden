@@ -101,6 +101,14 @@ worldRoutes.get("/s/:id", (c) => {
         .filter((g) => canManageGroup(user, g, world))
         .map((g) => ({ id: g.id, title: g.title }))
     : [];
+  const entranceGroups =
+    user && (manage || canOrganise(user, world))
+      ? world.listEntranceGroups().map((g) => ({
+          id: g.id,
+          title: g.title,
+          entranceSceneId: g.entranceSceneId,
+        }))
+      : [];
 
   return page(
     c,
@@ -120,6 +128,7 @@ worldRoutes.get("/s/:id", (c) => {
       userGrants: user?.grants,
       userDenies: user?.denies,
       groups,
+      entranceGroups,
     },
   );
 });

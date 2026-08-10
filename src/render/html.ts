@@ -34,6 +34,7 @@ export interface ManageContext {
   userGrants?: import("../model/types.js").Grant[];
   userDenies?: import("../model/types.js").Deny[];
   groups?: Array<{ id: string; title: string }>;
+  entranceGroups?: Array<{ id: string; title: string; entranceSceneId: number }>;
 }
 
 export function renderHtmlPage(opts: HtmlShellOptions): string {
@@ -76,6 +77,39 @@ function manageSection(title: string, inner: string): string {
     <summary>${escapeHtml(title)}</summary>
     <div class="manage-section-body">${inner}</div>
   </details>`;
+}
+
+function entranceGroupAssignSection(
+  scene: SceneRecord,
+  entranceGroups: ManageContext["entranceGroups"],
+): string {
+  const options = [
+    `<option value="none"${!scene.entranceGroupId ? " selected" : ""}>(none)</option>`,
+    ...(entranceGroups ?? []).map(
+      (g) =>
+        `<option value="${escapeAttr(g.id)}"${scene.entranceGroupId === g.id ? " selected" : ""}>${escapeHtml(g.title)} (#${escapeHtml(g.id)}, entrance scene ${g.entranceSceneId})</option>`,
+    ),
+  ].join("");
+  return manageSection(
+    "Entrance group",
+    `<form method="post" action="s/${scene.id}/entrance-group" class="stack">
+        <p class="muted">Teleporting into this set from outside lands at the entrance scene.</p>
+        <label>Group <select name="entranceGroupId">${options}</select></label>
+        <button type="submit">Assign entrance group</button>
+      </form>`,
+  );
+}
+
+function entranceGroupCreateSection(scene: SceneRecord): string {
+  return manageSection(
+    "New entrance group",
+    `<form method="post" action="eg" class="stack">
+        <p class="muted">Creates a set with this scene as the entrance.</p>
+        <label>Title <input name="title" required /></label>
+        <input type="hidden" name="entranceSceneId" value="${scene.id}" />
+        <button type="submit">Create with this scene as entrance</button>
+      </form>`,
+  );
 }
 
 const DETAILS_JSON_EXAMPLE = `{
@@ -294,17 +328,8 @@ function manageSidebar(
       </form>`,
         ),
       );
-      sections.push(
-        manageSection(
-          "Entrance group",
-          `<form method="post" action="eg" class="stack">
-        <p class="muted">Teleporting into this set from outside lands at the entrance scene.</p>
-        <label>Title <input name="title" required /></label>
-        <input type="hidden" name="entranceSceneId" value="${scene.id}" />
-        <button type="submit">Create with this scene as entrance</button>
-      </form>`,
-        ),
-      );
+      sections.push(entranceGroupAssignSection(scene, manage.entranceGroups));
+      sections.push(entranceGroupCreateSection(scene));
     } else if (manage.canOrganise) {
       sections.push(
         manageSection(
@@ -315,16 +340,8 @@ function manageSidebar(
       </form>`,
         ),
       );
-      sections.push(
-        manageSection(
-          "Entrance group",
-          `<form method="post" action="eg" class="stack">
-        <label>Title <input name="title" required /></label>
-        <input type="hidden" name="entranceSceneId" value="${scene.id}" />
-        <button type="submit">Create with this scene as entrance</button>
-      </form>`,
-        ),
-      );
+      sections.push(entranceGroupAssignSection(scene, manage.entranceGroups));
+      sections.push(entranceGroupCreateSection(scene));
     }
     if (manage.canDelete) {
       sections.push(
