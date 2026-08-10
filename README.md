@@ -30,6 +30,8 @@ Environment:
 
 Seed login: **gardener** / **garden**
 
+Demo invite: **visitor** / **visit** can read the Private Study (`/s/3`) via a scene grant.
+
 ## Playing with curl
 
 ```bash
@@ -73,7 +75,9 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `POST` | `/auth/register` `/auth/login` `/auth/logout` | Session cookie + optional JSON token |
 | `POST` | `/s` | Create scene (auth) |
 | `PUT`/`POST` | `/s/:id` | Update scene (owner) |
-| `POST` | `/s/:id/exits` | Add directed exit (owner) |
+| `POST` | `/s/:id/exits` | Add directed exit (edit) |
+| `GET`/`PUT`/`POST` | `/s/:id/access` | Scene grants/denies (manage) |
+| `GET`/`PUT`/`POST` | `/u/:username/access` | User-level share-all (self or manager) |
 | `POST` | `/a` | Create artefact (auth, edit rights on home) |
 | `PUT`/`POST` | `/a/:id` | Update artefact |
 | `POST` | `/a/:id/collect` | Collect (inventory link) |
@@ -96,6 +100,6 @@ Prose files use YAML frontmatter plus `## detail:<slug>` sections.
 
 **Collect** adds an inventory link to the artefact; it does not remove it from its home scene. Multiple readers may collect the same artefact.
 
-## Deferred (schema-ready, not in v1 UI)
+## Deferred (later phases)
 
-Invites, deny lists, user-level share-all, groups, public junctions, entrance-group teleport rules, moderator/organiser/manager roles, and historical snapshot browsing. Access helpers already consult deny/invite hooks so these can be enabled without rewiring callers.
+Groups, public junctions, entrance-group teleport rules, moderator/organiser/manager roles, and historical snapshot browsing. Access helpers already consult group/role hooks so these can be enabled without rewiring callers.

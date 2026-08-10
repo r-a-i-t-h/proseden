@@ -147,9 +147,10 @@ text/plain`, `?format=text`, or curl-like clients), a non-markup version is
 served so the world can be played with `curl`.
 
 Public spaces need no authentication. Private scenes require an authenticated
-reader with access (v1: owner only). Editing uses `PUT`/`POST` and always
-requires authentication. The HTML shell includes login/register and, when
-signed in, a management sidebar for CMS actions.
+reader with access (owner, grants including `"*"`, group/user-level share, or
+staff). Editing uses `PUT`/`POST` and always requires authentication with edit
+or manage rights. The HTML shell includes login/register and, when signed in, a
+management sidebar for CMS actions including scene ACL and share-all.
 
 Artefacts are collected as inventory *links* to the original; collecting does
 not remove them from their home scene.

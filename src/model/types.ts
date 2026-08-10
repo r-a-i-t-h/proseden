@@ -1,5 +1,22 @@
 export type Visibility = "public" | "private";
 
+/** Hierarchical: manage ⊃ edit ⊃ read */
+export type Right = "read" | "edit" | "manage";
+
+export type StaffRole = "moderator" | "organiser" | "manager";
+
+export interface Grant {
+  /** Username or `"*"` for everyone (still subject to deny). */
+  who: string;
+  rights: Right[];
+}
+
+export interface Deny {
+  who: string;
+  /** Omit or empty = deny all rights. */
+  rights?: Right[];
+}
+
 export interface InventoryItem {
   artefactId: number;
   tags: string[];
@@ -11,9 +28,10 @@ export interface UserRecord {
   passwordSalt: string;
   createdAt: string;
   inventory: InventoryItem[];
-  /** Reserved for later user-level grants */
-  grants?: string[];
-  denies?: string[];
+  /** Share-all: grants on this user's scenes and groups. */
+  grants?: Grant[];
+  /** Persona-non-grata blocks on this user's content. */
+  denies?: Deny[];
 }
 
 export interface SceneMeta {
@@ -23,11 +41,14 @@ export interface SceneMeta {
   title?: string;
   createdAt: string;
   modifiedAt: string[];
-  /** Reserved — unused in v1 UI */
   groupId?: string | null;
-  invites?: string[];
-  denies?: string[];
+  grants?: Grant[];
+  denies?: Deny[];
   entranceGroupId?: string | null;
+  /** Public junction: others may attach exits to/from when they manage their own end. */
+  isJunction?: boolean;
+  /** @deprecated migrated to grants on load */
+  invites?: string[];
 }
 
 export interface SceneRecord extends SceneMeta {
@@ -57,9 +78,33 @@ export interface ArtefactRecord extends ArtefactMeta {
   details: Record<string, string>;
 }
 
+export interface GroupRecord {
+  id: string;
+  owner: string;
+  title: string;
+  sceneIds: number[];
+  grants: Grant[];
+  denies: Deny[];
+  createdAt: string;
+}
+
+export interface EntranceGroupRecord {
+  id: string;
+  title: string;
+  entranceSceneId: number;
+  sceneIds: number[];
+}
+
+export interface StaffFile {
+  /** username → roles */
+  roles: Record<string, StaffRole[]>;
+}
+
 export interface MetaFile {
   nextSceneId: number;
   nextArtefactId: number;
+  nextGroupId?: number;
+  nextEntranceGroupId?: number;
 }
 
 export interface SessionRecord {
@@ -68,3 +113,19 @@ export interface SessionRecord {
   createdAt: string;
   expiresAt: string;
 }
+
+export interface EditLogEntry {
+  at: string;
+  by: string;
+  fields: string[];
+  retained?: boolean;
+  versionId?: string;
+}
+
+export const ALL_RIGHTS: Right[] = ["read", "edit", "manage"];
+
+export const RIGHT_RANK: Record<Right, number> = {
+  read: 1,
+  edit: 2,
+  manage: 3,
+};

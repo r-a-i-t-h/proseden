@@ -6,6 +6,7 @@ export function renderSceneText(opts: {
   artefacts: ArtefactRecord[];
   detail?: string;
   basePath?: string;
+  accessSummary?: string;
 }): string {
   const base = opts.basePath ?? "";
   const { scene, exits, artefacts, detail } = opts;
@@ -44,6 +45,13 @@ export function renderSceneText(opts: {
         lines.push(
           `  ${e.exitId}. ${e.nickname} -> scene ${e.toSceneId}  ${base}/s/${e.toSceneId}`,
         );
+      }
+      lines.push("");
+    }
+    if (opts.accessSummary) {
+      lines.push("Access:");
+      for (const line of opts.accessSummary.split("\n")) {
+        lines.push(`  ${line}`);
       }
       lines.push("");
     }

@@ -60,12 +60,12 @@ flowchart TD
   P2 --> P6
 ```
 
-### Phase 2 — Permissions UI + API
+### Phase 2 — Permissions UI + API ✅
 
 - Types + migration in `src/model/types.ts` / load path in `src/store/world.ts`
 - Finish `src/access/permissions.ts`: rights levels, `*`, user-level grants, group stub no-op until Phase 3
 - Routes + HTML sidebar panels for scene access; text mode shows access summary only to managers
-- Seed: keep Threshold public; Private Study demonstrates invite (optional demo grant)
+- Seed: keep Threshold public; Private Study demonstrates invite (visitor read grant)
 
 ### Phase 3 — Groups
 

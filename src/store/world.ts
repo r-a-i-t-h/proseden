@@ -1,25 +1,36 @@
 import { cp, mkdir, readdir, access, rename } from "node:fs/promises";
 import { join } from "node:path";
+import type { AccessWorld } from "../access/permissions.js";
+import { normalizeDenies, normalizeGrants, stripLegacyInvites } from "../access/acl.js";
 import type {
   ArtefactMeta,
   ArtefactRecord,
+  Deny,
+  EntranceGroupRecord,
   ExitRecord,
+  Grant,
+  GroupRecord,
   InventoryItem,
   MetaFile,
   SceneMeta,
   SceneRecord,
+  StaffFile,
+  StaffRole,
   UserRecord,
 } from "../model/types.js";
 import { readJson, readText, writeJsonAtomic, writeTextAtomic } from "./fs.js";
 import { parseProseDocument, serializeProseDocument } from "./markdown.js";
 
-export class WorldStore {
+export class WorldStore implements AccessWorld {
   readonly dataDir: string;
-  meta: MetaFile = { nextSceneId: 1, nextArtefactId: 1 };
+  meta: MetaFile = { nextSceneId: 1, nextArtefactId: 1, nextGroupId: 1, nextEntranceGroupId: 1 };
   users = new Map<string, UserRecord>();
   scenes = new Map<number, SceneRecord>();
   exits = new Map<number, ExitRecord[]>();
   artefacts = new Map<number, ArtefactRecord>();
+  groups = new Map<string, GroupRecord>();
+  entranceGroups = new Map<string, EntranceGroupRecord>();
+  staff: StaffFile = { roles: {} };
 
   constructor(dataDir: string) {
     this.dataDir = dataDir;
@@ -38,13 +49,22 @@ export class WorldStore {
     await mkdir(join(this.dataDir, "users"), { recursive: true });
     await mkdir(join(this.dataDir, "scenes"), { recursive: true });
     await mkdir(join(this.dataDir, "artefacts"), { recursive: true });
+    await mkdir(join(this.dataDir, "groups"), { recursive: true });
+    await mkdir(join(this.dataDir, "entrance-groups"), { recursive: true });
 
     if (await exists(metaPath)) {
       this.meta = normalizeMeta(await readJson<Record<string, unknown>>(metaPath));
     }
 
+    const staffPath = join(this.dataDir, "staff.json");
+    if (await exists(staffPath)) {
+      this.staff = normalizeStaff(await readJson<Record<string, unknown>>(staffPath));
+    }
+    this.applyManagerBootstrap();
+
     for (const file of await listFiles(join(this.dataDir, "users"), ".json")) {
-      const user = await readJson<UserRecord>(join(this.dataDir, "users", file));
+      const raw = await readJson<Record<string, unknown>>(join(this.dataDir, "users", file));
+      const user = normalizeUser(raw);
       this.users.set(user.username, user);
     }
 
@@ -52,8 +72,9 @@ export class WorldStore {
       const id = Number(file.replace(/\.md$/, ""));
       if (!Number.isFinite(id)) continue;
       const raw = await readText(join(this.dataDir, "scenes", file));
-      const { meta, body, details } = parseProseDocument<SceneMeta>(raw);
-      this.scenes.set(id, { ...meta, id, body, details });
+      const { meta, body, details } = parseProseDocument<Record<string, unknown>>(raw);
+      const normalised = normalizeSceneMeta(meta, id);
+      this.scenes.set(id, { ...normalised, body, details });
 
       const exitsPath = join(this.dataDir, "scenes", `${id}.exits.json`);
       if (await exists(exitsPath)) {
@@ -78,6 +99,32 @@ export class WorldStore {
         details,
       });
     }
+
+    for (const file of await listFiles(join(this.dataDir, "groups"), ".json")) {
+      const group = normalizeGroup(
+        await readJson<Record<string, unknown>>(join(this.dataDir, "groups", file)),
+      );
+      this.groups.set(group.id, group);
+    }
+
+    for (const file of await listFiles(join(this.dataDir, "entrance-groups"), ".json")) {
+      const eg = normalizeEntranceGroup(
+        await readJson<Record<string, unknown>>(join(this.dataDir, "entrance-groups", file)),
+      );
+      this.entranceGroups.set(eg.id, eg);
+    }
+  }
+
+  getGroup(id: string): GroupRecord | undefined {
+    return this.groups.get(id);
+  }
+
+  getEntranceGroup(id: string): EntranceGroupRecord | undefined {
+    return this.entranceGroups.get(id);
+  }
+
+  rolesFor(username: string): StaffRole[] {
+    return this.staff.roles[username] ?? [];
   }
 
   /** One-time rename from v1 "nodes" layout if present. */
@@ -121,8 +168,63 @@ export class WorldStore {
   async saveScene(scene: SceneRecord): Promise<void> {
     this.scenes.set(scene.id, scene);
     const { body, details, ...meta } = scene;
-    const raw = serializeProseDocument(meta, body, details);
+    const clean = stripLegacyInvites(meta);
+    const raw = serializeProseDocument(clean, body, details);
     await writeTextAtomic(join(this.dataDir, "scenes", `${scene.id}.md`), raw);
+  }
+
+  async saveStaff(): Promise<void> {
+    await writeJsonAtomic(join(this.dataDir, "staff.json"), this.staff);
+  }
+
+  async saveGroup(group: GroupRecord): Promise<void> {
+    this.groups.set(group.id, group);
+    await writeJsonAtomic(join(this.dataDir, "groups", `${group.id}.json`), group);
+  }
+
+  async saveEntranceGroup(group: EntranceGroupRecord): Promise<void> {
+    this.entranceGroups.set(group.id, group);
+    await writeJsonAtomic(join(this.dataDir, "entrance-groups", `${group.id}.json`), group);
+  }
+
+  async updateSceneAccess(
+    id: number,
+    patch: { grants?: Grant[]; denies?: Deny[] },
+  ): Promise<SceneRecord> {
+    const existing = this.scenes.get(id);
+    if (!existing) throw new Error("Scene not found");
+    const updated: SceneRecord = {
+      ...existing,
+      grants: patch.grants ?? existing.grants ?? [],
+      denies: patch.denies ?? existing.denies ?? [],
+    };
+    delete updated.invites;
+    await this.saveScene(updated);
+    return updated;
+  }
+
+  async updateUserAccess(
+    username: string,
+    patch: { grants?: Grant[]; denies?: Deny[] },
+  ): Promise<UserRecord> {
+    const existing = this.users.get(username);
+    if (!existing) throw new Error("User not found");
+    const updated: UserRecord = {
+      ...existing,
+      grants: patch.grants ?? existing.grants ?? [],
+      denies: patch.denies ?? existing.denies ?? [],
+    };
+    await this.saveUser(updated);
+    return updated;
+  }
+
+  private applyManagerBootstrap(): void {
+    const env = process.env.PROSEDEN_MANAGERS ?? "";
+    for (const name of env.split(",").map((s) => s.trim()).filter(Boolean)) {
+      const roles = new Set(this.staff.roles[name] ?? []);
+      roles.add("manager");
+      this.staff.roles[name] = [...roles];
+    }
   }
 
   async saveExits(fromSceneId: number, exits: ExitRecord[]): Promise<void> {
@@ -291,10 +393,92 @@ export class WorldStore {
 function normalizeMeta(raw: Record<string, unknown>): MetaFile {
   const nextSceneId = Number(raw.nextSceneId ?? raw.nextNodeId ?? 1);
   const nextArtefactId = Number(raw.nextArtefactId ?? 1);
+  const nextGroupId = Number(raw.nextGroupId ?? 1);
+  const nextEntranceGroupId = Number(raw.nextEntranceGroupId ?? 1);
   return {
     nextSceneId: Number.isFinite(nextSceneId) ? nextSceneId : 1,
     nextArtefactId: Number.isFinite(nextArtefactId) ? nextArtefactId : 1,
+    nextGroupId: Number.isFinite(nextGroupId) ? nextGroupId : 1,
+    nextEntranceGroupId: Number.isFinite(nextEntranceGroupId) ? nextEntranceGroupId : 1,
   };
+}
+
+function normalizeUser(raw: Record<string, unknown>): UserRecord {
+  return {
+    username: String(raw.username ?? ""),
+    passwordHash: String(raw.passwordHash ?? ""),
+    passwordSalt: String(raw.passwordSalt ?? ""),
+    createdAt: String(raw.createdAt ?? nowIso()),
+    inventory: Array.isArray(raw.inventory)
+      ? (raw.inventory as InventoryItem[]).map((i) => ({
+          artefactId: Number(i.artefactId),
+          tags: Array.isArray(i.tags) ? i.tags.map(String) : [],
+        }))
+      : [],
+    grants: normalizeGrants(raw.grants),
+    denies: normalizeDenies(raw.denies),
+  };
+}
+
+function normalizeSceneMeta(raw: Record<string, unknown>, id: number): SceneMeta {
+  const grants = normalizeGrants(raw.grants, raw.invites);
+  const denies = normalizeDenies(raw.denies);
+  return {
+    id,
+    owner: String(raw.owner ?? ""),
+    visibility: raw.visibility === "public" ? "public" : "private",
+    title: raw.title !== undefined ? String(raw.title) : undefined,
+    createdAt: String(raw.createdAt ?? nowIso()),
+    modifiedAt: Array.isArray(raw.modifiedAt) ? raw.modifiedAt.map(String) : [],
+    groupId: raw.groupId != null && raw.groupId !== "" ? String(raw.groupId) : null,
+    grants,
+    denies,
+    entranceGroupId:
+      raw.entranceGroupId != null && raw.entranceGroupId !== ""
+        ? String(raw.entranceGroupId)
+        : null,
+    isJunction: Boolean(raw.isJunction),
+  };
+}
+
+function normalizeGroup(raw: Record<string, unknown>): GroupRecord {
+  return {
+    id: String(raw.id ?? ""),
+    owner: String(raw.owner ?? ""),
+    title: String(raw.title ?? ""),
+    sceneIds: Array.isArray(raw.sceneIds) ? raw.sceneIds.map(Number).filter(Number.isFinite) : [],
+    grants: normalizeGrants(raw.grants),
+    denies: normalizeDenies(raw.denies),
+    createdAt: String(raw.createdAt ?? nowIso()),
+  };
+}
+
+function normalizeEntranceGroup(raw: Record<string, unknown>): EntranceGroupRecord {
+  return {
+    id: String(raw.id ?? ""),
+    title: String(raw.title ?? ""),
+    entranceSceneId: Number(raw.entranceSceneId),
+    sceneIds: Array.isArray(raw.sceneIds) ? raw.sceneIds.map(Number).filter(Number.isFinite) : [],
+  };
+}
+
+function normalizeStaff(raw: Record<string, unknown>): StaffFile {
+  const roles: Record<string, StaffRole[]> = {};
+  const src = (raw.roles && typeof raw.roles === "object" ? raw.roles : raw) as Record<
+    string,
+    unknown
+  >;
+  for (const [username, value] of Object.entries(src)) {
+    if (username === "roles") continue;
+    const list = Array.isArray(value) ? value : [value];
+    const cleaned: StaffRole[] = [];
+    for (const r of list) {
+      const s = String(r);
+      if (s === "moderator" || s === "organiser" || s === "manager") cleaned.push(s);
+    }
+    if (cleaned.length) roles[username] = cleaned;
+  }
+  return { roles };
 }
 
 function normalizeExit(raw: Record<string, unknown>): ExitRecord {

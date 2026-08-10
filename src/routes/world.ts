@@ -1,8 +1,10 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { formatAccessSummary, parseAccessPayload } from "../access/acl.js";
 import {
   canEdit,
   canEditArtefact,
+  canManage,
   canRead,
   canReadArtefact,
 } from "../access/permissions.js";
@@ -42,7 +44,7 @@ worldRoutes.get("/s/:id", (c) => {
       renderMessageText("Not found", `No scene ${id}.`),
     );
   }
-  if (!canRead(user, scene)) {
+  if (!canRead(user, scene, world)) {
     const msg = user
       ? "This scene is private and you do not have access."
       : "This scene is private. Authenticate and retry.";
@@ -59,17 +61,24 @@ worldRoutes.get("/s/:id", (c) => {
   const exits = world.getExits(id);
   const artefacts = world.artefactsAt(id);
   const assetBase = c.get("assetBase");
+  const manage = canManage(user, scene, world);
+  const accessSummary = manage
+    ? formatAccessSummary(scene.grants, scene.denies)
+    : undefined;
 
   return page(
     c,
     200,
     scene.title ?? `Scene ${scene.id}`,
     renderSceneBodyHtml({ scene, exits, artefacts, detail, assetBase }),
-    renderSceneText({ scene, exits, artefacts, detail, basePath: assetBase }),
+    renderSceneText({ scene, exits, artefacts, detail, basePath: assetBase, accessSummary }),
     {
       kind: "scene",
       scene,
-      canEdit: canEdit(user, scene),
+      canEdit: canEdit(user, scene, world),
+      canManage: manage,
+      userGrants: user?.grants,
+      userDenies: user?.denies,
     },
   );
 });
@@ -89,7 +98,7 @@ worldRoutes.get("/a/:id", (c) => {
     );
   }
   const home = world.getScene(artefact.homeSceneId);
-  if (!home || !canReadArtefact(user, artefact, home)) {
+  if (!home || !canReadArtefact(user, artefact, home, world)) {
     return page(
       c,
       user ? 403 : 401,
@@ -112,8 +121,10 @@ worldRoutes.get("/a/:id", (c) => {
     {
       kind: "artefact",
       artefact,
-      canEdit: canEditArtefact(user, artefact, home),
+      canEdit: canEditArtefact(user, artefact, home, world),
       collected,
+      userGrants: user?.grants,
+      userDenies: user?.denies,
     },
   );
 });
@@ -145,7 +156,11 @@ worldRoutes.get("/inv", (c) => {
     "Inventory",
     renderInventoryBodyHtml(items, assetBase),
     renderInventoryText(items, assetBase),
-    { kind: "inventory" },
+    {
+      kind: "inventory",
+      userGrants: user.grants,
+      userDenies: user.denies,
+    },
   );
 });
 
@@ -186,7 +201,7 @@ async function updateScene(c: Context) {
   const id = Number(c.req.param("id"));
   const scene = world.getScene(id);
   if (!scene) return apiError(c, 404, "Scene not found");
-  if (!canEdit(user, scene)) return apiError(c, 403, "Not allowed to edit this scene");
+  if (!canEdit(user, scene, world)) return apiError(c, 403, "Not allowed to edit this scene");
 
   const body = await readBody(c);
   const details =
@@ -213,6 +228,111 @@ async function updateScene(c: Context) {
   return c.redirect(`${c.get("assetBase")}/s/${id}`);
 }
 
+worldRoutes.get("/s/:id/access", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  const id = Number(c.req.param("id"));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canManage(user, scene, world)) {
+    return apiError(c, user ? 403 : 401, "Manage rights required");
+  }
+  const payload = {
+    grants: scene.grants ?? [],
+    denies: scene.denies ?? [],
+  };
+  if (wantsJson(c) || negotiateFormat(c) === "text") {
+    if (wantsJson(c)) return c.json(payload);
+    return c.text(
+      renderMessageText(`Scene ${id} access`, formatAccessSummary(payload.grants, payload.denies)),
+    );
+  }
+  return c.redirect(`${c.get("assetBase")}/s/${id}`);
+});
+
+worldRoutes.put("/s/:id/access", async (c) => updateSceneAccess(c));
+worldRoutes.post("/s/:id/access", async (c) => updateSceneAccess(c));
+
+async function updateSceneAccess(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = Number(c.req.param("id"));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canManage(user, scene, world)) return apiError(c, 403, "Manage rights required");
+
+  const body = await readBody(c);
+  try {
+    const patch = parseAccessPayload(body);
+    if (patch.grants === undefined && patch.denies === undefined) {
+      return apiError(c, 400, "grants and/or denies required");
+    }
+    const updated = await world.updateSceneAccess(id, patch);
+    if (wantsJson(c)) return c.json({ grants: updated.grants, denies: updated.denies });
+    return c.redirect(`${c.get("assetBase")}/s/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Invalid access payload");
+  }
+}
+
+worldRoutes.get("/u/:username/access", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  const username = String(c.req.param("username") ?? "");
+  const target = world.getUser(username);
+  if (!target) return apiError(c, 404, "User not found");
+  if (!canManageUserAccess(user, username, world)) {
+    return apiError(c, user ? 403 : 401, "Not allowed to view this user's access");
+  }
+  const payload = {
+    grants: target.grants ?? [],
+    denies: target.denies ?? [],
+  };
+  if (wantsJson(c)) return c.json(payload);
+  return c.text(
+    renderMessageText(
+      `User ${username} access (share-all)`,
+      formatAccessSummary(payload.grants, payload.denies),
+    ),
+  );
+});
+
+worldRoutes.put("/u/:username/access", async (c) => updateUserAccess(c));
+worldRoutes.post("/u/:username/access", async (c) => updateUserAccess(c));
+
+async function updateUserAccess(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const username = String(c.req.param("username") ?? "");
+  if (!canManageUserAccess(user, username, world)) {
+    return apiError(c, 403, "Not allowed to edit this user's access");
+  }
+  const body = await readBody(c);
+  try {
+    const patch = parseAccessPayload(body);
+    if (patch.grants === undefined && patch.denies === undefined) {
+      return apiError(c, 400, "grants and/or denies required");
+    }
+    const updated = await world.updateUserAccess(username, patch);
+    if (wantsJson(c)) return c.json({ grants: updated.grants, denies: updated.denies });
+    return c.redirect(`${c.get("assetBase")}/`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Invalid access payload");
+  }
+}
+
+function canManageUserAccess(
+  user: import("../model/types.js").UserRecord | undefined,
+  username: string,
+  world: import("../store/world.js").WorldStore,
+): boolean {
+  if (!user) return false;
+  if (user.username === username) return true;
+  return world.rolesFor(user.username).includes("manager");
+}
+
 worldRoutes.post("/s/:id/exits", async (c) => {
   const world = c.get("world");
   const user = c.get("user");
@@ -221,7 +341,7 @@ worldRoutes.post("/s/:id/exits", async (c) => {
   const id = Number(c.req.param("id"));
   const scene = world.getScene(id);
   if (!scene) return apiError(c, 404, "Scene not found");
-  if (!canEdit(user, scene)) return apiError(c, 403, "Not allowed to edit this scene");
+  if (!canEdit(user, scene, world)) return apiError(c, 403, "Not allowed to edit this scene");
 
   const body = await readBody(c);
   const nickname = String(body.nickname ?? "").trim();
@@ -251,7 +371,7 @@ worldRoutes.post("/a", async (c) => {
 
   const home = world.getScene(homeSceneId);
   if (!home) return apiError(c, 404, "Home scene not found");
-  if (!canEdit(user, home)) return apiError(c, 403, "Not allowed to place artefacts here");
+  if (!canEdit(user, home, world)) return apiError(c, 403, "Not allowed to place artefacts here");
 
   const artefact = await world.createArtefact({
     owner: user.username,
@@ -278,7 +398,7 @@ async function updateArtefact(c: Context) {
   const artefact = world.getArtefact(id);
   if (!artefact) return apiError(c, 404, "Artefact not found");
   const home = world.getScene(artefact.homeSceneId);
-  if (!home || !canEditArtefact(user, artefact, home)) {
+  if (!home || !canEditArtefact(user, artefact, home, world)) {
     return apiError(c, 403, "Not allowed to edit this artefact");
   }
 
@@ -310,7 +430,7 @@ worldRoutes.post("/a/:id/collect", async (c) => {
   const artefact = world.getArtefact(id);
   if (!artefact) return apiError(c, 404, "Artefact not found");
   const home = world.getScene(artefact.homeSceneId);
-  if (!home || !canReadArtefact(user, artefact, home)) {
+  if (!home || !canReadArtefact(user, artefact, home, world)) {
     return apiError(c, 403, "Cannot collect an unreadable artefact");
   }
 
