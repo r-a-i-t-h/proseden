@@ -92,7 +92,7 @@ flowchart TD
 - Bootstrap: first manager via env `PROSEDEN_MANAGERS=gardener` or seed staff file
 - Access helpers consult roles after ownership/grants
 
-### Phase 6 — Version history
+### Phase 6 — Version history ✅
 
 - On each scene/artefact save: append to `scenes/<id>.edits.jsonl` (or `.log.json`) `{ at, by, fields }`
 - Retain snapshot when: explicit “keep version” checkbox, or body hash changed and `retainSnapshot: true` in request; store under `scenes/<id>.versions/<iso>.md`

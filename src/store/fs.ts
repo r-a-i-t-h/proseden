@@ -19,3 +19,15 @@ export async function writeTextAtomic(path: string, contents: string): Promise<v
 export async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
   await writeTextAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
 }
+
+/** Append a line (creates file if missing). Single-process safe via read-modify-write. */
+export async function appendLineAtomic(path: string, line: string): Promise<void> {
+  let existing = "";
+  try {
+    existing = await readText(path);
+  } catch {
+    existing = "";
+  }
+  const next = existing.endsWith("\n") || existing === "" ? existing : `${existing}\n`;
+  await writeTextAtomic(path, `${next}${line.endsWith("\n") ? line : `${line}\n`}`);
+}

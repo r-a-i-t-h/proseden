@@ -6,6 +6,7 @@ import type {
   ArtefactMeta,
   ArtefactRecord,
   Deny,
+  EditLogEntry,
   EntranceGroupRecord,
   ExitRecord,
   Grant,
@@ -18,7 +19,7 @@ import type {
   StaffRole,
   UserRecord,
 } from "../model/types.js";
-import { readJson, readText, writeJsonAtomic, writeTextAtomic } from "./fs.js";
+import { appendLineAtomic, readJson, readText, writeJsonAtomic, writeTextAtomic } from "./fs.js";
 import { parseProseDocument, serializeProseDocument } from "./markdown.js";
 
 export class WorldStore implements AccessWorld {
@@ -554,17 +555,176 @@ export class WorldStore implements AccessWorld {
     patch: Partial<
       Pick<SceneRecord, "title" | "body" | "details" | "visibility" | "isJunction">
     >,
+    opts?: { by?: string; retainSnapshot?: boolean },
   ): Promise<SceneRecord> {
     const existing = this.scenes.get(id);
     if (!existing) throw new Error("Scene not found");
+    const fields = changedFields(existing, patch);
+    const at = nowIso();
     const updated: SceneRecord = {
       ...existing,
       ...patch,
       details: patch.details ?? existing.details,
-      modifiedAt: [...existing.modifiedAt, nowIso()],
+      modifiedAt: [...existing.modifiedAt, at],
     };
     await this.saveScene(updated);
+
+    const entry: EditLogEntry = {
+      at,
+      by: opts?.by ?? "unknown",
+      fields,
+    };
+    if (opts?.retainSnapshot) {
+      const versionId = versionIdFromIso(at);
+      await this.saveSceneSnapshot(id, versionId, existing);
+      entry.retained = true;
+      entry.versionId = versionId;
+    }
+    if (fields.length || opts?.retainSnapshot) {
+      await this.appendEditLog("scenes", id, entry);
+    }
     return updated;
+  }
+
+  async updateArtefact(
+    id: number,
+    patch: Partial<Pick<ArtefactRecord, "title" | "body" | "details" | "tags" | "homeSceneId">>,
+    opts?: { by?: string; retainSnapshot?: boolean },
+  ): Promise<ArtefactRecord> {
+    const existing = this.artefacts.get(id);
+    if (!existing) throw new Error("Artefact not found");
+    if (patch.homeSceneId !== undefined && !this.scenes.has(patch.homeSceneId)) {
+      throw new Error("Home scene not found");
+    }
+    const fields = changedFields(existing, patch);
+    const at = nowIso();
+    const updated: ArtefactRecord = {
+      ...existing,
+      ...patch,
+      details: patch.details ?? existing.details,
+      tags: patch.tags ?? existing.tags,
+      modifiedAt: [...existing.modifiedAt, at],
+    };
+    await this.saveArtefact(updated);
+
+    const entry: EditLogEntry = {
+      at,
+      by: opts?.by ?? "unknown",
+      fields,
+    };
+    if (opts?.retainSnapshot) {
+      const versionId = versionIdFromIso(at);
+      await this.saveArtefactSnapshot(id, versionId, existing);
+      entry.retained = true;
+      entry.versionId = versionId;
+    }
+    if (fields.length || opts?.retainSnapshot) {
+      await this.appendEditLog("artefacts", id, entry);
+    }
+    return updated;
+  }
+
+  async listEditLog(kind: "scenes" | "artefacts", id: number): Promise<EditLogEntry[]> {
+    const path = join(this.dataDir, kind, `${id}.edits.jsonl`);
+    if (!(await exists(path))) return [];
+    const raw = await readText(path);
+    return raw
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as EditLogEntry);
+  }
+
+  async getSceneSnapshot(id: number, versionId: string): Promise<SceneRecord | undefined> {
+    const path = join(this.dataDir, "scenes", `${id}.versions`, `${versionId}.md`);
+    if (!(await exists(path))) return undefined;
+    const raw = await readText(path);
+    const { meta, body, details } = parseProseDocument<Record<string, unknown>>(raw);
+    return { ...normalizeSceneMeta(meta, id), body, details };
+  }
+
+  async getArtefactSnapshot(id: number, versionId: string): Promise<ArtefactRecord | undefined> {
+    const path = join(this.dataDir, "artefacts", `${id}.versions`, `${versionId}.md`);
+    if (!(await exists(path))) return undefined;
+    const raw = await readText(path);
+    const { meta, body, details } = parseProseDocument<Record<string, unknown>>(raw);
+    const normalised = normalizeArtefactMeta(meta);
+    return { ...normalised, id, body, details };
+  }
+
+  async restoreSceneSnapshot(
+    id: number,
+    versionId: string,
+    by: string,
+  ): Promise<SceneRecord> {
+    const snap = await this.getSceneSnapshot(id, versionId);
+    if (!snap) throw new Error("Snapshot not found");
+    return this.updateScene(
+      id,
+      {
+        title: snap.title,
+        body: snap.body,
+        details: snap.details,
+        visibility: snap.visibility,
+        isJunction: snap.isJunction,
+      },
+      { by, retainSnapshot: false },
+    );
+  }
+
+  async restoreArtefactSnapshot(
+    id: number,
+    versionId: string,
+    by: string,
+  ): Promise<ArtefactRecord> {
+    const snap = await this.getArtefactSnapshot(id, versionId);
+    if (!snap) throw new Error("Snapshot not found");
+    return this.updateArtefact(
+      id,
+      {
+        title: snap.title,
+        body: snap.body,
+        details: snap.details,
+        tags: snap.tags,
+        homeSceneId: snap.homeSceneId,
+      },
+      { by, retainSnapshot: false },
+    );
+  }
+
+  private async appendEditLog(
+    kind: "scenes" | "artefacts",
+    id: number,
+    entry: EditLogEntry,
+  ): Promise<void> {
+    const path = join(this.dataDir, kind, `${id}.edits.jsonl`);
+    await appendLineAtomic(path, JSON.stringify(entry));
+  }
+
+  private async saveSceneSnapshot(
+    id: number,
+    versionId: string,
+    scene: SceneRecord,
+  ): Promise<void> {
+    const { body, details, ...meta } = scene;
+    const raw = serializeProseDocument(stripLegacyInvites(meta), body, details);
+    await writeTextAtomic(
+      join(this.dataDir, "scenes", `${id}.versions`, `${versionId}.md`),
+      raw,
+    );
+  }
+
+  private async saveArtefactSnapshot(
+    id: number,
+    versionId: string,
+    artefact: ArtefactRecord,
+  ): Promise<void> {
+    const { body, details, ...meta } = artefact;
+    const raw = serializeProseDocument(meta, body, details);
+    await writeTextAtomic(
+      join(this.dataDir, "artefacts", `${id}.versions`, `${versionId}.md`),
+      raw,
+    );
   }
 
   async addExit(
@@ -612,26 +772,6 @@ export class WorldStore implements AccessWorld {
     await this.saveArtefact(artefact);
     await this.saveMeta();
     return artefact;
-  }
-
-  async updateArtefact(
-    id: number,
-    patch: Partial<Pick<ArtefactRecord, "title" | "body" | "details" | "tags" | "homeSceneId">>,
-  ): Promise<ArtefactRecord> {
-    const existing = this.artefacts.get(id);
-    if (!existing) throw new Error("Artefact not found");
-    if (patch.homeSceneId !== undefined && !this.scenes.has(patch.homeSceneId)) {
-      throw new Error("Home scene not found");
-    }
-    const updated: ArtefactRecord = {
-      ...existing,
-      ...patch,
-      details: patch.details ?? existing.details,
-      tags: patch.tags ?? existing.tags,
-      modifiedAt: [...existing.modifiedAt, nowIso()],
-    };
-    await this.saveArtefact(updated);
-    return updated;
   }
 
   async collectArtefact(username: string, artefactId: number, tags: string[] = []): Promise<UserRecord> {
@@ -778,6 +918,23 @@ function normalizeArtefactMeta(raw: Record<string, unknown>): ArtefactMeta {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function versionIdFromIso(iso: string): string {
+  return iso.replace(/[:.]/g, "-");
+}
+
+function changedFields(
+  existing: object,
+  patch: object,
+): string[] {
+  const fields: string[] = [];
+  const prev = existing as Record<string, unknown>;
+  for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
+    if (value === undefined) continue;
+    if (JSON.stringify(prev[key]) !== JSON.stringify(value)) fields.push(key);
+  }
+  return fields;
 }
 
 async function exists(path: string): Promise<boolean> {

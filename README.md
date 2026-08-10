@@ -91,6 +91,10 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `DELETE`/`POST` | `/a/:id/delete` | Delete artefact (owner/manage/moderator) |
 | `GET` | `/staff` | List staff roles (manager) |
 | `PUT`/`POST` | `/staff/:username` | Set roles (manager) |
+| `GET` | `/s/:id/history` | Edit log (readers) |
+| `GET` | `/s/:id/history/:version` | View retained snapshot |
+| `POST` | `/s/:id/history/:version/restore` | Restore snapshot (manage) |
+| `GET` | `/a/:id/history` … | Same for artefacts |
 | `POST` | `/a` | Create artefact (auth, edit rights on home) |
 | `PUT`/`POST` | `/a/:id` | Update artefact |
 | `POST` | `/a/:id/collect` | Collect (inventory link) |
@@ -116,6 +120,8 @@ Prose files use YAML frontmatter plus `## detail:<slug>` sections.
 
 **Collect** adds an inventory link to the artefact; it does not remove it from its home scene. Multiple readers may collect the same artefact.
 
-## Deferred (later phases)
+Every prose edit is appended to `scenes/<id>.edits.jsonl` (or artefacts). Snapshots are retained only when the save includes `retainSnapshot` / “Keep version”, stored under `scenes/<id>.versions/<iso>.md`. Exits are not versioned.
 
-Historical snapshot browsing (edit log lands with Phase 6).
+## Deferred
+
+None of the planned phases remain; nested groups, chat, presence, search, and multi-process writers stay out of scope.

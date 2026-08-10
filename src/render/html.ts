@@ -110,8 +110,10 @@ function manageSidebar(
             ? `<label><input type="checkbox" name="isJunction" value="true" ${scene.isJunction ? "checked" : ""} /> Public junction</label>`
             : ""
         }
+        <label><input type="checkbox" name="retainSnapshot" value="true" /> Keep version snapshot</label>
         <button type="submit">Save scene</button>
       </form>`);
+      sections.push(`<p class="muted"><a href="${assetBase}/s/${scene.id}/history">Scene history</a></p>`);
       sections.push(`<form method="post" action="${assetBase}/a" class="stack">
         <h3>New artefact here</h3>
         <input type="hidden" name="homeSceneId" value="${scene.id}" />
@@ -204,8 +206,10 @@ function manageSidebar(
         <label>Home scene <input name="homeSceneId" type="number" value="${a.homeSceneId}" required /></label>
         <label>Tags (comma) <input name="tags" value="${escapeAttr(a.tags.join(", "))}" /></label>
         <label>Details (JSON map) <textarea name="detailsJson" rows="4">${escapeHtml(JSON.stringify(a.details, null, 2))}</textarea></label>
+        <label><input type="checkbox" name="retainSnapshot" value="true" /> Keep version snapshot</label>
         <button type="submit">Save artefact</button>
       </form>`);
+      sections.push(`<p class="muted"><a href="${assetBase}/a/${a.id}/history">Artefact history</a></p>`);
     }
     if (manage.canDelete) {
       sections.push(`<form method="post" action="${assetBase}/a/${a.id}/delete" class="stack">

@@ -16,6 +16,7 @@ import {
 import type { StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
+  escapeHtml,
   renderArtefactBodyHtml,
   renderHtmlPage,
   renderInventoryBodyHtml,
@@ -285,13 +286,20 @@ async function updateScene(c: Context) {
       body.isJunction === true || body.isJunction === "true" || body.isJunction === "on";
   }
 
-  const updated = await world.updateScene(id, {
-    title: body.title !== undefined ? optionalString(body.title) : scene.title,
-    body: body.body !== undefined ? String(body.body) : scene.body,
-    details,
-    visibility,
-    isJunction,
-  });
+  const updated = await world.updateScene(
+    id,
+    {
+      title: body.title !== undefined ? optionalString(body.title) : scene.title,
+      body: body.body !== undefined ? String(body.body) : scene.body,
+      details,
+      visibility,
+      isJunction,
+    },
+    {
+      by: user.username,
+      retainSnapshot: isTruthy(body.retainSnapshot) || isTruthy(body.keepVersion),
+    },
+  );
 
   if (wantsJson(c)) return c.json(updated);
   return c.redirect(`${c.get("assetBase")}/s/${id}`);
@@ -724,16 +732,23 @@ async function updateArtefact(c: Context) {
 
   const body = await readBody(c);
   try {
-    const updated = await world.updateArtefact(id, {
-      title: body.title !== undefined ? optionalString(body.title) : artefact.title,
-      body: body.body !== undefined ? String(body.body) : artefact.body,
-      details:
-        body.detailsJson !== undefined || body.details !== undefined
-          ? parseDetails(body.detailsJson ?? body.details)
-          : undefined,
-      tags: body.tags !== undefined ? parseTags(body.tags) : undefined,
-      homeSceneId: body.homeSceneId !== undefined ? Number(body.homeSceneId) : undefined,
-    });
+    const updated = await world.updateArtefact(
+      id,
+      {
+        title: body.title !== undefined ? optionalString(body.title) : artefact.title,
+        body: body.body !== undefined ? String(body.body) : artefact.body,
+        details:
+          body.detailsJson !== undefined || body.details !== undefined
+            ? parseDetails(body.detailsJson ?? body.details)
+            : undefined,
+        tags: body.tags !== undefined ? parseTags(body.tags) : undefined,
+        homeSceneId: body.homeSceneId !== undefined ? Number(body.homeSceneId) : undefined,
+      },
+      {
+        by: user.username,
+        retainSnapshot: isTruthy(body.retainSnapshot) || isTruthy(body.keepVersion),
+      },
+    );
     if (wantsJson(c)) return c.json(updated);
     return c.redirect(`${c.get("assetBase")}/a/${id}`);
   } catch (err) {
@@ -850,6 +865,206 @@ async function setStaff(c: Context) {
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Could not set roles");
   }
+}
+
+worldRoutes.get("/s/:id/history", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  const id = Number(c.req.param("id"));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canRead(user, scene, world)) {
+    return apiError(c, user ? 403 : 401, "Not allowed to read this scene");
+  }
+  const log = await world.listEditLog("scenes", id);
+  const assetBase = c.get("assetBase");
+  if (wantsJson(c)) return c.json({ edits: log });
+  const lines = log.length
+    ? log
+        .map((e) => {
+          const snap = e.versionId
+            ? `  snapshot: ${assetBase}/s/${id}/history/${encodeURIComponent(e.versionId)}`
+            : "";
+          return `${e.at} by ${e.by} [${e.fields.join(", ") || "—"}]${e.retained ? " (retained)" : ""}${snap ? `\n${snap}` : ""}`;
+        })
+        .join("\n")
+    : "(no edits logged)";
+  const htmlList = log.length
+    ? `<ul class="link-list">${log
+        .map((e) => {
+          const link = e.versionId
+            ? ` <a href="${assetBase}/s/${id}/history/${encodeURIComponent(e.versionId)}">view</a>`
+            : "";
+          return `<li>${escapeHtml(e.at)} · ${escapeHtml(e.by)} · ${escapeHtml(e.fields.join(", ") || "—")}${e.retained ? " · retained" : ""}${link}</li>`;
+        })
+        .join("")}</ul>`
+    : `<p class="muted">No edits logged.</p>`;
+  return page(
+    c,
+    200,
+    `History · Scene ${id}`,
+    `<p class="crumb"><a href="${assetBase}/s/${id}">← Scene ${id}</a></p><h1>History</h1>${htmlList}`,
+    renderMessageText(`History · Scene ${id}`, lines),
+    {
+      kind: "scene",
+      scene,
+      canManage: canManage(user, scene, world),
+      isManager: isManager(user, world),
+      userGrants: user?.grants,
+      userDenies: user?.denies,
+    },
+  );
+});
+
+worldRoutes.get("/s/:id/history/:version", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  const id = Number(c.req.param("id"));
+  const versionId = String(c.req.param("version") ?? "");
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canRead(user, scene, world)) {
+    return apiError(c, user ? 403 : 401, "Not allowed to read this scene");
+  }
+  const snap = await world.getSceneSnapshot(id, versionId);
+  if (!snap) return apiError(c, 404, "Snapshot not found");
+  const assetBase = c.get("assetBase");
+  const manage = canManage(user, scene, world);
+  return page(
+    c,
+    200,
+    `Snapshot ${versionId}`,
+    `<p class="crumb"><a href="${assetBase}/s/${id}/history">← History</a></p>
+      <h1>Snapshot <span class="sub">${escapeHtml(versionId)}</span></h1>
+      <p class="meta">${escapeHtml(snap.title ?? `Scene ${id}`)}</p>
+      <div class="desc">${snap.body
+        .split(/\n{2,}/)
+        .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br />")}</p>`)
+        .join("")}</div>
+      ${
+        manage
+          ? `<form method="post" action="${assetBase}/s/${id}/history/${encodeURIComponent(versionId)}/restore" class="stack"><button type="submit">Restore this version</button></form>`
+          : ""
+      }`,
+    renderMessageText(
+      `Snapshot ${versionId}`,
+      `${snap.title ?? `Scene ${id}`}\n\n${snap.body}\n`,
+    ),
+  );
+});
+
+worldRoutes.post("/s/:id/history/:version/restore", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = Number(c.req.param("id"));
+  const versionId = String(c.req.param("version") ?? "");
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canManage(user, scene, world)) return apiError(c, 403, "Manage rights required to restore");
+  try {
+    const updated = await world.restoreSceneSnapshot(id, versionId, user.username);
+    if (wantsJson(c)) return c.json(updated);
+    return c.redirect(`${c.get("assetBase")}/s/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Restore failed");
+  }
+});
+
+worldRoutes.get("/a/:id/history", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  const id = Number(c.req.param("id"));
+  const artefact = world.getArtefact(id);
+  if (!artefact) return apiError(c, 404, "Artefact not found");
+  const home = world.getScene(artefact.homeSceneId);
+  if (!home || !canReadArtefact(user, artefact, home, world)) {
+    return apiError(c, user ? 403 : 401, "Not allowed to read this artefact");
+  }
+  const log = await world.listEditLog("artefacts", id);
+  const assetBase = c.get("assetBase");
+  if (wantsJson(c)) return c.json({ edits: log });
+  const lines = log.length
+    ? log
+        .map((e) => {
+          const snap = e.versionId
+            ? `  snapshot: ${assetBase}/a/${id}/history/${encodeURIComponent(e.versionId)}`
+            : "";
+          return `${e.at} by ${e.by} [${e.fields.join(", ") || "—"}]${e.retained ? " (retained)" : ""}${snap ? `\n${snap}` : ""}`;
+        })
+        .join("\n")
+    : "(no edits logged)";
+  return page(
+    c,
+    200,
+    `History · Artefact ${id}`,
+    `<p class="crumb"><a href="${assetBase}/a/${id}">← Artefact ${id}</a></p><h1>History</h1><pre>${escapeHtml(lines)}</pre>`,
+    renderMessageText(`History · Artefact ${id}`, lines),
+  );
+});
+
+worldRoutes.get("/a/:id/history/:version", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  const id = Number(c.req.param("id"));
+  const versionId = String(c.req.param("version") ?? "");
+  const artefact = world.getArtefact(id);
+  if (!artefact) return apiError(c, 404, "Artefact not found");
+  const home = world.getScene(artefact.homeSceneId);
+  if (!home || !canReadArtefact(user, artefact, home, world)) {
+    return apiError(c, user ? 403 : 401, "Not allowed to read this artefact");
+  }
+  const snap = await world.getArtefactSnapshot(id, versionId);
+  if (!snap) return apiError(c, 404, "Snapshot not found");
+  const assetBase = c.get("assetBase");
+  const canRestore =
+    !!user &&
+    (user.username === artefact.owner || canManage(user, home, world));
+  return page(
+    c,
+    200,
+    `Snapshot ${versionId}`,
+    `<p class="crumb"><a href="${assetBase}/a/${id}/history">← History</a></p>
+      <h1>Snapshot <span class="sub">${escapeHtml(versionId)}</span></h1>
+      <div class="desc">${snap.body
+        .split(/\n{2,}/)
+        .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br />")}</p>`)
+        .join("")}</div>
+      ${
+        canRestore
+          ? `<form method="post" action="${assetBase}/a/${id}/history/${encodeURIComponent(versionId)}/restore" class="stack"><button type="submit">Restore this version</button></form>`
+          : ""
+      }`,
+    renderMessageText(`Snapshot ${versionId}`, snap.body),
+  );
+});
+
+worldRoutes.post("/a/:id/history/:version/restore", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = Number(c.req.param("id"));
+  const versionId = String(c.req.param("version") ?? "");
+  const artefact = world.getArtefact(id);
+  if (!artefact) return apiError(c, 404, "Artefact not found");
+  const home = world.getScene(artefact.homeSceneId);
+  if (
+    user.username !== artefact.owner &&
+    !(home && canManage(user, home, world))
+  ) {
+    return apiError(c, 403, "Manage rights required to restore");
+  }
+  try {
+    const updated = await world.restoreArtefactSnapshot(id, versionId, user.username);
+    if (wantsJson(c)) return c.json(updated);
+    return c.redirect(`${c.get("assetBase")}/a/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Restore failed");
+  }
+});
+
+function isTruthy(value: unknown): boolean {
+  return value === true || value === "true" || value === "on" || value === "1";
 }
 
 function page(

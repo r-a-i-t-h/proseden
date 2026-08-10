@@ -27,6 +27,12 @@ function enhanceForms(): void {
         )?.checked;
         payload.isJunction = !!checked;
       }
+      if (form.querySelector('input[name="retainSnapshot"][type="checkbox"]')) {
+        const checked = form.querySelector<HTMLInputElement>(
+          'input[name="retainSnapshot"][type="checkbox"]',
+        )?.checked;
+        payload.retainSnapshot = !!checked;
+      }
 
       const response = await fetch(action, {
         method,
