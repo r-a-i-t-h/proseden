@@ -298,15 +298,13 @@ describe("HTTP ACL enforcement", () => {
 
     const collect = await app.request("/a/1/collect", {
       method: "POST",
-      headers: { ...auth(tokens.carol), "Content-Type": "application/json" },
-      body: JSON.stringify({ tags: ["x"] }),
+      headers: auth(tokens.carol),
     });
     expect(collect.status).toBe(403);
 
     const bobCollect = await app.request("/a/1/collect", {
       method: "POST",
-      headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
-      body: JSON.stringify({ tags: ["keepsake"] }),
+      headers: auth(tokens.bob),
     });
     expect(bobCollect.status).toBe(200);
   });

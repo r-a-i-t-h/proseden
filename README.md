@@ -68,7 +68,6 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 
 # Collect / inventory
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' \
-  -H 'Content-Type: application/json' -d '{"tags":["keepsake"]}' \
   -X POST http://127.0.0.1:8787/a/1/collect
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
   http://127.0.0.1:8787/inv

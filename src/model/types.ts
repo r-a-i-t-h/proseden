@@ -19,7 +19,6 @@ export interface Deny {
 
 export interface InventoryItem {
   artefactId: number;
-  tags: string[];
 }
 
 export interface UserRecord {

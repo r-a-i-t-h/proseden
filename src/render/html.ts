@@ -289,7 +289,6 @@ function manageSidebar(
         manageSection(
           "Collect",
           `<form method="post" action="a/${a.id}/collect" class="stack">
-        <label>Tags (comma) <input name="tags" /></label>
         <button type="submit">Collect</button>
       </form>`,
         ),
@@ -480,18 +479,17 @@ export function renderArtefactBodyHtml(opts: {
     ${detailLinks ? `<section><h2>Details</h2><ul class="link-list">${detailLinks}</ul></section>` : ""}`;
 }
 
-export function renderInventoryBodyHtml(
-  items: Array<{ artefact: ArtefactRecord; tags: string[] }>,
-  _assetBase = "",
-): string {
+export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""): string {
   if (!items.length) {
     return `<h1>Inventory</h1><p class="muted">Empty — collect artefacts you love.</p>`;
   }
   const list = items
-    .map((item) => {
-      const label = item.artefact.title ?? `Artefact ${item.artefact.id}`;
-      const tags = item.tags.length ? ` <span class="muted">(${escapeHtml(item.tags.join(", "))})</span>` : "";
-      return `<li><a href="a/${item.artefact.id}">${escapeHtml(label)}</a>${tags}</li>`;
+    .map((artefact) => {
+      const label = artefact.title ?? `Artefact ${artefact.id}`;
+      const tags = artefact.tags.length
+        ? ` <span class="muted">(${escapeHtml(artefact.tags.join(", "))})</span>`
+        : "";
+      return `<li><a href="a/${artefact.id}">${escapeHtml(label)}</a>${tags}</li>`;
     })
     .join("");
   return `<h1>Inventory</h1><ul class="link-list">${list}</ul>`;

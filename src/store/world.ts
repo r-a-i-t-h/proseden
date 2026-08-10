@@ -799,14 +799,14 @@ export class WorldStore implements AccessWorld {
     return artefact;
   }
 
-  async collectArtefact(username: string, artefactId: number, tags: string[] = []): Promise<UserRecord> {
+  async collectArtefact(username: string, artefactId: number): Promise<UserRecord> {
     const user = this.users.get(username);
     if (!user) throw new Error("User not found");
     if (!this.artefacts.has(artefactId)) throw new Error("Artefact not found");
     if (user.inventory.some((i) => i.artefactId === artefactId)) {
       return user;
     }
-    const item: InventoryItem = { artefactId, tags };
+    const item: InventoryItem = { artefactId };
     const updated: UserRecord = {
       ...user,
       inventory: [...user.inventory, item],
@@ -849,7 +849,6 @@ function normalizeUser(raw: Record<string, unknown>): UserRecord {
     inventory: Array.isArray(raw.inventory)
       ? (raw.inventory as InventoryItem[]).map((i) => ({
           artefactId: Number(i.artefactId),
-          tags: Array.isArray(i.tags) ? i.tags.map(String) : [],
         }))
       : [],
     grants: normalizeGrants(raw.grants),

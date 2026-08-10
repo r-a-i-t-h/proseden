@@ -211,11 +211,8 @@ worldRoutes.get("/inv", (c) => {
   }
 
   const items = user.inventory
-    .map((item) => {
-      const artefact = world.getArtefact(item.artefactId);
-      return artefact ? { artefact, tags: item.tags } : null;
-    })
-    .filter((x): x is { artefact: NonNullable<typeof x>["artefact"]; tags: string[] } => !!x);
+    .map((item) => world.getArtefact(item.artefactId))
+    .filter((a): a is NonNullable<typeof a> => !!a);
 
   const assetBase = c.get("assetBase");
   return page(
@@ -772,8 +769,7 @@ worldRoutes.post("/a/:id/collect", async (c) => {
     return apiError(c, 403, "Cannot collect an unreadable artefact");
   }
 
-  const body = await readBody(c);
-  const updated = await world.collectArtefact(user.username, id, parseTags(body.tags));
+  const updated = await world.collectArtefact(user.username, id);
   c.set("user", updated);
   if (wantsJson(c)) return c.json({ ok: true, inventory: updated.inventory });
   return c.redirect(`${c.get("assetBase")}/a/${id}`);

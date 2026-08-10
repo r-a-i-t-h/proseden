@@ -61,8 +61,9 @@ description which can have details examined.
 
 Each artefact is homed in a single scene. It can be moved by the owner.
 
-Artefacts can be collected and become part of a users inventory. To help manage
-the inventory these are tagged, e.g. "music", "garment", etc.
+Artefacts can be collected and become part of a users inventory. Owner-set tags
+on the artefact (e.g. "music", "garment") are the only tags; collectors do not
+add their own.
 
 There is no limit to a users inventory - collect all the artefacts you love.
 

@@ -102,18 +102,15 @@ export function renderArtefactText(opts: {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-export function renderInventoryText(
-  items: Array<{ artefact: ArtefactRecord; tags: string[] }>,
-  basePath = "",
-): string {
+export function renderInventoryText(items: ArtefactRecord[], basePath = ""): string {
   const lines = ["[Inventory]", ""];
   if (!items.length) {
     lines.push("(empty)");
   } else {
-    for (const item of items) {
-      const label = item.artefact.title ?? `artefact ${item.artefact.id}`;
-      const tags = item.tags.length ? ` [${item.tags.join(", ")}]` : "";
-      lines.push(`  ${item.artefact.id}. ${label}${tags}  ${basePath}/a/${item.artefact.id}`);
+    for (const artefact of items) {
+      const label = artefact.title ?? `artefact ${artefact.id}`;
+      const tags = artefact.tags.length ? ` [${artefact.tags.join(", ")}]` : "";
+      lines.push(`  ${artefact.id}. ${label}${tags}  ${basePath}/a/${artefact.id}`);
     }
   }
   return `${lines.join("\n").trimEnd()}\n`;
