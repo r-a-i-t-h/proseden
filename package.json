@@ -9,7 +9,9 @@
     "build:client": "vite build",
     "start": "node dist/server.js",
     "seed:user": "tsx scripts/make-seed-user.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "engines": {
     "node": ">=20"
@@ -24,6 +26,7 @@
     "@types/node": "^24.0.14",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.10"
   }
 }
