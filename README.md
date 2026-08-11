@@ -131,7 +131,7 @@ data/
   artefacts/<id>.md
 ```
 
-Prose files use YAML frontmatter plus `## detail:<slug>` sections.
+Prose files use YAML frontmatter plus `## detail:<slug>` sections. Hash-leading lines in body/detail text are saved escaped (`\#`, `\##`) so they cannot be mistaken for section markers.
 
 **Collect** adds an inventory link to the artefact; it does not remove it from its home scene. Multiple readers may collect the same artefact.
 

@@ -214,6 +214,29 @@ button:hover {
   color: var(--muted);
 }
 
+.desc hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.35rem 0;
+  max-width: 42rem;
+}
+
+.desc blockquote {
+  margin: 0 0 1rem;
+  padding: 0.15rem 0 0.15rem 0.9rem;
+  border-left: 3px solid var(--leaf);
+  max-width: 42rem;
+  color: var(--muted);
+}
+
+.desc blockquote p {
+  margin: 0;
+}
+
+.desc a {
+  font-weight: 600;
+}
+
 .link-list {
   list-style: none;
   padding: 0;

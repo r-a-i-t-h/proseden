@@ -21,15 +21,23 @@ export function serializeProseDocument(
 ): string {
   const detailBlocks = Object.entries(details)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([slug, text]) => `## detail:${slug}\n${text.trim()}`)
+    .map(([slug, text]) => `## detail:${slug}\n${escapeHashLines(text.trim())}`)
     .join("\n\n");
 
-  const content = [body.trim(), detailBlocks].filter(Boolean).join("\n\n");
+  const content = [escapeHashLines(body.trim()), detailBlocks].filter(Boolean).join("\n\n");
   const cleanMeta: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(meta as Record<string, unknown>)) {
     if (value !== undefined) cleanMeta[key] = value;
   }
   return matter.stringify(`${content}\n`, cleanMeta);
+}
+
+/** Prefix a backslash on any content line that starts with `#`, so future `## section:` markers stay unambiguous. */
+function escapeHashLines(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => (line.startsWith("#") ? `\\${line}` : line))
+    .join("\n");
 }
 
 function splitDetails(content: string): { body: string; details: Record<string, string> } {
@@ -47,18 +55,24 @@ function splitDetails(content: string): { body: string; details: Record<string, 
     }
   };
 
+  const pushLine = (line: string) => {
+    if (currentDetail) detailLines.push(line);
+    else bodyLines.push(line);
+  };
+
   for (const line of lines) {
+    if (line.startsWith("\\#")) {
+      pushLine(line.slice(1));
+      continue;
+    }
+
     const match = line.match(DETAIL_HEADING);
     if (match) {
       flushDetail();
       currentDetail = match[1]!;
       continue;
     }
-    if (currentDetail) {
-      detailLines.push(line);
-    } else {
-      bodyLines.push(line);
-    }
+    pushLine(line);
   }
   flushDetail();
 
