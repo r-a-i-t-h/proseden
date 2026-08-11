@@ -1,3 +1,4 @@
+import { prepareJsonTextarea } from "../json-textarea.js";
 import type { Deny, Grant, Right } from "../model/types.js";
 import { RIGHT_RANK } from "../model/types.js";
 
@@ -124,7 +125,7 @@ function parseJsonField(value: unknown): unknown {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return [];
-    return JSON.parse(trimmed) as unknown;
+    return JSON.parse(prepareJsonTextarea(trimmed)) as unknown;
   }
   return value;
 }

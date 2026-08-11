@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { formatJsonTextarea } from "../json-textarea.js";
 import type { ArtefactRecord, Deny, ExitRecord, Grant, SceneRecord, UserRecord } from "../model/types.js";
 import { escapeHtml, formatProse } from "./prose.js";
 
@@ -474,7 +475,7 @@ function renderJsonFieldHtml(
           </div>
         </details>
       </div>
-      <textarea name="${escapeAttr(name)}" rows="${rows}">${escapeHtml(JSON.stringify(value, null, 2))}</textarea>
+      <textarea name="${escapeAttr(name)}" rows="${rows}">${escapeHtml(formatJsonTextarea(value))}</textarea>
     </div>`;
 }
 

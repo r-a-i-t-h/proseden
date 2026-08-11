@@ -1,3 +1,5 @@
+import { formatJsonTextarea } from "../src/json-textarea.js";
+
 interface OwnedSceneLink {
   id: number;
   title?: string;
@@ -51,7 +53,8 @@ const MODE_KEY = "proseden-edit";
 const FLASH_KEY = "proseden-edit-flash";
 
 const DETAILS_EXAMPLE = `{
-  "card": "Closer look at the mantel card.",
+  "card": "Closer look at the mantel card.
+Second paragraph on a new line.",
   "window": "Rain beads on the glass."
 }`;
 
@@ -146,7 +149,7 @@ function jsonField(label: string, name: string, rows: number, value: unknown, ex
   const textarea = el(
     "textarea",
     { name, rows: String(rows) },
-    JSON.stringify(value ?? fallback, null, 2),
+    formatJsonTextarea(value ?? fallback),
   );
   const help = el(
     "details",

@@ -180,6 +180,21 @@ describe("parseAccessPayload", () => {
     });
   });
 
+  it("allows real line breaks inside JSON string values", () => {
+    expect(
+      parseAccessPayload({
+        grantsJson: `[
+  { "who": "alice", "rights": ["edit"] }
+]`,
+        deniesJson: `[{"who": "bob
+jr"}]`,
+      }),
+    ).toEqual({
+      grants: [{ who: "alice", rights: ["edit"] }],
+      denies: [{ who: "bob\njr" }],
+    });
+  });
+
   it("treats blank JSON strings as empty lists", () => {
     expect(parseAccessPayload({ grantsJson: "  ", deniesJson: "" })).toEqual({
       grants: [],

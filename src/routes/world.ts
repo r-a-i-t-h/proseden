@@ -18,6 +18,7 @@ import {
   isModerator,
 } from "../access/permissions.js";
 import { apiError, ownedSceneLinks, wantsJson } from "../http.js";
+import { prepareJsonTextarea } from "../json-textarea.js";
 import type { StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
@@ -1177,7 +1178,7 @@ async function setStaff(c: Context) {
     roles = body.roles.split(",").map((s) => s.trim()).filter(Boolean) as StaffRole[];
   } else if (typeof body.rolesJson === "string") {
     try {
-      roles = JSON.parse(body.rolesJson) as StaffRole[];
+      roles = JSON.parse(prepareJsonTextarea(body.rolesJson)) as StaffRole[];
     } catch {
       return apiError(c, 400, "Invalid rolesJson");
     }
@@ -1494,7 +1495,7 @@ function parseDetails(value: unknown): Record<string, string> {
     if (!trimmed) return {};
     let parsed: unknown;
     try {
-      parsed = JSON.parse(trimmed);
+      parsed = JSON.parse(prepareJsonTextarea(trimmed));
     } catch {
       throw new Error("Details must be a JSON object");
     }
