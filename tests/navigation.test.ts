@@ -324,7 +324,7 @@ describe("HTTP teleport vs rights", () => {
       redirect: "manual",
     });
     expect(carol.status).toBe(403);
-    expect(await carol.text()).toMatch(/Entrance to this area is not readable/i);
+    expect(await carol.text()).toMatch(/Entrance to this area is not reachable/i);
 
     const anon = await app.request(`/s/${ids.inner}`, {
       headers: { Accept: "text/plain" },

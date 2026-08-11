@@ -64,7 +64,7 @@ worldRoutes.get("/s/:id", (c) => {
   if (resolved.redirected) {
     const entrance = world.getScene(resolved.sceneId);
     if (!entrance || !canRead(user, entrance, world)) {
-      const msg = "Entrance to this area is not readable.";
+      const msg = "Entrance to this area is not reachable.";
       return page(
         c,
         user ? 403 : 401,
@@ -158,7 +158,7 @@ worldRoutes.get("/s/:id/go/:exit", (c) => {
   const from = world.getScene(fromId);
   if (!from) return apiError(c, 404, "Scene not found");
   if (!canRead(user, from, world)) {
-    return apiError(c, user ? 403 : 401, "Cannot leave from an unreadable scene");
+    return apiError(c, user ? 403 : 401, "Cannot leave from an unreachable scene");
   }
   const exit = world.findExit(fromId, exitKey);
   if (!exit) return apiError(c, 404, `No exit matching "${exitKey}"`);
@@ -166,7 +166,7 @@ worldRoutes.get("/s/:id/go/:exit", (c) => {
   const resolved = world.resolveTeleportTarget(exit.toSceneId, fromId);
   const dest = world.getScene(resolved.sceneId);
   if (!dest || !canRead(user, dest, world)) {
-    return apiError(c, user ? 403 : 401, "Destination is not readable");
+    return apiError(c, user ? 403 : 401, "Destination is not reachable");
   }
   return c.redirect(`${c.get("assetBase")}/s/${resolved.sceneId}?from=${fromId}`);
 });
@@ -191,8 +191,8 @@ worldRoutes.get("/a/:id", (c) => {
       c,
       user ? 403 : 401,
       "Forbidden",
-      renderMessageBodyHtml("Forbidden", "This artefact is not readable."),
-      renderMessageText("Forbidden", "This artefact is not readable."),
+      renderMessageBodyHtml("Forbidden", "This artefact is not for your eyes."),
+      renderMessageText("Forbidden", "This artefact is not for your eyes."),
     );
   }
 
@@ -804,7 +804,7 @@ worldRoutes.post("/s/:id/exits", async (c) => {
   const dest = world.getScene(toSceneId);
   if (!dest) return apiError(c, 404, "Destination scene not found");
   if (!canRead(user, dest, world)) {
-    return apiError(c, 403, "Destination must be readable");
+    return apiError(c, 403, "Destination must be reachable");
   }
 
   try {
@@ -1025,7 +1025,7 @@ worldRoutes.post("/a/:id/collect", async (c) => {
   if (!artefact) return apiError(c, 404, "Artefact not found");
   const home = world.getScene(artefact.homeSceneId);
   if (!home || !canReadArtefact(user, artefact, home, world)) {
-    return apiError(c, 403, "Cannot collect an unreadable artefact");
+    return apiError(c, 403, "Cannot collect a prohibited artefact");
   }
 
   const updated = await world.collectArtefact(user.username, id);

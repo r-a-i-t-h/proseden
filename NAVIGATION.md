@@ -54,7 +54,7 @@ Both teleport and go call this helper before access checks on the **resolved** d
 ### Teleport HTTP flow
 
 1. Resolve target with `from` / Referer.
-2. If redirected: require `canRead` on the **entrance**; if not readable → `401`/`403` with “Entrance to this area is not readable.”; if readable → `302` to `/s/<entrance>`.
+2. If redirected: require `canRead` on the **entrance**; if not readable → `401`/`403` with “Entrance to this area is not reachable.”; if readable → `302` to `/s/<entrance>`.
 3. If not redirected: require `canRead` on the requested scene; missing → `404`; unreadable → `401`/`403`.
 
 ### Go HTTP flow
