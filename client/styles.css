@@ -162,9 +162,15 @@ button:hover {
 
 .meta,
 .muted,
-.crumb {
+.crumb,
+.byline {
   color: var(--muted);
   font-size: 0.95rem;
+}
+
+.byline {
+  font-style: italic;
+  margin: -0.1rem 0 0.75rem;
 }
 
 .desc p {

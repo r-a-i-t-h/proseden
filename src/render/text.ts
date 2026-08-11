@@ -15,10 +15,12 @@ export function renderSceneText(opts: {
   if (detail) {
     const text = scene.details[detail];
     lines.push(`[Scene ${scene.id}${scene.title ? `: ${scene.title}` : ""} — detail:${detail}]`);
+    if (scene.owner) lines.push(`by ${scene.owner}`);
     lines.push("");
     lines.push(text ?? `(No detail named "${detail}".)`);
   } else {
     lines.push(`[Scene ${scene.id}${scene.title ? `: ${scene.title}` : ""}]`);
+    if (scene.owner) lines.push(`by ${scene.owner}`);
     lines.push(`visibility: ${scene.visibility}`);
     lines.push("");
     lines.push(scene.body);
@@ -79,10 +81,12 @@ export function renderArtefactText(opts: {
     lines.push(
       `[Artefact ${artefact.id}${artefact.title ? `: ${artefact.title}` : ""} — detail:${detail}]`,
     );
+    if (artefact.owner) lines.push(`by ${artefact.owner}`);
     lines.push("");
     lines.push(text ?? `(No detail named "${detail}".)`);
   } else {
     lines.push(`[Artefact ${artefact.id}${artefact.title ? `: ${artefact.title}` : ""}]`);
+    if (artefact.owner) lines.push(`by ${artefact.owner}`);
     lines.push(`home: ${base}/s/${artefact.homeSceneId}`);
     if (artefact.tags.length) lines.push(`tags: ${artefact.tags.join(", ")}`);
     lines.push("");

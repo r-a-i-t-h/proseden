@@ -482,6 +482,7 @@ export function renderSceneBodyHtml(opts: {
     const text = scene.details[detail];
     return `<p class="crumb"><a href="s/${scene.id}">← Scene ${scene.id}</a></p>
       <h1>${escapeHtml(scene.title ?? `Scene ${scene.id}`)} <span class="sub">detail:${escapeHtml(detail)}</span></h1>
+      ${bylineHtml(scene.owner)}
       <div class="desc">${formatProse(text ?? `No detail named “${detail}”.`)}</div>`;
   }
 
@@ -508,6 +509,7 @@ export function renderSceneBodyHtml(opts: {
     .join("");
 
   return `<h1>${escapeHtml(scene.title ?? `Scene ${scene.id}`)} <span class="sub">#${scene.id}</span></h1>
+    ${bylineHtml(scene.owner)}
     <p class="meta">${escapeHtml(scene.visibility)}${scene.isJunction ? " · junction" : ""}${
       scene.groupId ? ` · group ${escapeHtml(scene.groupId)}` : ""
     }</p>
@@ -550,6 +552,7 @@ export function renderArtefactBodyHtml(opts: {
     const text = artefact.details[detail];
     return `<p class="crumb"><a href="a/${artefact.id}">← Artefact ${artefact.id}</a></p>
       <h1>${escapeHtml(artefact.title ?? `Artefact ${artefact.id}`)} <span class="sub">detail:${escapeHtml(detail)}</span></h1>
+      ${bylineHtml(artefact.owner)}
       <div class="desc">${formatProse(text ?? `No detail named “${detail}”.`)}</div>`;
   }
 
@@ -562,6 +565,7 @@ export function renderArtefactBodyHtml(opts: {
     .join("");
 
   return `<h1>${escapeHtml(artefact.title ?? `Artefact ${artefact.id}`)} <span class="sub">#${artefact.id}</span></h1>
+    ${bylineHtml(artefact.owner)}
     <p class="meta">Homed at <a href="s/${artefact.homeSceneId}">scene ${artefact.homeSceneId}</a>${
       artefact.tags.length ? ` · ${escapeHtml(artefact.tags.join(", "))}` : ""
     }</p>
@@ -587,6 +591,10 @@ export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""
 
 export function renderMessageBodyHtml(title: string, message: string): string {
   return `<h1>${escapeHtml(title)}</h1><div class="desc">${formatProse(message)}</div>`;
+}
+
+function bylineHtml(owner: string): string {
+  return owner ? `<p class="byline">by ${escapeHtml(owner)}</p>` : "";
 }
 
 function formatProse(text: string): string {
