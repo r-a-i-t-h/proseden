@@ -1,6 +1,10 @@
 import matter from "gray-matter";
 
-const DETAIL_HEADING = /^##\s+detail:([A-Za-z0-9_-]+)\s*$/;
+/**
+ * Detail slug: any non-empty string (any characters).
+ * Trailing line whitespace is ignored; leading/trailing spaces in the slug are trimmed.
+ */
+const DETAIL_HEADING = /^##\s+detail:(.+?)\s*$/;
 
 export function parseProseDocument<T extends object>(
   raw: string,
@@ -67,8 +71,13 @@ function splitDetails(content: string): { body: string; details: Record<string, 
 
     const match = line.match(DETAIL_HEADING);
     if (match) {
+      const slug = match[1]!.trim();
+      if (!slug) {
+        pushLine(line);
+        continue;
+      }
       flushDetail();
-      currentDetail = match[1]!;
+      currentDetail = slug;
       continue;
     }
     pushLine(line);

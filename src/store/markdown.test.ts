@@ -34,6 +34,30 @@ real
     expect(body).toBe("# subtitle\n## detail:oopsie\nliteral");
     expect(details).toEqual({ card: "real" });
   });
+
+  it("accepts detail slugs with spaces and punctuation", () => {
+    const raw = `---
+title: Spaced
+---
+Body.
+
+## detail:look closer
+First detail.
+
+## detail:foo.bar
+Second detail.
+
+## detail:café-door
+Third detail.
+`;
+    const { body, details } = parseProseDocument(raw);
+    expect(body).toBe("Body.");
+    expect(details).toEqual({
+      "look closer": "First detail.",
+      "foo.bar": "Second detail.",
+      "café-door": "Third detail.",
+    });
+  });
 });
 
 describe("serializeProseDocument", () => {
@@ -60,5 +84,16 @@ describe("serializeProseDocument", () => {
     expect(raw.indexOf("## detail:zebra")).toBeLessThan(raw.indexOf("## detail:apple"));
     const { details } = parseProseDocument(raw);
     expect(Object.keys(details)).toEqual(["zebra", "apple"]);
+  });
+
+  it("round-trips detail keys with spaces", () => {
+    const raw = serializeProseDocument({ title: "T" }, "Scene body.", {
+      "look closer": "First.",
+      card: "Second.",
+    });
+    expect(raw).toContain("## detail:look closer\nFirst.");
+    const { body, details } = parseProseDocument(raw);
+    expect(body).toBe("Scene body.");
+    expect(details).toEqual({ "look closer": "First.", card: "Second." });
   });
 });
