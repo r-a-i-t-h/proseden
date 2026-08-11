@@ -20,7 +20,6 @@ export function serializeProseDocument(
   details: Record<string, string>,
 ): string {
   const detailBlocks = Object.entries(details)
-    .sort(([a], [b]) => a.localeCompare(b))
     .map(([slug, text]) => `## detail:${slug}\n${escapeHashLines(text.trim())}`)
     .join("\n\n");
 

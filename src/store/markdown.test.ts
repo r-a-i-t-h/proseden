@@ -51,4 +51,14 @@ describe("serializeProseDocument", () => {
     expect(body).toBe("Hi\n# subtitle\n## detail:oopsie\nscene #3");
     expect(details).toEqual({ card: "look\n## nested" });
   });
+
+  it("preserves author detail key order (does not alphabetize)", () => {
+    const raw = serializeProseDocument({ title: "T" }, "body", {
+      zebra: "last alphabetically",
+      apple: "first alphabetically",
+    });
+    expect(raw.indexOf("## detail:zebra")).toBeLessThan(raw.indexOf("## detail:apple"));
+    const { details } = parseProseDocument(raw);
+    expect(Object.keys(details)).toEqual(["zebra", "apple"]);
+  });
 });
