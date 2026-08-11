@@ -6,6 +6,8 @@ import {
   canEditGroup,
   canManage,
   canManageGroup,
+  canTransferGroup,
+  canTransferScene,
   canOrganise,
   canRead,
   canReadArtefact,
@@ -303,5 +305,36 @@ describe("junction exit add / remove", () => {
     });
     expect(canRemoveExit(alice, junction, toBob, w)).toBe(true);
     expect(canRemoveExit(alice, junction, toCarol, w)).toBe(true);
+  });
+});
+
+describe("ownership transfer rights", () => {
+  it("allows the owner and staff manager, not a manage grantee", () => {
+    const s = scene(1, "alice", {
+      grants: [{ who: "bob", rights: ["manage"] }],
+    });
+    const w = world({
+      users: [alice, bob, carol],
+      roles: { carol: ["manager"] },
+    });
+    expect(canTransferScene(alice, s, w)).toBe(true);
+    expect(canTransferScene(bob, s, w)).toBe(false);
+    expect(canManage(bob, s, w)).toBe(true);
+    expect(canTransferScene(carol, s, w)).toBe(true);
+    expect(canTransferScene(undefined, s, w)).toBe(false);
+  });
+
+  it("allows the group owner and staff manager, not a manage grantee", () => {
+    const g = group("1", "alice", {
+      grants: [{ who: "bob", rights: ["manage"] }],
+    });
+    const w = world({
+      users: [alice, bob, carol],
+      roles: { carol: ["manager"] },
+    });
+    expect(canTransferGroup(alice, g, w)).toBe(true);
+    expect(canTransferGroup(bob, g, w)).toBe(false);
+    expect(canManageGroup(bob, g, w)).toBe(true);
+    expect(canTransferGroup(carol, g, w)).toBe(true);
   });
 });

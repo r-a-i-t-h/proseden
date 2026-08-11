@@ -7,6 +7,8 @@ import {
   canAddExit,
   canManage,
   canManageGroup,
+  canTransferGroup,
+  canTransferScene,
   canOrganise,
   canRead,
   canReadArtefact,
@@ -139,9 +141,11 @@ worldRoutes.get("/s/:id", (c) => {
       canAddExit: canAddExit(user, scene, world),
       canOrganise: canOrganise(user, world),
       canDelete: manage || isModerator(user, world),
+      canTransfer: canTransferScene(user, scene, world),
       isManager: isManager(user, world),
       groups,
       entranceGroups,
+      sceneGroup: sceneGroupSummary(world, scene.groupId),
     },
   );
 });
@@ -430,6 +434,31 @@ async function updateSceneAccess(c: Context) {
   }
 }
 
+worldRoutes.post("/s/:id/transfer", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = Number(c.req.param("id"));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canTransferScene(user, scene, world)) {
+    return apiError(c, 403, "Only the owner or a manager can transfer this scene");
+  }
+  const body = await readBody(c);
+  const to = String(body.to ?? "").trim();
+  if (!to) return apiError(c, 400, "Recipient username is required");
+  try {
+    const result = await world.transferSceneOwner(id, to, {
+      keepAccess: parseKeepAccess(body),
+      by: user.username,
+    });
+    if (wantsJson(c)) return c.json(result);
+    return c.redirect(`${c.get("assetBase")}/s/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not transfer scene");
+  }
+});
+
 worldRoutes.get("/u/:username/access", (c) => {
   const world = c.get("world");
   const user = c.get("user");
@@ -582,7 +611,11 @@ worldRoutes.get("/g/:id", (c) => {
     .map((sceneId) => world.getScene(sceneId))
     .filter((scene): scene is NonNullable<typeof scene> => !!scene)
     .map((scene) => ({ id: scene.id, title: scene.title }));
-  const message = c.req.query("updated") ? "Group access saved." : undefined;
+  const message = c.req.query("updated")
+    ? "Group access saved."
+    : c.req.query("transferred")
+      ? "Group transferred."
+      : undefined;
   return page(
     c,
     200,
@@ -595,6 +628,7 @@ worldRoutes.get("/g/:id", (c) => {
       grants: group.grants,
       denies: group.denies,
       canManage: manage,
+      canTransfer: canTransferGroup(user, group, world),
       accessSummary: formatAccessSummary(group.grants, group.denies),
       message,
     }),
@@ -665,6 +699,31 @@ async function updateGroupAccess(c: Context) {
     return apiError(c, 400, err instanceof Error ? err.message : "Invalid access payload");
   }
 }
+
+worldRoutes.post("/g/:id/transfer", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = String(c.req.param("id") ?? "");
+  const group = world.getGroup(id);
+  if (!group) return apiError(c, 404, "Group not found");
+  if (!canTransferGroup(user, group, world)) {
+    return apiError(c, 403, "Only the owner or a manager can transfer this group");
+  }
+  const body = await readBody(c);
+  const to = String(body.to ?? "").trim();
+  if (!to) return apiError(c, 400, "Recipient username is required");
+  try {
+    const result = await world.transferGroupOwner(id, to, {
+      keepAccess: parseKeepAccess(body),
+      by: user.username,
+    });
+    if (wantsJson(c)) return c.json(result);
+    return c.redirect(`${c.get("assetBase")}/g/${id}?transferred=1`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not transfer group");
+  }
+});
 
 worldRoutes.post("/g/:id/scenes", async (c) => {
   const world = c.get("world");
@@ -1373,6 +1432,25 @@ async function readBody(c: Context): Promise<Record<string, unknown>> {
     }
   }
   return out;
+}
+
+function sceneGroupSummary(
+  world: { getGroup(id: string): { id: string; title: string } | undefined },
+  groupId: string | null | undefined,
+): { id: string; title: string } | undefined {
+  if (!groupId) return undefined;
+  const group = world.getGroup(groupId);
+  return group ? { id: group.id, title: group.title } : { id: groupId, title: `Group ${groupId}` };
+}
+
+/** Omitted keepAccess defaults on; form uses hidden 0 + checkbox 1. */
+function parseKeepAccess(body: Record<string, unknown>): boolean {
+  if (body.keepAccess === undefined || body.keepAccess === null || body.keepAccess === "") {
+    return true;
+  }
+  if (body.keepAccess === false || body.keepAccess === 0) return false;
+  const s = String(body.keepAccess).toLowerCase();
+  return s !== "0" && s !== "false" && s !== "off" && s !== "no";
 }
 
 function optionalString(value: unknown): string | undefined {

@@ -98,6 +98,12 @@ date.
 
 A scene has a single owner but others/all can be invited to read/edit/manage.
 
+The owner (or a staff manager) may transfer an ungrouped scene to another
+registered user. Artefacts they own that are homed in that scene move with it.
+A scene in a group cannot be transferred on its own: every member scene's owner
+must match the group owner, and transferring the group cascades to those scenes
+and matching artefacts.
+
 A scene may appear in a single group to which those rights are assigned.
 
 The same access rights can be assigned to a "user" level, which bestows the

@@ -121,6 +121,26 @@ export function canEditArtefact(
   return canEdit(user, home, world);
 }
 
+/** Owner or staff manager — a manage grant is not enough. */
+export function canTransferScene(
+  user: UserRecord | undefined,
+  scene: SceneRecord,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  return user.username === scene.owner || isManager(user, world);
+}
+
+/** Owner or staff manager — a manage grant is not enough. */
+export function canTransferGroup(
+  user: UserRecord | undefined,
+  group: GroupRecord,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  return user.username === group.owner || isManager(user, world);
+}
+
 /** Manage rights on a group (owner or grant). */
 export function canManageGroup(
   user: UserRecord | undefined,

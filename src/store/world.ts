@@ -301,6 +301,14 @@ export class WorldStore implements AccessWorld {
     const previousId = scene.groupId ?? null;
     if (previousId === groupId) return scene;
 
+    if (groupId) {
+      const dest = this.groups.get(groupId);
+      if (!dest) throw new Error("Group not found");
+      if (scene.owner !== dest.owner) {
+        throw new Error("Scene owner must match group owner");
+      }
+    }
+
     if (previousId) {
       const prev = this.groups.get(previousId);
       if (prev) {
@@ -328,6 +336,111 @@ export class WorldStore implements AccessWorld {
     };
     await this.saveScene(updated);
     return updated;
+  }
+
+  /**
+   * Reassign an ungrouped scene (and artefacts the current owner has homed there).
+   * Grouped scenes must be transferred via {@link transferGroupOwner}.
+   */
+  async transferSceneOwner(
+    sceneId: number,
+    toUsername: string,
+    opts?: { keepAccess?: boolean; by?: string },
+  ): Promise<{ scene: SceneRecord; artefacts: ArtefactRecord[] }> {
+    const scene = this.scenes.get(sceneId);
+    if (!scene) throw new Error("Scene not found");
+    if (scene.groupId) {
+      throw new Error("Scene is in a group; transfer the group instead");
+    }
+    this.assertTransferRecipient(toUsername, scene.owner);
+    return this.reassignSceneOwner(sceneId, toUsername, {
+      keepAccess: opts?.keepAccess !== false,
+      by: opts?.by,
+    });
+  }
+
+  /**
+   * Reassign a group, every member scene, and artefacts each scene owner has homed there.
+   */
+  async transferGroupOwner(
+    groupId: string,
+    toUsername: string,
+    opts?: { keepAccess?: boolean; by?: string },
+  ): Promise<{ group: GroupRecord; scenes: SceneRecord[]; artefacts: ArtefactRecord[] }> {
+    const group = this.groups.get(groupId);
+    if (!group) throw new Error("Group not found");
+    this.assertTransferRecipient(toUsername, group.owner);
+
+    const from = group.owner;
+    const keepAccess = opts?.keepAccess !== false;
+    const grants = keepAccess ? withManageGrant(group.grants, from) : group.grants;
+    const updatedGroup: GroupRecord = {
+      ...group,
+      owner: toUsername,
+      grants,
+    };
+    await this.saveGroup(updatedGroup);
+
+    const scenes: SceneRecord[] = [];
+    const artefacts: ArtefactRecord[] = [];
+    for (const sceneId of group.sceneIds) {
+      if (!this.scenes.has(sceneId)) continue;
+      const moved = await this.reassignSceneOwner(sceneId, toUsername, {
+        keepAccess: false,
+        by: opts?.by,
+      });
+      scenes.push(moved.scene);
+      artefacts.push(...moved.artefacts);
+    }
+    return { group: updatedGroup, scenes, artefacts };
+  }
+
+  private assertTransferRecipient(toUsername: string, currentOwner: string): void {
+    const to = toUsername.trim();
+    if (!to || !this.users.has(to)) throw new Error("User not found");
+    if (to === currentOwner) throw new Error("Already owned by that user");
+  }
+
+  private async reassignSceneOwner(
+    sceneId: number,
+    toUsername: string,
+    opts?: { keepAccess?: boolean; by?: string },
+  ): Promise<{ scene: SceneRecord; artefacts: ArtefactRecord[] }> {
+    const scene = this.scenes.get(sceneId);
+    if (!scene) throw new Error("Scene not found");
+    if (scene.owner === toUsername) return { scene, artefacts: [] };
+    if (!this.users.has(toUsername)) throw new Error("User not found");
+
+    const from = scene.owner;
+    const keepAccess = opts?.keepAccess === true;
+    const at = nowIso();
+    const by = opts?.by ?? "unknown";
+    const grants = keepAccess ? withManageGrant(scene.grants, from) : scene.grants;
+    const sceneFields = ["owner"];
+    if (keepAccess && grants !== scene.grants) sceneFields.push("grants");
+
+    const updatedScene: SceneRecord = {
+      ...scene,
+      owner: toUsername,
+      grants,
+      modifiedAt: [...scene.modifiedAt, at],
+    };
+    await this.saveScene(updatedScene);
+    await this.appendEditLog("scenes", sceneId, { at, by, fields: sceneFields });
+
+    const artefacts: ArtefactRecord[] = [];
+    for (const artefact of this.artefactsAt(sceneId)) {
+      if (artefact.owner !== from) continue;
+      const updatedArtefact: ArtefactRecord = {
+        ...artefact,
+        owner: toUsername,
+        modifiedAt: [...artefact.modifiedAt, at],
+      };
+      await this.saveArtefact(updatedArtefact);
+      await this.appendEditLog("artefacts", artefact.id, { at, by, fields: ["owner"] });
+      artefacts.push(updatedArtefact);
+    }
+    return { scene: updatedScene, artefacts };
   }
 
   listGroups(): GroupRecord[] {
@@ -999,6 +1112,18 @@ function normalizeArtefactMeta(raw: Record<string, unknown>): ArtefactMeta {
     createdAt: String(raw.createdAt ?? nowIso()),
     modifiedAt: Array.isArray(raw.modifiedAt) ? raw.modifiedAt.map(String) : [],
   };
+}
+
+function withManageGrant(grants: Grant[] | undefined, who: string): Grant[] {
+  const list = grants ?? [];
+  const existing = list.find((g) => g.who === who);
+  if (existing?.rights.includes("manage")) return list;
+  if (existing) {
+    return list.map((g) =>
+      g.who === who ? { ...g, rights: [...new Set([...g.rights, "manage" as const])] } : g,
+    );
+  }
+  return [...list, { who, rights: ["manage"] }];
 }
 
 function nowIso(): string {

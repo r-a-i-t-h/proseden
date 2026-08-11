@@ -106,11 +106,13 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `DELETE`/`POST` | `/s/:id/exits/:exit/delete` | Remove one exit (manage/organise any; on a public junction, also exits to scenes you own) |
 | `POST` | `/s/:id/exits/delete` | Remove one or more exits (`exitId` / `exitIds`) |
 | `GET`/`PUT`/`POST` | `/s/:id/access` | Scene grants/denies (manage) |
+| `POST` | `/s/:id/transfer` | Transfer ungrouped scene (+ owner's homed artefacts); owner or staff manager |
 | `GET`/`PUT`/`POST` | `/u/:username/access` | User-level share-all (self or manager) |
 | `GET` | `/g` | Groups you can manage or see (auth) |
 | `POST` | `/g` | Create group (auth) |
 | `GET`/`PUT`/`POST` | `/g/:id` | Group page; manage ACL if you have manage |
 | `GET`/`PUT`/`POST` | `/g/:id/access` | Group grants/denies |
+| `POST` | `/g/:id/transfer` | Transfer group (+ member scenes and matching artefacts); owner or staff manager |
 | `POST` | `/g/:id/scenes` | Add scene to group |
 | `POST` | `/s/:id/group` | Assign/clear scene group |
 | `POST` | `/eg` | Create entrance group (entrance = scene id) |

@@ -35,10 +35,12 @@ export interface ManageContext {
   canAddExit?: boolean;
   canOrganise?: boolean;
   canDelete?: boolean;
+  canTransfer?: boolean;
   isManager?: boolean;
   collected?: boolean;
   groups?: Array<{ id: string; title: string }>;
   entranceGroups?: Array<{ id: string; title: string; entranceSceneId: number }>;
+  sceneGroup?: { id: string; title: string };
 }
 
 export interface EditBootstrap {
@@ -348,6 +350,7 @@ export function renderGroupBodyHtml(opts: {
   grants?: Grant[];
   denies?: Deny[];
   canManage: boolean;
+  canTransfer?: boolean;
   accessSummary: string;
   message?: string;
 }): string {
@@ -367,13 +370,17 @@ export function renderGroupBodyHtml(opts: {
     <p class="muted">Anyone granted rights here can use them on every scene in this group.</p>
     ${renderAccessFormHtml(`g/${encodeURIComponent(opts.id)}/access`, opts.grants, opts.denies, "Save group access")}`
     : `<h2>Access</h2><pre class="desc">${escapeHtml(opts.accessSummary)}</pre>`;
+  const transfer = opts.canTransfer
+    ? renderTransferFormHtml(`g/${encodeURIComponent(opts.id)}/transfer`, opts.owner, "group")
+    : "";
   return `<p class="crumb"><a href="g">← Groups</a></p>
     <h1>${escapeHtml(opts.title)} <span class="sub">#${escapeHtml(opts.id)}</span></h1>
     ${bylineHtml(opts.owner)}
     ${notice}
     <h2>Scenes</h2>
     ${scenes}
-    ${access}`;
+    ${access}
+    ${transfer}`;
 }
 
 export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""): string {
@@ -394,6 +401,25 @@ export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""
 
 export function renderMessageBodyHtml(title: string, message: string): string {
   return `<h1>${escapeHtml(title)}</h1><div class="desc">${formatProse(message)}</div>`;
+}
+
+function renderTransferFormHtml(
+  action: string,
+  owner: string,
+  kind: "scene" | "group",
+): string {
+  const what =
+    kind === "group"
+      ? "this group, its scenes, and artefacts you own that are homed in those scenes"
+      : "this scene and artefacts you own that are homed here";
+  return `<h2>Transfer ownership</h2>
+    <p class="muted">Owner is ${escapeHtml(owner)}. Transfer ${what} to another registered user.</p>
+    <form method="post" action="${escapeAttr(action)}" class="profile-form">
+      <label>New owner <input name="to" required autocomplete="username" /></label>
+      <input type="hidden" name="keepAccess" value="0" />
+      <label class="edit-check"><input type="checkbox" name="keepAccess" value="1" checked /> Keep my access</label>
+      <button type="submit">Transfer</button>
+    </form>`;
 }
 
 function renderAccessFormHtml(

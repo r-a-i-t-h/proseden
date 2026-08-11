@@ -12,6 +12,7 @@ interface ManageContext {
     details: Record<string, string>;
     visibility: string;
     isJunction?: boolean;
+    owner?: string;
     groupId?: string | null;
     entranceGroupId?: string | null;
     grants?: unknown;
@@ -31,8 +32,10 @@ interface ManageContext {
   canAddExit?: boolean;
   canOrganise?: boolean;
   canDelete?: boolean;
+  canTransfer?: boolean;
   groups?: Array<{ id: string; title: string }>;
   entranceGroups?: Array<{ id: string; title: string; entranceSceneId: number }>;
+  sceneGroup?: { id: string; title: string };
 }
 
 interface EditBootstrap {
@@ -623,7 +626,62 @@ function accessTool(manage: ManageContext | undefined, inspector: HTMLElement): 
       setStatus(inspector, err instanceof Error ? err.message : "Save failed");
     }
   });
-  return el("div", { class: "stack" }, el("p", { class: "edit-kicker" }, `Access for scene ${scene.id}`), form, save);
+  const wrap = el(
+    "div",
+    { class: "stack" },
+    el("p", { class: "edit-kicker" }, `Access for scene ${scene.id}`),
+    el("p", { class: "muted" }, `Owner: ${scene.owner ?? "unknown"}`),
+    form,
+    save,
+  );
+  const grouped = manage.sceneGroup ?? (scene.groupId ? { id: scene.groupId, title: `Group ${scene.groupId}` } : undefined);
+  if (grouped) {
+    wrap.append(
+      el("p", { class: "edit-kicker" }, "Transfer ownership"),
+      el(
+        "p",
+        { class: "muted" },
+        "This scene is in ",
+        el("a", { href: `g/${grouped.id}` }, grouped.title),
+        ". Transfer the group.",
+      ),
+    );
+  } else if (manage.canTransfer) {
+    const xfer = el("div", { class: "edit-fields" });
+    xfer.append(
+      field("New owner", el("input", { name: "to", autocomplete: "username" })),
+      el(
+        "label",
+        { class: "edit-check" },
+        el("input", { type: "checkbox", name: "keepAccess", checked: true }),
+        " Keep my access",
+      ),
+    );
+    const transfer = el("button", { type: "button" }, "Transfer");
+    transfer.addEventListener("click", async () => {
+      const to = inputValue(xfer, "to").trim();
+      if (!to) {
+        setStatus(inspector, "Recipient username is required");
+        return;
+      }
+      try {
+        await apiJson("POST", `s/${scene.id}/transfer`, {
+          to,
+          keepAccess: checked(xfer, "keepAccess"),
+        });
+        window.location.reload();
+      } catch (err) {
+        setStatus(inspector, err instanceof Error ? err.message : "Transfer failed");
+      }
+    });
+    wrap.append(el("p", { class: "edit-kicker" }, "Transfer ownership"), xfer, transfer);
+  } else {
+    wrap.append(
+      el("p", { class: "edit-kicker" }, "Transfer ownership"),
+      el("p", { class: "muted" }, "Only the owner or a manager can transfer this scene."),
+    );
+  }
+  return wrap;
 }
 
 function organiseTool(manage: ManageContext | undefined, inspector: HTMLElement): HTMLElement {

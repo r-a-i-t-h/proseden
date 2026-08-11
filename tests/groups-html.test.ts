@@ -69,6 +69,8 @@ describe("group ACL pages", () => {
     const html = await res.text();
     expect(html).toContain("Save group access");
     expect(html).toContain(`action="g/${groupId}/access"`);
+    expect(html).toContain("Transfer ownership");
+    expect(html).toContain(`action="g/${groupId}/transfer"`);
     expect(html).toContain("Study");
     expect(html).not.toContain("passwordHash");
   });
@@ -83,6 +85,7 @@ describe("group ACL pages", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).not.toContain("Save group access");
+    expect(html).not.toContain("Transfer ownership");
     expect(html).toContain("bob [read]");
   });
 
