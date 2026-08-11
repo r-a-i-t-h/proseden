@@ -10,6 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "allowJs": true,
     "noEmit": true,
     "rootDir": ".",
     "types": ["node"]
@@ -20,6 +21,7 @@
     "tests/**/*.ts",
     "client/**/*.ts",
     "vite.config.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "deploy/migrations/**/*.mjs"
   ]
 }

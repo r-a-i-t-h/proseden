@@ -184,12 +184,18 @@ The updater:
 - **First** archives this instance’s `data/` to `backup/YYYY-MM-DDTHHMMSSZ.tar.gz` (aborts if that fails)
 - Downloads that release into `releases/<tag>/` for **that instance only**
 - Flips `current`
-- Runs `deploy/post-update.sh`, which applies `deploy/migrations/NNN-*.sh` where `NNN` is greater than `schemaVersion` in `data/meta.json` (missing or non-numeric = **0**). The first script stamps `schemaVersion: 1`. A failed hook aborts before restart.
+- Runs `deploy/post-update.sh`, which applies `deploy/migrations/NNN-*.sh` where `NNN` is greater than `schemaVersion` in `data/meta.json` (missing or non-numeric = **0**). `001` stamps `schemaVersion: 1`. `002` rewrites `pedia:`/`srch:`/`media:` link prefixes in scene and artefact prose (including history snapshots) and stamps `2`. A failed hook aborts before restart.
 - Restarts `proseden-<name>`
 - Does **not** delete or re-seed `data/`, and does **not** rewrite `env`
 - Keeps one previous release folder so you can roll back by pointing `current` back and restarting
 
 Migrations are forward-only. Absence of `schemaVersion` in `meta.json` is treated as schema **0**. The app never writes that field; it only preserves it when saving `meta.json`. Rolling `current` back does not undo a data migration.
+
+To apply pending migrations against a local `data/` tree without a full update:
+
+```bash
+PROSEDEN_DATA=./data sh deploy/migrate.sh
+```
 
 ### Data backups
 

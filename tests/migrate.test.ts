@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { parseProseDocument } from "../src/store/markdown.js";
 import { WorldStore } from "../src/store/world.js";
+import { rewriteLegacyLinkSchemes } from "../deploy/migrations/002-rewrite-link-schemes.mjs";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -49,6 +51,27 @@ async function runMigrate(
   }
 }
 
+describe("rewriteLegacyLinkSchemes", () => {
+  it("maps pedia, srch, and media destinations", () => {
+    expect(rewriteLegacyLinkSchemes("[Moss](pedia:Moss)")).toBe("[Moss](wikipedia:Moss)");
+    expect(rewriteLegacyLinkSchemes("[find](srch:proseden)")).toBe("[find](search:proseden)");
+    expect(rewriteLegacyLinkSchemes("[look](media:stone lintel)")).toBe(
+      "[look](search:stone lintel)",
+    );
+  });
+
+  it("is case-insensitive and keeps dest whitespace", () => {
+    expect(rewriteLegacyLinkSchemes("[n](PEDIA:Lintel)")).toBe("[n](wikipedia:Lintel)");
+    expect(rewriteLegacyLinkSchemes("[n]( srch:x )")).toBe("[n]( search:x )");
+  });
+
+  it("leaves http(s), new prefixes, and code spans alone", () => {
+    expect(rewriteLegacyLinkSchemes("[a](https://example.com)")).toBe("[a](https://example.com)");
+    expect(rewriteLegacyLinkSchemes("[a](wikipedia:Moss)")).toBe("[a](wikipedia:Moss)");
+    expect(rewriteLegacyLinkSchemes("`[x](pedia:y)`")).toBe("`[x](pedia:y)`");
+  });
+});
+
 describe("schema migrate runner", () => {
   let dataDir: string;
 
@@ -60,7 +83,7 @@ describe("schema migrate runner", () => {
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  it("001 stamps schemaVersion 1 and keeps other meta keys", async () => {
+  it("001 then 002 stamp schemaVersion 2 and keep other meta keys", async () => {
     await writeMeta(dataDir, {
       nextSceneId: 4,
       nextArtefactId: 2,
@@ -73,9 +96,10 @@ describe("schema migrate runner", () => {
     const first = await runMigrate(dataDir);
     expect(first.code).toBe(0);
     expect(first.stdout).toMatch(/applying 001-schema-version\.sh/);
+    expect(first.stdout).toMatch(/applying 002-rewrite-link-schemes\.sh/);
 
     const meta = await readMeta(dataDir);
-    expect(meta.schemaVersion).toBe(1);
+    expect(meta.schemaVersion).toBe(2);
     expect(meta.nextSceneId).toBe(4);
     expect(meta.nextArtefactId).toBe(2);
     expect(meta.nextGroupId).toBe(2);
@@ -97,7 +121,7 @@ describe("schema migrate runner", () => {
 
     const second = await runMigrate(dataDir);
     expect(second.code).toBe(0);
-    expect(second.stdout).toMatch(/already at schema 1/);
+    expect(second.stdout).toMatch(/already at schema 2/);
     expect(second.stdout).not.toMatch(/applying/);
     expect(await readFile(join(dataDir, "meta.json"), "utf8")).toBe(afterFirst);
   });
@@ -149,6 +173,96 @@ fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + "\\n");
     } finally {
       await rm(harness, { recursive: true, force: true });
     }
+  });
+
+  it("rewrites legacy link prefixes in current prose and snapshots", async () => {
+    await writeMeta(dataDir, {
+      nextSceneId: 3,
+      nextArtefactId: 2,
+      nextGroupId: 1,
+      nextEntranceGroupId: 1,
+      entranceSceneId: 1,
+      schemaVersion: 1,
+    });
+
+    await mkdir(join(dataDir, "scenes", "1.versions"), { recursive: true });
+    await mkdir(join(dataDir, "artefacts"), { recursive: true });
+    await writeFile(
+      join(dataDir, "scenes", "1.md"),
+      `---
+id: 1
+---
+See [Moss](pedia:Moss) and [find](srch:proseden).
+Also [look](media:stone lintel) and [keep](https://example.com/a).
+Inline code \`[x](pedia:y)\` stays put.
+`,
+    );
+    await writeFile(
+      join(dataDir, "scenes", "1.versions", "2026-08-10T200000Z.md"),
+      "Older [note](PEDIA:Lintel).\n",
+    );
+    await writeFile(
+      join(dataDir, "artefacts", "1.md"),
+      "A [clipping](srch:deckle edge).\n",
+    );
+    await writeFile(join(dataDir, "scenes", "1.exits.json"), "[]\n");
+
+    const result = await runMigrate(dataDir);
+    expect(result.code).toBe(0);
+    expect(result.stdout).not.toMatch(/001-schema-version/);
+    expect(result.stdout).toMatch(/applying 002-rewrite-link-schemes\.sh/);
+    expect(result.stdout).toMatch(/rewrote 3 file\(s\)/);
+
+    expect(await readFile(join(dataDir, "scenes", "1.md"), "utf8")).toBe(`---
+id: 1
+---
+See [Moss](wikipedia:Moss) and [find](search:proseden).
+Also [look](search:stone lintel) and [keep](https://example.com/a).
+Inline code \`[x](pedia:y)\` stays put.
+`);
+    expect(await readFile(join(dataDir, "scenes", "1.versions", "2026-08-10T200000Z.md"), "utf8")).toBe(
+      "Older [note](wikipedia:Lintel).\n",
+    );
+    expect(await readFile(join(dataDir, "artefacts", "1.md"), "utf8")).toBe(
+      "A [clipping](search:deckle edge).\n",
+    );
+    expect(await readFile(join(dataDir, "scenes", "1.exits.json"), "utf8")).toBe("[]\n");
+    expect((await readMeta(dataDir)).schemaVersion).toBe(2);
+  });
+
+  it("upgrades a sample scene file without mangling the rest", async () => {
+    const fixtureDir = join(repoRoot, "tests/fixtures/link-scheme-upgrade");
+    const before = await readFile(join(fixtureDir, "scene.md"), "utf8");
+    const expected = await readFile(join(fixtureDir, "scene.expected.md"), "utf8");
+
+    await writeMeta(dataDir, {
+      nextSceneId: 8,
+      nextArtefactId: 1,
+      nextGroupId: 2,
+      nextEntranceGroupId: 1,
+      entranceSceneId: 1,
+      schemaVersion: 1,
+    });
+    await mkdir(join(dataDir, "scenes"), { recursive: true });
+    const scenePath = join(dataDir, "scenes", "7.md");
+    await writeFile(scenePath, before);
+
+    const script = join(deployDir, "migrations", "002-rewrite-link-schemes.sh");
+    const { stdout, stderr } = await execFileAsync("sh", [script], {
+      env: { ...process.env, PROSEDEN_DATA: dataDir },
+    });
+    expect(stderr).toBe("");
+    expect(stdout).toMatch(/rewrote 1 file\(s\)/);
+
+    const after = await readFile(scenePath, "utf8");
+    expect(after).toBe(expected);
+
+    const parsedBefore = parseProseDocument(before);
+    const parsedAfter = parseProseDocument(after);
+    expect(parsedAfter.meta).toEqual(parsedBefore.meta);
+    expect(Object.keys(parsedAfter.details)).toEqual(["card", "lintel"]);
+    expect(Object.keys(parsedAfter.details)).toEqual(Object.keys(parsedBefore.details));
+    expect(after.split("\n")).toHaveLength(before.split("\n").length);
   });
 
   it("fails when meta.json is missing and does not re-seed", async () => {

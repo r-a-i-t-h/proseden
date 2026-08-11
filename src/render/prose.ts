@@ -2,7 +2,7 @@
  * Lightweight prose adornments for scene/artefact bodies (Markdown-adjacent, not full MD).
  *
  * Inline: `_em_`, `*strong*`, `~strike~`, `` `code` ``,
- *         `[label](pedia:…)`, `[label](media:…)`, `[label](srch:…)`
+ *         `[label](https://…)`, `[label](wikipedia:…)`, `[label](search:…)`
  * Block:  `# subtitle` → h3, `## minor` → h4, `---` → hr, `>` → blockquote
  *
  * Applied only when rendering HTML — raw seed/data files are unchanged.
@@ -85,9 +85,7 @@ export function formatInline(escaped: string): string {
   let s = escaped.replace(/`([^`\n]+)`/g, (_m, code: string) => park(`<code>${code}</code>`));
 
   s = rewriteLinks(s, (label, dest) => {
-    const scheme = dest.match(/^(pedia|media|srch):([\s\S]*)$/i);
-    if (!scheme) return label;
-    const href = expandCuratedLink(scheme[1]!.toLowerCase(), scheme[2]!.trim());
+    const href = resolveLinkHref(unescapeHtml(dest));
     if (!href) return label;
     return park(
       `<a href="${escapeAttr(href)}" rel="noopener noreferrer" target="_blank">${formatMarkers(label)}</a>`,
@@ -149,17 +147,35 @@ function formatMarkers(text: string): string {
   return s;
 }
 
+/**
+ * Resolve a Markdown link destination to an href.
+ * Allows http(s) URLs and the wikipedia/search shortcuts; rejects other schemes.
+ */
+export function resolveLinkHref(dest: string): string | null {
+  const target = dest.trim();
+  if (!target) return null;
+
+  const curated = target.match(/^(wikipedia|search):([\s\S]*)$/i);
+  if (curated) return expandCuratedLink(curated[1]!.toLowerCase(), curated[2]!.trim());
+
+  if (!/^https?:\/\//i.test(target)) return null;
+  try {
+    const url = new URL(target);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
 /** Expand curated link schemes; returns null for unknown/empty targets. */
 export function expandCuratedLink(kind: string, target: string): string | null {
   if (!target) return null;
   switch (kind) {
-    case "pedia":
+    case "wikipedia":
       // Wikipedia article title: spaces → underscores (MediaWiki convention).
       return `https://en.wikipedia.org/wiki/${wikiTitlePath(target)}`;
-    case "media":
-      // Wikimedia Commons MediaSearch — forgiving for free-form phrases.
-      return `https://commons.wikimedia.org/wiki/Special:MediaSearch?search=${encodeURIComponent(target)}`;
-    case "srch":
+    case "search":
       return `https://www.ecosia.org/search?q=${encodeURIComponent(target)}`;
     default:
       return null;
@@ -181,4 +197,14 @@ export function escapeHtml(value: string): string {
 
 function escapeAttr(value: string): string {
   return escapeHtml(value).replace(/'/g, "&#39;");
+}
+
+/** Undo escapeHtml so URL query strings keep raw `&` before parsing. */
+function unescapeHtml(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
 }
