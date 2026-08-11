@@ -9,7 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
 const dataDir = process.env.PROSEDEN_DATA ?? join(root, "data");
 const seedDir = process.env.PROSEDEN_SEED ?? join(root, "seed");
-const port = Number(process.env.PORT ?? 8787);
+const port = Number(process.env.PORT ?? 3336);
 const assetBase = process.env.PROSEDEN_BASE_PATH ?? "";
 
 const world = new WorldStore(dataDir);

@@ -9,7 +9,7 @@ DEFAULT_USER="proseden"
 
 PREFIX=$DEFAULT_PREFIX
 NAME=
-PORT=
+PORT=3336
 BASE_PATH=
 SERVER_NAME=
 NGINX_SITE=
@@ -24,12 +24,11 @@ usage() {
 Install a Proseden instance (downloads a GitHub Release, systemd, nginx).
 
 Usage:
-  install.sh --name NAME --port PORT (--server-name HOST | --nginx-site FILE --base-path PATH)
+  install.sh --name NAME (--server-name HOST | --nginx-site FILE --base-path PATH)
              [options]
 
 Required:
   --name NAME           Instance id (directory + service name), e.g. www, test, raith
-  --port PORT           Local port the Node process listens on (unique per instance)
 
 One of:
   --server-name HOST    New nginx site for this hostname (app at /)
@@ -37,6 +36,7 @@ One of:
   --base-path PATH      URL prefix for --nginx-site (e.g. raith → /raith/)
 
 Optional:
+  --port PORT           Loopback port (default: 3336; unique per instance)
   --prefix DIR          Parent directory (default: /opt/proseden)
   --repo OWNER/REPO     GitHub repo (default: r-a-i-t-h/proseden)
   --version TAG         Release tag or "latest" (default: latest)
@@ -46,9 +46,9 @@ Optional:
   -h, --help            Show this help
 
 Examples:
-  install.sh --name www  --server-name www.proseden.co.uk  --port 8787
-  install.sh --name test --server-name test.proseden.co.uk --port 8788
-  install.sh --name raith --base-path raith --port 8789 \
+  install.sh --name www  --server-name www.proseden.co.uk  --port 3336
+  install.sh --name test --server-name test.proseden.co.uk --port 3337
+  install.sh --name raith --base-path raith --port 3338 \
     --nginx-site /etc/nginx/sites-enabled/proseden.co.uk
 EOF
 }
@@ -75,7 +75,6 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$NAME" ] || { usage >&2; err "--name is required"; }
-[ -n "$PORT" ] || { usage >&2; err "--port is required"; }
 
 case "$NAME" in
   *[!a-zA-Z0-9_-]* | '' | -* | *_ ) err "--name must be letters, digits, hyphen, or underscore" ;;

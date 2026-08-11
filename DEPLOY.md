@@ -10,16 +10,16 @@ Example: two worlds on two hostnames.
 
 | Public URL | Local process | Files on disk |
 |---|---|---|
-| `http://www.proseden.co.uk/` | Node on port 8787 | `/opt/proseden/www/` |
-| `http://test.proseden.co.uk/` | Node on port 8788 | `/opt/proseden/test/` |
+| `http://www.proseden.co.uk/` | Node on port 3336 | `/opt/proseden/www/` |
+| `http://test.proseden.co.uk/` | Node on port 3337 | `/opt/proseden/test/` |
 
 Each instance has **its own copy of the app** and **its own world data**. Updating `test` does not change `www`. That is deliberate: try a new version on `test`, then promote `www` when you are happy.
 
-nginx sits on ports 80/443 and forwards each hostname to the matching Node process. Browsers never talk to port 8787 directly.
+nginx sits on ports 80/443 and forwards each hostname to the matching Node process. Browsers never talk to port 3336 directly.
 
 ```
-Internet → nginx :80/:443 → 127.0.0.1:8787  (www)
-                         → 127.0.0.1:8788  (test)
+Internet → nginx :80/:443 → 127.0.0.1:3336  (www)
+                         → 127.0.0.1:3337  (test)
 ```
 
 ## What you need
@@ -77,7 +77,7 @@ sudo ufw allow 443/tcp
 sudo ufw status
 ```
 
-Do **not** expose 8787/8788 to the internet; only nginx should reach them.
+Do **not** expose 3336/3337 to the internet; only nginx should reach them.
 
 ## 4. Run the installer (first instance)
 
@@ -88,7 +88,7 @@ curl -fsSL https://raw.githubusercontent.com/r-a-i-t-h/proseden/main/deploy/inst
   | sudo bash -s -- \
       --name www \
       --server-name www.proseden.co.uk \
-      --port 8787
+      --port 3336
 ```
 
 That single command:
@@ -117,7 +117,7 @@ Same VPS, different hostname, **different port**, **different `--name`**:
 sudo /usr/local/sbin/proseden-install \
   --name test \
   --server-name test.proseden.co.uk \
-  --port 8788
+  --port 3337
 ```
 
 You now have two independent worlds:
@@ -195,7 +195,7 @@ Subdomains use a full nginx `server { }` (what `--server-name` installs). Person
 sudo proseden-install \
   --name raith \
   --base-path raith \
-  --port 8789 \
+  --port 3338 \
   --nginx-site /etc/nginx/sites-enabled/your-apex-site
 ```
 
@@ -261,7 +261,7 @@ No Release exists yet, the repo is private without `GITHUB_TOKEN`, or `--repo` i
 `apt install nodejs` on older Ubuntu is too old. Use NodeSource as in step 3. If `node -v` is fine as your user but the installer fails, you are on nvm — install a system Node.
 
 **`service proseden-www failed to start`**  
-`sudo journalctl -u proseden-www -n 50`. Common causes: port already in use (`ss -lntp | grep 8787`), `env` syntax error, disk full.
+`sudo journalctl -u proseden-www -n 50`. Common causes: port already in use (`ss -lntp | grep 3336`), `env` syntax error, disk full.
 
 **nginx `unknown directive` / `location` not allowed here**  
 A `location` snippet was included at the `http` level. It must sit inside `server { }`. Use `--server-name` for subdomains; for path mounts, put the `include` inside the site’s `server` block.

@@ -6,8 +6,8 @@ Proseden can run several independent worlds under one hostname, each on its own 
 
 | Public URL | Process | Data |
 |---|---|---|
-| `https://example.com/garden/` | port 8787 | `./data-garden` |
-| `https://example.com/attic/` | port 8788 | `./data-attic` |
+| `https://example.com/garden/` | port 3336 | `./data-garden` |
+| `https://example.com/attic/` | port 3337 | `./data-attic` |
 
 Each process is a full Proseden server. They do not share memory, users, scenes, or session state.
 
@@ -47,11 +47,11 @@ example.com {
   }
 
   handle /garden* {
-    reverse_proxy 127.0.0.1:8787
+    reverse_proxy 127.0.0.1:3336
   }
 
   handle /attic* {
-    reverse_proxy 127.0.0.1:8788
+    reverse_proxy 127.0.0.1:3337
   }
 }
 ```
@@ -60,33 +60,33 @@ example.com {
 
 ```nginx
 location /garden/ {
-  proxy_pass http://127.0.0.1:8787;   # no trailing URI on proxy_pass → prefix kept
+  proxy_pass http://127.0.0.1:3336;   # no trailing URI on proxy_pass → prefix kept
   proxy_set_header Host $host;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 }
 
 location /attic/ {
-  proxy_pass http://127.0.0.1:8788;
+  proxy_pass http://127.0.0.1:3337;
   proxy_set_header Host $host;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 }
 ```
 
-Avoid `proxy_pass http://127.0.0.1:8787/;` (with a path) if that would strip `/garden`.
+Avoid `proxy_pass http://127.0.0.1:3336/;` (with a path) if that would strip `/garden`.
 
 ## Local smoke test
 
 ```bash
 npm run build
 
-PROSEDEN_BASE_PATH=garden PROSEDEN_DATA=./data-garden PORT=8787 npm start &
-PROSEDEN_BASE_PATH=attic  PROSEDEN_DATA=./data-attic  PORT=8788 npm start &
+PROSEDEN_BASE_PATH=garden PROSEDEN_DATA=./data-garden PORT=3336 npm start &
+PROSEDEN_BASE_PATH=attic  PROSEDEN_DATA=./data-attic  PORT=3337 npm start &
 
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8787/garden/s/1
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8787/garden/assets/styles.css
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8788/attic/health
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3336/garden/s/1
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3336/garden/assets/styles.css
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3337/attic/health
 ```
 
 Point a browser at each mount (or at the proxy URLs) and confirm styles load and login cookies stay separate.

@@ -8,7 +8,7 @@ See [SPEC.md](SPEC.md) for the product vision, [NAVIGATION.md](NAVIGATION.md) fo
 
 ```bash
 npm install
-npm run dev            # vite build + http://127.0.0.1:8787
+npm run dev            # vite build + http://127.0.0.1:3336
 ```
 
 `npm run build:client` alone rebuilds Vite assets into `public/assets` (base: `./`) when you change CSS/JS without restarting the server.
@@ -24,7 +24,7 @@ Environment:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `PORT` | `8787` | Listen port |
+| `PORT` | `3336` | Listen port (`EDEN` on a phone keypad) |
 | `PROSEDEN_DATA` | `./data` | Live world files (created from `seed/` on first boot); use a distinct directory per instance |
 | `PROSEDEN_SEED` | `./seed` | Seed copied when `data/meta.json` is missing |
 | `PROSEDEN_BASE_PATH` | _(empty)_ | URL prefix for subdirectory deploy, e.g. `proseden` or `worlds/alpha` |
@@ -41,7 +41,7 @@ Novice-friendly walkthrough (DNS, Node, nginx, two subdomains, HTTPS, updates): 
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/r-a-i-t-h/proseden/main/deploy/install.sh \
-  | sudo bash -s -- --name www --server-name www.proseden.co.uk --port 8787
+  | sudo bash -s -- --name www --server-name www.proseden.co.uk --port 3336
 ```
 
 Each instance keeps its own app copy and `data/` directory. `sudo proseden-update --name test` upgrades only that world. Releases are GitHub Release tarballs (`npm run pack` / tag `v*`), not a live git checkout.
@@ -51,8 +51,8 @@ Each instance keeps its own app copy and `data/` directory. `sudo proseden-updat
 See [MULTI_INSTANCE.md](MULTI_INSTANCE.md) for reverse-proxy examples, cookie isolation, and a checklist. Short version:
 
 ```bash
-PROSEDEN_BASE_PATH=garden PROSEDEN_DATA=./data-garden PORT=8787 npm start
-PROSEDEN_BASE_PATH=attic  PROSEDEN_DATA=./data-attic  PORT=8788 npm start
+PROSEDEN_BASE_PATH=garden PROSEDEN_DATA=./data-garden PORT=3336 npm start
+PROSEDEN_BASE_PATH=attic  PROSEDEN_DATA=./data-attic  PORT=3337 npm start
 ```
 
 Proxy `/garden/` and `/attic/` to those processes **without stripping the prefix**.
@@ -61,30 +61,30 @@ Proxy `/garden/` and `/attic/` to those processes **without stripping the prefix
 
 ```bash
 # Entrance — `/` redirects to `/s/1`
-curl -s -L -H 'Accept: text/plain' http://127.0.0.1:8787/
+curl -s -L -H 'Accept: text/plain' http://127.0.0.1:3336/
 # Same scene directly
-curl -s -H 'Accept: text/plain' http://127.0.0.1:8787/s/1
+curl -s -H 'Accept: text/plain' http://127.0.0.1:3336/s/1
 
 # Examine a detail
-curl -s -H 'Accept: text/plain' 'http://127.0.0.1:8787/s/1?card'
+curl -s -H 'Accept: text/plain' 'http://127.0.0.1:3336/s/1?card'
 
 # Artefact
-curl -s -H 'Accept: text/plain' http://127.0.0.1:8787/a/1
+curl -s -H 'Accept: text/plain' http://127.0.0.1:3336/a/1
 
 # Log in (returns bearer token)
 TOKEN=$(curl -s -H 'Accept: application/json' -H 'Content-Type: application/json' \
   -d '{"username":"gardener","password":"garden"}' \
-  http://127.0.0.1:8787/auth/login | jq -r .token)
+  http://127.0.0.1:3336/auth/login | jq -r .token)
 
 # Private scene
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
-  http://127.0.0.1:8787/s/3
+  http://127.0.0.1:3336/s/3
 
 # Collect / inventory
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' \
-  -X POST http://127.0.0.1:8787/a/1/collect
+  -X POST http://127.0.0.1:3336/a/1/collect
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
-  http://127.0.0.1:8787/inv
+  http://127.0.0.1:3336/inv
 ```
 
 `?format=text` or `?format=html` overrides `Accept` negotiation. Browsers get read-only HTML with linked exits/artefacts and login (ACL still applies). Signed-in readers can open **Edit** (`?edit`) to mount a fetch-based editor chrome around the same page — including **New scene**, and from a public junction an optional exit back to the new page. Without JavaScript the HTML stays the hyperlinked text. Entrance groups do not redirect owners on teleport.
