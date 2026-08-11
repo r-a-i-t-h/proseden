@@ -100,7 +100,7 @@ adminRoutes.get("/backup/:name", async (c) => {
     throw err;
   }
 
-  return new Response(bytes, {
+  return new Response(Uint8Array.from(bytes), {
     status: 200,
     headers: {
       "Content-Type": "application/gzip",
