@@ -122,22 +122,24 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
 }
 
 function authLoggedIn(user: UserRecord, editHref: string): string {
-  return `<span class="who">Signed in as <strong>${escapeHtml(user.username)}</strong></span>
-    <a href="${escapeAttr(editHref)}" id="edit-enter">Edit</a>
+  return `<span class="who"><strong>${escapeHtml(user.username)}</strong></span>
     <a href="profile">Profile</a>
-    <a href="g">Groups</a>
     <a href="inv">Inventory</a>
+    <a href="${escapeAttr(editHref)}" id="edit-enter">Edit</a>
     <form method="post" action="auth/logout" class="inline">
       <button type="submit">Log out</button>
     </form>`;
 }
 
 function authLoggedOut(): string {
-  return `<form method="post" action="auth/login" class="login-form">
-      <label>User <input name="username" autocomplete="username" required /></label>
-      <label>Pass <input name="password" type="password" autocomplete="current-password" required /></label>
-      <button type="submit">Log in</button>
-    </form>
+  return `<details class="login">
+      <summary>Log in</summary>
+      <form method="post" action="auth/login" class="login-form">
+        <label>User <input name="username" autocomplete="username" required /></label>
+        <label>Pass <input name="password" type="password" autocomplete="current-password" required /></label>
+        <button type="submit">Log in</button>
+      </form>
+    </details>
     <details class="register">
       <summary>Register</summary>
       <form method="post" action="auth/register">

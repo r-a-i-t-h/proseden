@@ -56,6 +56,8 @@ describe("read-only HTML vs edit bootstrap", () => {
     expect(html).not.toContain("Save scene");
     expect(html).not.toContain('id="edit-enter"');
     expect(html).toContain('action="auth/login"');
+    expect(html).toContain("<summary>Log in</summary>");
+    expect(html).toContain("<summary>Register</summary>");
   });
 
   it("signed-in read view offers Edit but still no mutation forms", async () => {
@@ -66,7 +68,9 @@ describe("read-only HTML vs edit bootstrap", () => {
     expect(html).toContain('id="edit-enter"');
     expect(html).toContain("s/1?edit");
     expect(html).toContain('href="profile"');
-    expect(html).toContain('href="g"');
+    expect(html).toContain('href="inv"');
+    expect(html.indexOf('href="profile"')).toBeLessThan(html.indexOf('href="inv"'));
+    expect(html.indexOf('href="inv"')).toBeLessThan(html.indexOf('id="edit-enter"'));
     expect(html).not.toContain("data-method");
     expect(html).not.toContain("Create scene");
     expect(html).toContain('"username":"gardener"');

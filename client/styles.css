@@ -76,7 +76,7 @@ body.is-editing .app {
   font-size: 0.95rem;
 }
 
-.login-form,
+.login form,
 .register form,
 .inline {
   display: flex;
@@ -535,6 +535,7 @@ button:hover {
   padding: 0.6rem 0.8rem;
 }
 
+details.login summary,
 details.register summary {
   cursor: pointer;
   color: var(--muted);

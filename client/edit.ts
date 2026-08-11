@@ -209,7 +209,12 @@ function mount(boot: EditBootstrap): void {
   done.addEventListener("click", () => leaveEditMode(boot.readHref));
   const newBtn = el("button", { type: "button", class: "edit-tool-btn" }, "New scene");
   newBtn.addEventListener("click", () => selectTool("new"));
-  toolbar.append(done, newBtn, sceneSwitcher(boot.ownedScenes, manage));
+  toolbar.append(
+    done,
+    newBtn,
+    sceneSwitcher(boot.ownedScenes, manage),
+    el("a", { class: "edit-tool-link", href: "g" }, "Groups"),
+  );
   if (boot.isManager) {
     toolbar.append(
       el("a", { class: "edit-tool-link", href: "admin" }, "Admin"),
