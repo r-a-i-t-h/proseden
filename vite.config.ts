@@ -10,7 +10,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         styles: resolve(__dirname, "client/styles.css"),
-        manage: resolve(__dirname, "client/manage.ts"),
+        edit: resolve(__dirname, "client/edit.ts"),
       },
       output: {
         entryFileNames: "assets/[name].js",

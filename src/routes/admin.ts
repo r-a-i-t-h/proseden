@@ -3,7 +3,7 @@ import type { Context } from "hono";
 import { isManager } from "../access/permissions.js";
 import { apiError, ownedSceneLinksFor, wantsJson } from "../http.js";
 import { negotiateFormat } from "../render/format.js";
-import { renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
+import { editModeHrefs, renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
 
 export const adminRoutes = new Hono();
@@ -40,6 +40,7 @@ adminRoutes.get("/", (c) => {
       assetBase: c.get("assetBase"),
       ownedScenes: ownedSceneLinksFor(c),
       isManager: true,
+      ...editModeHrefs(c.req.url, c.get("assetBase")),
     }),
   );
 });
@@ -73,6 +74,7 @@ adminRoutes.post("/reload", async (c) => {
       assetBase: c.get("assetBase"),
       ownedScenes: ownedSceneLinksFor(c),
       isManager: true,
+      ...editModeHrefs(c.req.url, c.get("assetBase")),
     }),
   );
 });

@@ -1,0 +1,144 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { SessionStore } from "../src/auth/sessions.js";
+import { createApp } from "../src/app.js";
+import { editModeHrefs } from "../src/render/html.js";
+import { WorldStore } from "../src/store/world.js";
+
+describe("editModeHrefs", () => {
+  it("adds and removes the edit flag, keeping other query keys", () => {
+    const hrefs = editModeHrefs("http://example.test/garden/s/1?card&from=2", "/garden");
+    expect(hrefs.editHref).toBe("s/1?card&from=2&edit");
+    expect(hrefs.readHref).toBe("s/1?card&from=2");
+  });
+
+  it("uses ./ on the mount root", () => {
+    const hrefs = editModeHrefs("http://example.test/garden/", "/garden");
+    expect(hrefs.editHref).toBe("./?edit");
+    expect(hrefs.readHref).toBe("./");
+  });
+});
+
+describe("read-only HTML vs edit bootstrap", () => {
+  let dataDir: string;
+  let world: WorldStore;
+  let sessions: SessionStore;
+  let token: string;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "proseden-edit-html-"));
+    world = new WorldStore(dataDir);
+    await world.load(join(process.cwd(), "seed"));
+    sessions = new SessionStore();
+    token = sessions.create("gardener").token;
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  function app() {
+    return createApp({ world, sessions });
+  }
+
+  it("serves hypertext without editor forms", async () => {
+    const res = await app().request("/s/1", { headers: { Accept: "text/html" } });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('src="assets/edit.js"');
+    expect(html).toContain('id="edit-root"');
+    expect(html).toContain('id="edit-bootstrap"');
+    expect(html).toContain("Moss softens the stone step");
+    expect(html).not.toContain("data-method");
+    expect(html).not.toContain("Create scene");
+    expect(html).not.toContain("Save scene");
+    expect(html).not.toContain('id="edit-enter"');
+    expect(html).toContain('action="auth/login"');
+  });
+
+  it("signed-in read view offers Edit but still no mutation forms", async () => {
+    const res = await app().request("/s/1", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${token}` },
+    });
+    const html = await res.text();
+    expect(html).toContain('id="edit-enter"');
+    expect(html).toContain("s/1?edit");
+    expect(html).not.toContain("data-method");
+    expect(html).not.toContain("Create scene");
+    expect(html).toContain('"username":"gardener"');
+    expect(html).not.toContain("passwordHash");
+  });
+
+  it("does not treat ?edit as a detail name", async () => {
+    const res = await app().request("/s/1?edit", { headers: { Accept: "text/html" } });
+    const html = await res.text();
+    expect(html).toContain("Moss softens the stone step");
+    expect(html).not.toContain("No detail named");
+    expect(html).toContain("s/1?edit");
+  });
+
+  it("still opens a named detail when combined with ?edit", async () => {
+    const res = await app().request("/s/1?card&edit", { headers: { Accept: "text/html" } });
+    const html = await res.text();
+    expect(html).toContain("detail:card");
+    expect(html).toContain("deckle-edged");
+  });
+
+  it("shows collect on a signed-in artefact page", async () => {
+    const res = await app().request("/a/1", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${token}` },
+    });
+    const html = await res.text();
+    expect(html).toContain('action="a/1/collect"');
+    expect(html).toContain("Collect");
+    expect(html).not.toContain("Save artefact");
+  });
+});
+
+describe("create scene then exit from a junction", () => {
+  let dataDir: string;
+  let world: WorldStore;
+  let sessions: SessionStore;
+  let bob: string;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "proseden-edit-link-"));
+    world = new WorldStore(dataDir);
+    await world.load(join(process.cwd(), "seed"));
+    sessions = new SessionStore();
+    bob = sessions.create("visitor").token;
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it("lets a visitor create a scene and attach it from the public junction", async () => {
+    const app = createApp({ world, sessions });
+    const created = await app.request("/s", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${bob}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title: "Visitor nook", body: "A quiet corner." }),
+    });
+    expect(created.status).toBe(201);
+    const scene = (await created.json()) as { id: number };
+    const linked = await app.request("/s/1/exits", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${bob}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ nickname: "visitor nook", toSceneId: scene.id }),
+    });
+    expect(linked.status).toBe(201);
+    const exits = world.getExits(1);
+    expect(exits.some((e) => e.toSceneId === scene.id && e.nickname === "visitor nook")).toBe(true);
+  });
+});

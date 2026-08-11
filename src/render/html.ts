@@ -18,6 +18,10 @@ export interface HtmlShellOptions {
   ownedScenes?: OwnedSceneLink[];
   /** Staff manager — shows /admin and /staff links in the sidebar. */
   isManager?: boolean;
+  /** Relative href that adds `?edit` (signed-in Edit control). */
+  editHref?: string;
+  /** Relative href with `?edit` removed (Done). */
+  readHref?: string;
 }
 
 export interface ManageContext {
@@ -40,11 +44,56 @@ export interface ManageContext {
   entranceGroups?: Array<{ id: string; title: string; entranceSceneId: number }>;
 }
 
+export interface EditBootstrap {
+  user?: { username: string };
+  manage?: ManageContext;
+  ownedScenes: OwnedSceneLink[];
+  isManager: boolean;
+  editHref: string;
+  readHref: string;
+}
+
+/** Relative hrefs for entering / leaving edit mode on the current request. */
+export function editModeHrefs(
+  requestUrl: string,
+  assetBase: string,
+): { editHref: string; readHref: string } {
+  const url = new URL(requestUrl);
+  let path = url.pathname;
+  if (assetBase && (path === assetBase || path.startsWith(`${assetBase}/`))) {
+    path = path.slice(assetBase.length) || "/";
+  }
+  const relative = path.replace(/^\//, "") || "./";
+  const edit = new URLSearchParams(url.search);
+  const read = new URLSearchParams(url.search);
+  edit.set("edit", "");
+  read.delete("edit");
+  return {
+    editHref: `${relative}${formatFlagQuery(edit)}`,
+    readHref: `${relative}${formatFlagQuery(read)}`,
+  };
+}
+
+function formatFlagQuery(params: URLSearchParams): string {
+  const qs = params.toString().replace(/=(?=&|$)/g, "");
+  return qs ? `?${qs}` : "";
+}
+
 export function renderHtmlPage(opts: HtmlShellOptions): string {
   const assetBase = opts.assetBase ?? "";
   // Resolve all relative href/src/action against the mount path ("" → "/", "/garden" → "/garden/")
   const baseHref = `${assetBase}/`;
   const user = opts.user;
+  const editHref = opts.editHref ?? "?edit";
+  const readHref = opts.readHref ?? "./";
+  const bootstrap: EditBootstrap = {
+    user: user ? { username: user.username } : undefined,
+    manage: opts.manage,
+    ownedScenes: opts.ownedScenes ?? [],
+    isManager: opts.isManager ?? opts.manage?.isManager ?? false,
+    editHref,
+    readHref,
+  };
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -59,107 +108,25 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
     <header class="top">
       <a class="brand" href="./">Proseden</a>
       <div class="auth" id="auth-panel">
-        ${user ? authLoggedIn(user) : authLoggedOut()}
+        ${user ? authLoggedIn(user, editHref) : authLoggedOut()}
       </div>
     </header>
-    <div class="layout${user ? " with-manage" : ""}">
+    <div class="layout">
       <main class="prose">
         ${opts.bodyHtml}
       </main>
-      ${user ? manageSidebar(opts.manage, user, opts.isManager ?? opts.manage?.isManager, opts.ownedScenes ?? []) : ""}
+      <aside id="edit-root" class="edit-root" hidden></aside>
     </div>
   </div>
-  <script type="module" src="assets/manage.js"></script>
+  <script type="application/json" id="edit-bootstrap">${jsonScript(bootstrap)}</script>
+  <script type="module" src="assets/edit.js"></script>
 </body>
 </html>`;
 }
 
-function manageSection(title: string, inner: string): string {
-  return `<details class="manage-section">
-    <summary>${escapeHtml(title)}</summary>
-    <div class="manage-section-body">${inner}</div>
-  </details>`;
-}
-
-function entranceGroupAssignSection(
-  scene: SceneRecord,
-  entranceGroups: ManageContext["entranceGroups"],
-): string {
-  const options = [
-    `<option value="none"${!scene.entranceGroupId ? " selected" : ""}>(none)</option>`,
-    ...(entranceGroups ?? []).map(
-      (g) =>
-        `<option value="${escapeAttr(g.id)}"${scene.entranceGroupId === g.id ? " selected" : ""}>${escapeHtml(g.title)} (#${escapeHtml(g.id)}, entrance scene ${g.entranceSceneId})</option>`,
-    ),
-  ].join("");
-  return manageSection(
-    "Entrance group",
-    `<form method="post" action="s/${scene.id}/entrance-group" class="stack">
-        <p class="muted">Teleporting into this set from outside lands at the entrance scene.</p>
-        <label>Group <select name="entranceGroupId">${options}</select></label>
-        <button type="submit">Assign entrance group</button>
-      </form>`,
-  );
-}
-
-function entranceGroupCreateSection(scene: SceneRecord): string {
-  return manageSection(
-    "New entrance group",
-    `<form method="post" action="eg" class="stack">
-        <p class="muted">Creates a set with this scene as the entrance.</p>
-        <label>Title <input name="title" required /></label>
-        <input type="hidden" name="entranceSceneId" value="${scene.id}" />
-        <button type="submit">Create with this scene as entrance</button>
-      </form>`,
-  );
-}
-
-const DETAILS_JSON_EXAMPLE = `{
-  "card": "Closer look at the mantel card.",
-  "window": "Rain beads on the glass."
-}`;
-
-const GRANTS_JSON_EXAMPLE = `[
-  { "who": "visitor", "rights": ["read"] },
-  { "who": "*", "rights": ["read", "edit"] }
-]`;
-
-const DENIES_JSON_EXAMPLE = `[
-  { "who": "bob", "rights": ["edit"] },
-  { "who": "carol" }
-]`;
-
-let jsonFieldSeq = 0;
-
-function jsonEditorField(opts: {
-  label: string;
-  name: string;
-  rows: number;
-  value: unknown;
-  example: string;
-  exampleNote?: string;
-}): string {
-  const note = opts.exampleNote
-    ? `<p class="muted">${escapeHtml(opts.exampleNote)}</p>`
-    : "";
-  const fieldId = `json-field-${++jsonFieldSeq}`;
-  return `<div class="json-field">
-    <div class="json-field-label">
-      <label for="${escapeAttr(fieldId)}">${escapeHtml(opts.label)}</label>
-      <details class="json-format-help">
-        <summary class="json-format-info" aria-label="Example ${escapeAttr(opts.label)} format" title="Show example format">i</summary>
-        <div class="json-format-example">
-          ${note}
-          <pre>${escapeHtml(opts.example)}</pre>
-        </div>
-      </details>
-    </div>
-    <textarea id="${escapeAttr(fieldId)}" name="${escapeAttr(opts.name)}" rows="${opts.rows}">${escapeHtml(JSON.stringify(opts.value, null, 2))}</textarea>
-  </div>`;
-}
-
-function authLoggedIn(user: UserRecord): string {
+function authLoggedIn(user: UserRecord, editHref: string): string {
   return `<span class="who">Signed in as <strong>${escapeHtml(user.username)}</strong></span>
+    <a href="${escapeAttr(editHref)}" id="edit-enter">Edit</a>
     <a href="inv">Inventory</a>
     <form method="post" action="auth/logout" class="inline">
       <button type="submit">Log out</button>
@@ -180,295 +147,6 @@ function authLoggedOut(): string {
         <button type="submit">Create account</button>
       </form>
     </details>`;
-}
-
-function manageSidebar(
-  manage: ManageContext | undefined,
-  user?: UserRecord,
-  isManager = false,
-  ownedScenes: OwnedSceneLink[] = [],
-): string {
-  const sections: string[] = [];
-  sections.push(`<h2>Manage</h2>`);
-
-  if (isManager) {
-    sections.push(`<nav class="manage-links" aria-label="Manager">
-      <a href="admin">Admin</a>
-      <a href="staff">Staff</a>
-    </nav>`);
-  }
-
-  const currentSceneId = manage?.kind === "scene" ? manage.scene?.id : undefined;
-  const sceneNav =
-    ownedScenes.length === 0
-      ? `<p class="muted">No scenes yet.</p>`
-      : `<ul class="link-list manage-scene-list">${ownedScenes
-          .map((s) => {
-            const label = s.title?.trim() ? s.title : `Scene ${s.id}`;
-            const current = currentSceneId === s.id ? ` class="is-current"` : "";
-            return `<li${current}><a href="s/${s.id}"><span class="exit-id">${s.id}</span> ${escapeHtml(label)}</a></li>`;
-          })
-          .join("")}</ul>`;
-  sections.push(manageSection("My scenes", sceneNav));
-
-  sections.push(
-    manageSection(
-      "New scene",
-      `<form method="post" action="s" class="stack">
-      <label>Title <input name="title" /></label>
-      <label>Body <textarea name="body" rows="4" required></textarea></label>
-      <input type="hidden" name="visibility" value="private" />
-      <label><input type="checkbox" name="visibility" value="public" /> Public</label>
-      <button type="submit">Create scene</button>
-    </form>`,
-    ),
-  );
-
-  if (manage?.kind === "scene" && manage.scene) {
-    const scene = manage.scene;
-    if (manage.canEdit) {
-      sections.push(
-        manageSection(
-          `Edit scene ${scene.id}`,
-          `<form method="post" action="s/${scene.id}" class="stack" data-method="PUT">
-        <label>Title <input name="title" value="${escapeAttr(scene.title ?? "")}" /></label>
-        <label>Body <textarea name="body" rows="8" required>${escapeHtml(scene.body)}</textarea></label>
-        ${jsonEditorField({
-          label: "Details (JSON map)",
-          name: "detailsJson",
-          rows: 4,
-          value: scene.details,
-          example: DETAILS_JSON_EXAMPLE,
-          exampleNote: "Object of named closer-look texts (string values).",
-        })}
-        <label><input type="hidden" name="visibility" value="private" /><input type="checkbox" name="visibility" value="public" ${scene.visibility === "public" ? "checked" : ""} /> Public</label>
-        ${
-          manage.canManage
-            ? `<label><input type="hidden" name="isJunction" value="false" /><input type="checkbox" name="isJunction" value="true" ${scene.isJunction ? "checked" : ""} /> Public junction</label>`
-            : ""
-        }
-        <label><input type="checkbox" name="retainSnapshot" value="true" /> Keep version snapshot</label>
-        <button type="submit">Save scene</button>
-      </form>
-      <p class="muted"><a href="s/${scene.id}/history">Scene history</a></p>`,
-        ),
-      );
-      sections.push(
-        manageSection(
-          "New artefact here",
-          `<form method="post" action="a" class="stack">
-        <input type="hidden" name="homeSceneId" value="${scene.id}" />
-        <label>Title <input name="title" /></label>
-        <label>Body <textarea name="body" rows="4" required></textarea></label>
-        <label>Tags (comma) <input name="tags" /></label>
-        <button type="submit">Create artefact</button>
-      </form>`,
-        ),
-      );
-    } else {
-      sections.push(`<p class="muted">You can read this scene but not edit it.</p>`);
-    }
-    if (manage.canAddExit) {
-      sections.push(
-        manageSection(
-          "Add exit",
-          `<form method="post" action="s/${scene.id}/exits" class="stack">
-        <label>Nickname <input name="nickname" required /></label>
-        <label>To scene id <input name="toSceneId" type="number" min="1" required /></label>
-        <button type="submit">Add exit</button>
-      </form>`,
-        ),
-      );
-    }
-    if (manage.canAddExit && manage.exits?.some((e) => e.canRemove)) {
-      const removable = manage.exits.filter((e) => e.canRemove);
-      const exitRows = removable
-        .map(
-          (e) => `<li>
-          <label class="exit-remove-item">
-            <input type="checkbox" name="exitId" value="${e.exitId}" />
-            <span class="exit-id">${e.exitId}</span> ${escapeHtml(e.nickname)}
-            <span class="muted">→ ${e.toSceneId}</span>
-          </label>
-        </li>`,
-        )
-        .join("");
-      sections.push(
-        manageSection(
-          "Remove exit",
-          `<form method="post" action="s/${scene.id}/exits/delete" class="stack" data-confirm="Remove the selected exits?">
-        <ul class="link-list manage-exit-list">${exitRows}</ul>
-        <button type="submit">Remove</button>
-      </form>`,
-        ),
-      );
-    }
-    if (manage.canManage) {
-      sections.push(
-        manageSection(
-          "Scene access",
-          `<form method="post" action="s/${scene.id}/access" class="stack" data-method="PUT">
-        <p class="muted">Grants: who + rights (read/edit/manage). Use <code>*</code> for everyone.</p>
-        ${jsonEditorField({
-          label: "Grants (JSON)",
-          name: "grantsJson",
-          rows: 5,
-          value: scene.grants ?? [],
-          example: GRANTS_JSON_EXAMPLE,
-          exampleNote: "Array of { who, rights }. Rights: read, edit, manage.",
-        })}
-        ${jsonEditorField({
-          label: "Denies (JSON)",
-          name: "deniesJson",
-          rows: 4,
-          value: scene.denies ?? [],
-          example: DENIES_JSON_EXAMPLE,
-          exampleNote: "Array of { who, rights? }. Omit rights to deny all.",
-        })}
-        <button type="submit">Save access</button>
-      </form>`,
-        ),
-      );
-      const groupOptions = [
-        `<option value="none"${!scene.groupId ? " selected" : ""}>(none)</option>`,
-        ...(manage.groups ?? []).map(
-          (g) =>
-            `<option value="${escapeAttr(g.id)}"${scene.groupId === g.id ? " selected" : ""}>${escapeHtml(g.title)} (#${escapeHtml(g.id)})</option>`,
-        ),
-      ].join("");
-      sections.push(
-        manageSection(
-          "Scene group",
-          `<form method="post" action="s/${scene.id}/group" class="stack">
-        <label>Group <select name="groupId">${groupOptions}</select></label>
-        <button type="submit">Assign group</button>
-      </form>`,
-        ),
-      );
-      sections.push(
-        manageSection(
-          "New group",
-          `<form method="post" action="g" class="stack">
-        <label>Title <input name="title" required /></label>
-        <button type="submit">Create group</button>
-      </form>`,
-        ),
-      );
-      sections.push(entranceGroupAssignSection(scene, manage.entranceGroups));
-      sections.push(entranceGroupCreateSection(scene));
-    } else if (manage.canOrganise) {
-      sections.push(
-        manageSection(
-          "New group",
-          `<form method="post" action="g" class="stack">
-        <label>Title <input name="title" required /></label>
-        <button type="submit">Create group</button>
-      </form>`,
-        ),
-      );
-      sections.push(entranceGroupAssignSection(scene, manage.entranceGroups));
-      sections.push(entranceGroupCreateSection(scene));
-    }
-    if (manage.canDelete) {
-      sections.push(
-        manageSection(
-          "Delete scene",
-          `<form method="post" action="s/${scene.id}/delete" class="stack" data-confirm="Delete scene ${scene.id}? Homed artefacts and inbound exits will be removed.">
-        <button type="submit">Delete scene ${scene.id}</button>
-      </form>`,
-        ),
-      );
-    }
-  }
-
-  if (manage?.kind === "artefact" && manage.artefact) {
-    const a = manage.artefact;
-    if (manage.collected) {
-      sections.push(
-        manageSection(
-          "Inventory",
-          `<form method="post" action="a/${a.id}/collect/drop" class="stack">
-        <button type="submit">Remove from inventory</button>
-      </form>`,
-        ),
-      );
-    } else {
-      sections.push(
-        manageSection(
-          "Collect",
-          `<form method="post" action="a/${a.id}/collect" class="stack">
-        <button type="submit">Collect</button>
-      </form>`,
-        ),
-      );
-    }
-    if (manage.canEdit) {
-      sections.push(
-        manageSection(
-          `Edit artefact ${a.id}`,
-          `<form method="post" action="a/${a.id}" class="stack" data-method="PUT">
-        <label>Title <input name="title" value="${escapeAttr(a.title ?? "")}" /></label>
-        <label>Body <textarea name="body" rows="6" required>${escapeHtml(a.body)}</textarea></label>
-        <label>Home scene <input name="homeSceneId" type="number" value="${a.homeSceneId}" required /></label>
-        <label>Tags (comma) <input name="tags" value="${escapeAttr(a.tags.join(", "))}" /></label>
-        ${jsonEditorField({
-          label: "Details (JSON map)",
-          name: "detailsJson",
-          rows: 4,
-          value: a.details,
-          example: DETAILS_JSON_EXAMPLE,
-          exampleNote: "Object of named closer-look texts (string values).",
-        })}
-        <label><input type="checkbox" name="retainSnapshot" value="true" /> Keep version snapshot</label>
-        <button type="submit">Save artefact</button>
-      </form>
-      <p class="muted"><a href="a/${a.id}/history">Artefact history</a></p>`,
-        ),
-      );
-    }
-    if (manage.canDelete) {
-      sections.push(
-        manageSection(
-          "Delete artefact",
-          `<form method="post" action="a/${a.id}/delete" class="stack" data-confirm="Delete artefact ${a.id}?">
-        <button type="submit">Delete artefact</button>
-      </form>`,
-        ),
-      );
-    }
-  }
-
-  if (user) {
-    sections.push(
-      manageSection(
-        "Share all my work",
-        `<form method="post" action="u/${encodeURIComponent(user.username)}/access" class="stack" data-method="PUT">
-      <p class="muted">User-level grants/denies apply to every scene and group you own.</p>
-      ${jsonEditorField({
-        label: "Grants (JSON)",
-        name: "grantsJson",
-        rows: 4,
-        value: manage?.userGrants ?? user.grants ?? [],
-        example: GRANTS_JSON_EXAMPLE,
-        exampleNote: "Array of { who, rights }. Rights: read, edit, manage.",
-      })}
-      ${jsonEditorField({
-        label: "Denies (JSON)",
-        name: "deniesJson",
-        rows: 3,
-        value: manage?.userDenies ?? user.denies ?? [],
-        example: DENIES_JSON_EXAMPLE,
-        exampleNote: "Array of { who, rights? }. Omit rights to deny all.",
-      })}
-      <button type="submit">Save share-all</button>
-    </form>`,
-      ),
-    );
-  }
-
-  sections.push(`<p class="muted"><a href="inv">Open inventory</a></p>`);
-
-  return `<aside class="manage" id="manage-sidebar">${sections.join("\n")}</aside>`;
 }
 
 export function renderSceneBodyHtml(opts: {
@@ -548,6 +226,8 @@ export function renderArtefactBodyHtml(opts: {
   detail?: string;
   /** @deprecated Links are root-relative via <base href>; kept for callers. */
   assetBase?: string;
+  /** When set, show collect / drop as a reader action. */
+  collected?: boolean;
 }): string {
   const { artefact, detail } = opts;
 
@@ -573,7 +253,14 @@ export function renderArtefactBodyHtml(opts: {
       artefact.tags.length ? ` · ${escapeHtml(artefact.tags.join(", "))}` : ""
     }</p>
     <div class="desc">${formatProse(artefact.body)}</div>
-    ${detailLinks ? `<section><h2>Details</h2><ul class="link-list">${detailLinks}</ul></section>` : ""}`;
+    ${detailLinks ? `<section><h2>Details</h2><ul class="link-list">${detailLinks}</ul></section>` : ""}
+    ${
+      opts.collected === undefined
+        ? ""
+        : opts.collected
+          ? `<form method="post" action="a/${artefact.id}/collect/drop" class="reader-action"><button type="submit">Remove from inventory</button></form>`
+          : `<form method="post" action="a/${artefact.id}/collect" class="reader-action"><button type="submit">Collect</button></form>`
+    }`;
 }
 
 export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""): string {
@@ -602,4 +289,9 @@ function bylineHtml(owner: string): string {
 
 function escapeAttr(value: string): string {
   return escapeHtml(value).replace(/'/g, "&#39;");
+}
+
+/** JSON for a script tag: escape `<` so `</script>` in prose cannot break out. */
+function jsonScript(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
 }

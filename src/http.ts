@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { isManager } from "./access/permissions.js";
 import { negotiateFormat } from "./render/format.js";
 import {
+  editModeHrefs,
   renderHtmlPage,
   renderMessageBodyHtml,
   type OwnedSceneLink,
@@ -50,6 +51,7 @@ export function apiError(
       assetBase: c.get("assetBase"),
       ownedScenes: ownedSceneLinks(world, user),
       isManager: opts?.isManager ?? isManager(user, world),
+      ...editModeHrefs(c.req.url, c.get("assetBase")),
     }),
     status,
   );

@@ -3,7 +3,7 @@ import type { Context } from "hono";
 export type OutputFormat = "html" | "text";
 
 /** Query keys reserved for protocol concerns — not treated as detail names. */
-const RESERVED_QUERY_KEYS = new Set(["format", "from"]);
+const RESERVED_QUERY_KEYS = new Set(["format", "from", "edit"]);
 
 export function negotiateFormat(c: Context): OutputFormat {
   const q = c.req.query("format")?.toLowerCase();

@@ -75,7 +75,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
   http://127.0.0.1:8787/inv
 ```
 
-`?format=text` or `?format=html` overrides `Accept` negotiation. Browsers get HTML with linked exits/artefacts, login, and (when signed in) a management sidebar — including a collapsible **My scenes** list for immediate jumps to every scene you own (entrance groups do not redirect owners on teleport).
+`?format=text` or `?format=html` overrides `Accept` negotiation. Browsers get read-only HTML with linked exits/artefacts and login (ACL still applies). Signed-in readers can open **Edit** (`?edit`) to mount a fetch-based editor chrome around the same page — including **New scene**, and from a public junction an optional exit back to the new page. Without JavaScript the HTML stays the hyperlinked text. Entrance groups do not redirect owners on teleport.
 
 ## URL surface (v1)
 

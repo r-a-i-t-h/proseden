@@ -292,7 +292,7 @@ describe("HTTP teleport vs rights", () => {
     expect(await res.text()).toContain("Inner Chamber");
   });
 
-  it("lists owned scenes in the HTML manage sidebar", async () => {
+  it("lists owned scenes in the edit bootstrap, not the reader HTML", async () => {
     const { app, tokens, ids } = harness;
     const res = await app.request(`/s/${ids.hall}`, {
       headers: {
@@ -302,10 +302,19 @@ describe("HTTP teleport vs rights", () => {
     });
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("My scenes");
-    expect(html).toContain(`href="s/${ids.inner}"`);
+    expect(html).not.toContain("My scenes");
+    expect(html).toContain(`"id":${ids.inner}`);
     expect(html).toContain("Inner Chamber");
-    expect(html).toMatch(new RegExp(`<li class="is-current">.*s/${ids.hall}`));
+    const boot = html.match(/id="edit-bootstrap">([^<]+)</);
+    expect(boot?.[1]).toBeTruthy();
+    const data = JSON.parse(boot![1]!) as {
+      ownedScenes: Array<{ id: number; title?: string }>;
+      manage?: { scene?: { id: number } };
+    };
+    expect(data.ownedScenes.some((s) => s.id === ids.inner && s.title === "Inner Chamber")).toBe(
+      true,
+    );
+    expect(data.manage?.scene?.id).toBe(ids.hall);
   });
 
   it("denies outsider teleport into a group when the entrance is unreadable", async () => {

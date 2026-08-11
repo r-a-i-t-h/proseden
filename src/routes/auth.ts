@@ -4,7 +4,7 @@ import { deleteCookie, setCookie } from "hono/cookie";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { ownedSceneLinksFor, wantsJson } from "../http.js";
 import { negotiateFormat } from "../render/format.js";
-import { renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
+import { editModeHrefs, renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
 
 export const authRoutes = new Hono();
@@ -125,6 +125,7 @@ function respond(c: Context, status: 400 | 401 | 409, title: string, message: st
       user: c.get("user"),
       assetBase: c.get("assetBase"),
       ownedScenes: ownedSceneLinksFor(c),
+      ...editModeHrefs(c.req.url, c.get("assetBase")),
     }),
     status,
   );

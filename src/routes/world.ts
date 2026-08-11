@@ -19,6 +19,7 @@ import { apiError, ownedSceneLinks, wantsJson } from "../http.js";
 import type { StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
+  editModeHrefs,
   escapeHtml,
   renderArtefactBodyHtml,
   renderHtmlPage,
@@ -196,7 +197,12 @@ worldRoutes.get("/a/:id", (c) => {
     c,
     200,
     artefact.title ?? `Artefact ${artefact.id}`,
-    renderArtefactBodyHtml({ artefact, detail, assetBase }),
+    renderArtefactBodyHtml({
+      artefact,
+      detail,
+      assetBase,
+      collected: user ? collected : undefined,
+    }),
     renderArtefactText({ artefact, detail, basePath: assetBase }),
     {
       kind: "artefact",
@@ -1247,6 +1253,7 @@ function page(
   }
   const user = c.get("user");
   const world = c.get("world");
+  const hrefs = editModeHrefs(c.req.url, c.get("assetBase"));
   return c.html(
     renderHtmlPage({
       title,
@@ -1256,6 +1263,7 @@ function page(
       manage,
       ownedScenes: ownedSceneLinks(world, user),
       isManager: isManager(user, world),
+      ...hrefs,
     }),
     status as 200,
   );
