@@ -444,8 +444,7 @@ function artefactEditor(manage: ManageContext, inspector: HTMLElement): HTMLElem
 }
 
 function newSceneTool(manage: ManageContext | undefined, inspector: HTMLElement): HTMLElement {
-  const canLink = !!(manage?.kind === "scene" && manage.scene && manage.canAddExit);
-  const junction = !!(canLink && manage?.scene?.isJunction && manage.scene.visibility === "public");
+  const fromScene = manage?.kind === "scene" ? manage.scene : undefined;
   const form = el("div", { class: "edit-fields" });
   form.append(
     field("Title", el("input", { name: "title" })),
@@ -457,19 +456,10 @@ function newSceneTool(manage: ManageContext | undefined, inspector: HTMLElement)
       " Public",
     ),
   );
-  if (canLink) {
+  if (fromScene) {
     form.append(
-      el(
-        "label",
-        { class: "edit-check" },
-        el("input", {
-          type: "checkbox",
-          name: "linkExit",
-          ...(junction ? { checked: true } : {}),
-        }),
-        " Add an exit here to the new scene",
-      ),
-      field("Exit nickname", el("input", { name: "nickname", placeholder: "e.g. garden gate" })),
+      field("Exit nickname from here", el("input", { name: "nickname", placeholder: "e.g. garden gate" })),
+      field("Exit nickname back here", el("input", { name: "returnNickname", placeholder: "e.g. threshold" })),
     );
   }
   const create = el("button", { type: "button" }, "Create scene");
@@ -486,17 +476,28 @@ function newSceneTool(manage: ManageContext | undefined, inspector: HTMLElement)
         visibility: checked(form, "visibility") ? "public" : "private",
       });
       const id = Number(scene.id);
-      if (canLink && manage?.scene && checked(form, "linkExit")) {
+      if (fromScene) {
         const nickname = inputValue(form, "nickname").trim();
-        if (!nickname) {
-          sessionStorage.setItem(FLASH_KEY, "Scene created, but exit nickname was empty.");
-        } else {
+        const returnNickname = inputValue(form, "returnNickname").trim();
+        const failures: string[] = [];
+        if (nickname) {
           try {
-            await apiJson("POST", `s/${manage.scene.id}/exits`, { nickname, toSceneId: id });
+            await apiJson("POST", `s/${fromScene.id}/exits`, { nickname, toSceneId: id });
           } catch (err) {
             const msg = err instanceof Error ? err.message : "Could not add exit";
-            sessionStorage.setItem(FLASH_KEY, `Scene created, but could not add exit: ${msg}`);
+            failures.push(`from here: ${msg}`);
           }
+        }
+        if (returnNickname) {
+          try {
+            await apiJson("POST", `s/${id}/exits`, { nickname: returnNickname, toSceneId: fromScene.id });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Could not add return exit";
+            failures.push(`back here: ${msg}`);
+          }
+        }
+        if (failures.length) {
+          sessionStorage.setItem(FLASH_KEY, `Scene created, but could not add exit ${failures.join("; ")}`);
         }
       }
       window.location.href = `s/${id}`;

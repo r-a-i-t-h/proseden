@@ -87,7 +87,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
   http://127.0.0.1:3336/inv
 ```
 
-`?format=text` or `?format=html` overrides `Accept` negotiation. Browsers get read-only HTML with linked exits/artefacts and login (ACL still applies). Signed-in readers can open **Edit** (`?edit`) to mount a fetch-based editor chrome around the same page — including **New scene**, and from a public junction an optional exit back to the new page. Without JavaScript the HTML stays the hyperlinked text. Entrance groups do not redirect owners on teleport.
+`?format=text` or `?format=html` overrides `Accept` negotiation. Browsers get read-only HTML with linked exits/artefacts and login (ACL still applies). Signed-in readers can open **Edit** (`?edit`) to mount a fetch-based editor chrome around the same page — including **New scene**, with optional nicknames for an exit from the current page and back. Without JavaScript the HTML stays the hyperlinked text. Entrance groups do not redirect owners on teleport.
 
 ## URL surface (v1)
 

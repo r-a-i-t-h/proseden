@@ -151,7 +151,19 @@ describe("create scene then exit from a junction", () => {
       body: JSON.stringify({ nickname: "visitor nook", toSceneId: scene.id }),
     });
     expect(linked.status).toBe(201);
+    const back = await app.request(`/s/${scene.id}/exits`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${bob}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ nickname: "threshold", toSceneId: 1 }),
+    });
+    expect(back.status).toBe(201);
     const exits = world.getExits(1);
     expect(exits.some((e) => e.toSceneId === scene.id && e.nickname === "visitor nook")).toBe(true);
+    const returnExits = world.getExits(scene.id);
+    expect(returnExits.some((e) => e.toSceneId === 1 && e.nickname === "threshold")).toBe(true);
   });
 });
