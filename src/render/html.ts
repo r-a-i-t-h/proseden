@@ -173,10 +173,12 @@ export function renderSceneBodyHtml(opts: {
   exits: ExitRecord[];
   artefacts: ArtefactRecord[];
   detail?: string;
+  /** True when this scene is the landing scene of an entrance group. */
+  isEntrance?: boolean;
   /** @deprecated Links are root-relative via <base href>; kept for callers. */
   assetBase?: string;
 }): string {
-  const { scene, exits, artefacts, detail } = opts;
+  const { scene, exits, artefacts, detail, isEntrance } = opts;
 
   if (detail) {
     const text = scene.details[detail];
@@ -203,16 +205,20 @@ export function renderSceneBodyHtml(opts: {
 
   const exitLinks = exits
     .map((e) => {
-      const goNick = `s/${scene.id}/go/${encodeURIComponent(e.nickname)}`;
-      return `<li><a href="s/${scene.id}/go/${e.exitId}"><span class="exit-id">${e.exitId}</span> ${escapeHtml(e.nickname)}</a> <span class="muted">→ ${e.toSceneId}</span> <span class="muted">(<a href="${goNick}">by name</a>)</span></li>`;
+      return `<li><a href="s/${scene.id}/go/${e.exitId}"><span class="exit-id">${e.exitId}</span> ${escapeHtml(e.nickname)}</a></li>`;
     })
     .join("");
 
+  const publicJunction = Boolean(scene.isJunction && scene.visibility === "public");
+  const badges = [
+    escapeHtml(scene.visibility),
+    publicJunction ? "junction" : "",
+    isEntrance ? "entrance" : "",
+  ].filter(Boolean);
+
   return `<h1>${escapeHtml(scene.title ?? `Scene ${scene.id}`)} <span class="sub">#${scene.id}</span></h1>
     ${bylineHtml(scene.owner)}
-    <p class="meta">${escapeHtml(scene.visibility)}${scene.isJunction ? " · junction" : ""}${
-      scene.groupId ? ` · group ${escapeHtml(scene.groupId)}` : ""
-    }</p>
+    <p class="meta">${badges.join(" · ")}</p>
     <div class="desc">${formatProse(scene.body)}</div>
     ${detailLinks ? `<section><h2>Details</h2><ul class="link-list">${detailLinks}</ul></section>` : ""}
     ${artefactLinks ? `<section><h2>Artefacts</h2><ul class="link-list">${artefactLinks}</ul></section>` : ""}

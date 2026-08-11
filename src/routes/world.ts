@@ -122,13 +122,25 @@ worldRoutes.get("/s/:id", (c) => {
           entranceSceneId: g.entranceSceneId,
         }))
       : [];
+  const entranceGroup = scene.entranceGroupId
+    ? world.getEntranceGroup(scene.entranceGroupId)
+    : undefined;
+  const isEntrance = entranceGroup?.entranceSceneId === scene.id;
 
   return page(
     c,
     200,
     scene.title ?? `Scene ${scene.id}`,
-    renderSceneBodyHtml({ scene, exits, artefacts, detail, assetBase }),
-    renderSceneText({ scene, exits, artefacts, detail, basePath: assetBase, accessSummary }),
+    renderSceneBodyHtml({ scene, exits, artefacts, detail, assetBase, isEntrance }),
+    renderSceneText({
+      scene,
+      exits,
+      artefacts,
+      detail,
+      basePath: assetBase,
+      accessSummary,
+      isEntrance,
+    }),
     {
       kind: "scene",
       scene,

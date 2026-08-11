@@ -8,6 +8,8 @@ export function renderSceneText(opts: {
   detail?: string;
   basePath?: string;
   accessSummary?: string;
+  /** True when this scene is the landing scene of an entrance group. */
+  isEntrance?: boolean;
 }): string {
   const base = opts.basePath ?? "";
   const { scene, exits, artefacts, detail } = opts;
@@ -22,7 +24,12 @@ export function renderSceneText(opts: {
   } else {
     lines.push(`[Scene ${scene.id}${scene.title ? `: ${scene.title}` : ""}]`);
     if (scene.owner) lines.push(`by ${scene.owner}`);
-    lines.push(`visibility: ${scene.visibility}`);
+    {
+      const tags = [scene.visibility];
+      if (scene.isJunction && scene.visibility === "public") tags.push("junction");
+      if (opts.isEntrance) tags.push("entrance");
+      lines.push(`visibility: ${tags.join(" · ")}`);
+    }
     lines.push("");
     lines.push(scene.body);
     lines.push("");
@@ -46,10 +53,7 @@ export function renderSceneText(opts: {
       lines.push("Exits:");
       for (const e of exits) {
         lines.push(
-          `  ${e.exitId}. ${e.nickname} -> scene ${e.toSceneId}  ${base}/s/${scene.id}/go/${e.exitId}`,
-        );
-        lines.push(
-          `     also: ${base}/s/${scene.id}/go/${encodeURIComponent(e.nickname)}`,
+          `  ${e.exitId}. ${e.nickname}  ${base}/s/${scene.id}/go/${e.exitId}`,
         );
       }
       lines.push("");

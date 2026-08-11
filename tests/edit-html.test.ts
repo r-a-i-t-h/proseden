@@ -67,6 +67,30 @@ describe("read-only HTML vs edit bootstrap", () => {
     expect(html).toContain(`v${version}`);
   });
 
+  it("badges the public junction entrance and omits ACL group membership", async () => {
+    const entrance = await app().request("/s/1", { headers: { Accept: "text/html" } });
+    const entranceHtml = await entrance.text();
+    expect(entranceHtml).toContain('<p class="meta">public · junction · entrance</p>');
+    expect(entranceHtml).not.toMatch(/class="meta">[^<]*group\s+\d/);
+
+    // Scene 2 is in the same entrance group; arrive from the entrance so we are not redirected.
+    const member = await app().request("/s/2?from=1", { headers: { Accept: "text/html" } });
+    const memberHtml = await member.text();
+    expect(memberHtml).toContain('<p class="meta">public</p>');
+    expect(memberHtml).not.toMatch(/class="meta">[^<]*(junction|entrance|group\s+\d)/);
+  });
+
+  it("includes junction and entrance tags in the text view", async () => {
+    const entrance = await app().request("/s/1", { headers: { Accept: "text/plain" } });
+    expect(await entrance.text()).toContain("visibility: public · junction · entrance");
+
+    const member = await app().request("/s/2?from=1", { headers: { Accept: "text/plain" } });
+    const memberText = await member.text();
+    expect(memberText).toContain("visibility: public\n");
+    expect(memberText).not.toContain("junction");
+    expect(memberText).not.toContain("entrance");
+  });
+
   it("signed-in read view offers Edit but still no mutation forms", async () => {
     const res = await app().request("/s/1", {
       headers: { Accept: "text/html", Authorization: `Bearer ${token}` },
