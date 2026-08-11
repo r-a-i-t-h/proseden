@@ -1,4 +1,7 @@
 import type { ArtefactRecord, ExitRecord, SceneRecord, UserRecord } from "../model/types.js";
+import { escapeHtml, formatProse } from "./prose.js";
+
+export { escapeHtml } from "./prose.js";
 
 export interface OwnedSceneLink {
   id: number;
@@ -595,21 +598,6 @@ export function renderMessageBodyHtml(title: string, message: string): string {
 
 function bylineHtml(owner: string): string {
   return owner ? `<p class="byline">by ${escapeHtml(owner)}</p>` : "";
-}
-
-function formatProse(text: string): string {
-  return text
-    .split(/\n{2,}/)
-    .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br />")}</p>`)
-    .join("");
-}
-
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function escapeAttr(value: string): string {

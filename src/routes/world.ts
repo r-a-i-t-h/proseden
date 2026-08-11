@@ -26,6 +26,7 @@ import {
   renderMessageBodyHtml,
   renderSceneBodyHtml,
 } from "../render/html.js";
+import { formatProse } from "../render/prose.js";
 import {
   renderArtefactText,
   renderInventoryText,
@@ -1098,10 +1099,7 @@ worldRoutes.get("/s/:id/history/:version", async (c) => {
     `<p class="crumb"><a href="s/${id}/history">← History</a></p>
       <h1>Snapshot <span class="sub">${escapeHtml(versionId)}</span></h1>
       <p class="meta">${escapeHtml(snap.title ?? `Scene ${id}`)}</p>
-      <div class="desc">${snap.body
-        .split(/\n{2,}/)
-        .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br />")}</p>`)
-        .join("")}</div>
+      <div class="desc">${formatProse(snap.body)}</div>
       ${
         manage
           ? `<form method="post" action="s/${id}/history/${encodeURIComponent(versionId)}/restore" class="stack"><button type="submit">Restore this version</button></form>`
@@ -1197,10 +1195,7 @@ worldRoutes.get("/a/:id/history/:version", async (c) => {
     `Snapshot ${versionId}`,
     `<p class="crumb"><a href="a/${id}/history">← History</a></p>
       <h1>Snapshot <span class="sub">${escapeHtml(versionId)}</span></h1>
-      <div class="desc">${snap.body
-        .split(/\n{2,}/)
-        .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br />")}</p>`)
-        .join("")}</div>
+      <div class="desc">${formatProse(snap.body)}</div>
       ${
         canRestore
           ? `<form method="post" action="a/${id}/history/${encodeURIComponent(versionId)}/restore" class="stack"><button type="submit">Restore this version</button></form>`

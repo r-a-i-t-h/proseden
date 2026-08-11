@@ -179,6 +179,41 @@ button:hover {
   font-size: 1.08rem;
 }
 
+.desc .desc-heading {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--moss);
+  margin: 1.25rem 0 0.45rem;
+  max-width: 42rem;
+}
+
+.desc .desc-heading-minor {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.02rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin: 1rem 0 0.35rem;
+  max-width: 42rem;
+}
+
+.desc .desc-heading:first-child,
+.desc .desc-heading-minor:first-child {
+  margin-top: 0;
+}
+
+.desc code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: rgba(28, 36, 28, 0.06);
+  padding: 0.05em 0.3em;
+  border-radius: 0.2em;
+}
+
+.desc s {
+  color: var(--muted);
+}
+
 .link-list {
   list-style: none;
   padding: 0;
