@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ArtefactRecord, Deny, ExitRecord, Grant, SceneRecord, UserRecord } from "../model/types.js";
 import { escapeHtml, formatProse } from "./prose.js";
 
@@ -78,6 +81,8 @@ function formatFlagQuery(params: URLSearchParams): string {
   return qs ? `?${qs}` : "";
 }
 
+const APP_VERSION = readAppVersion();
+
 export function renderHtmlPage(opts: HtmlShellOptions): string {
   const assetBase = opts.assetBase ?? "";
   // Resolve all relative href/src/action against the mount path ("" → "/", "/garden" → "/garden/")
@@ -117,6 +122,17 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
       <aside id="edit-root" class="edit-root" hidden></aside>
     </div>
   </div>
+  <footer class="site-footer">
+    <p>
+      <span>proseden</span>
+      <span class="site-footer-sep" aria-hidden="true">::</span>
+      <span>by raith &amp; cursor</span>
+      <span class="site-footer-sep" aria-hidden="true">::</span>
+      <span>&copy; 2026</span>
+      <span class="site-footer-sep" aria-hidden="true">::</span>
+      <span>v${escapeHtml(APP_VERSION)}</span>
+    </p>
+  </footer>
   <script type="application/json" id="edit-bootstrap">${jsonScript(bootstrap)}</script>
   <script type="module" src="assets/edit.js"></script>
 </body>
@@ -460,6 +476,22 @@ function renderJsonFieldHtml(
 
 function bylineHtml(owner: string): string {
   return owner ? `<p class="byline">by ${escapeHtml(owner)}</p>` : "";
+}
+
+function readAppVersion(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  for (const rel of ["../../package.json", "../package.json"]) {
+    try {
+      const pkg = JSON.parse(readFileSync(join(here, rel), "utf8")) as {
+        name?: string;
+        version?: string;
+      };
+      if (pkg.name === "proseden" && pkg.version) return pkg.version;
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return "0.0.0";
 }
 
 function escapeAttr(value: string): string {

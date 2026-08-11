@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -58,6 +59,12 @@ describe("read-only HTML vs edit bootstrap", () => {
     expect(html).toContain('action="auth/login"');
     expect(html).toContain("<summary>Log in</summary>");
     expect(html).toContain("<summary>Register</summary>");
+    const version = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")).version;
+    expect(html).toContain(`<footer class="site-footer">`);
+    expect(html).toContain("proseden");
+    expect(html).toContain("by raith &amp; cursor");
+    expect(html).toContain("&copy; 2026");
+    expect(html).toContain(`v${version}`);
   });
 
   it("signed-in read view offers Edit but still no mutation forms", async () => {

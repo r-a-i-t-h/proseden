@@ -41,7 +41,7 @@ a:hover {
 .app {
   width: min(1100px, calc(100% - 2rem));
   margin: 0 auto;
-  padding: 1.25rem 0 3rem;
+  padding: 1.25rem 0 1.5rem;
 }
 
 body.is-editing .app {
@@ -125,6 +125,30 @@ button {
 
 button:hover {
   background: var(--leaf);
+}
+
+.site-footer {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 1rem 1rem 1.75rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.site-footer p {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  column-gap: 1.35rem;
+  row-gap: 0.35rem;
+  margin: 0;
+}
+
+.site-footer-sep {
+  opacity: 0.45;
+  letter-spacing: 0.04em;
 }
 
 .layout {
