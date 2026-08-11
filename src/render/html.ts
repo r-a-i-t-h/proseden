@@ -125,6 +125,7 @@ function authLoggedIn(user: UserRecord, editHref: string): string {
   return `<span class="who">Signed in as <strong>${escapeHtml(user.username)}</strong></span>
     <a href="${escapeAttr(editHref)}" id="edit-enter">Edit</a>
     <a href="profile">Profile</a>
+    <a href="g">Groups</a>
     <a href="inv">Inventory</a>
     <form method="post" action="auth/logout" class="inline">
       <button type="submit">Log out</button>
@@ -299,11 +300,78 @@ export function renderProfileBodyHtml(opts: {
     </form>
     <h2>Share all my work</h2>
     <p class="muted">Applies to every scene and group you own.</p>
-    <form method="post" action="${escapeAttr(accessAction)}" class="profile-share">
-      ${renderJsonFieldHtml("Grants", "grantsJson", 6, opts.grants ?? [], GRANTS_EXAMPLE, "Array of { who, rights }.")}
-      ${renderJsonFieldHtml("Denies", "deniesJson", 4, opts.denies ?? [], DENIES_EXAMPLE, "Array of { who, rights? }. Omit rights to deny all.")}
-      <button type="submit">Save share-all</button>
+    ${renderAccessFormHtml(accessAction, opts.grants, opts.denies, "Save share-all")}
+`;
+}
+
+export interface GroupListItem {
+  id: string;
+  title: string;
+  owner: string;
+  sceneCount: number;
+}
+
+export function renderGroupsIndexHtml(opts: {
+  managed: GroupListItem[];
+  readable: GroupListItem[];
+}): string {
+  return `<h1>Groups</h1>
+    <p class="muted">Rights on a group apply to every scene in it.</p>
+    ${renderGroupListSection("Groups you manage", opts.managed)}
+    ${renderGroupListSection("Other groups you can see", opts.readable)}
+    <h2>New group</h2>
+    <form method="post" action="g" class="profile-form">
+      <label>Title <input name="title" required /></label>
+      <button type="submit">Create group</button>
     </form>`;
+}
+
+function renderGroupListSection(heading: string, groups: GroupListItem[]): string {
+  if (!groups.length) return "";
+  const items = groups
+    .map((group) => {
+      const scenes = group.sceneCount === 1 ? "1 scene" : `${group.sceneCount} scenes`;
+      return `<li><a href="g/${encodeURIComponent(group.id)}">${escapeHtml(group.title)}</a>
+        <span class="muted"> (#${escapeHtml(group.id)} · ${escapeHtml(group.owner)} · ${scenes})</span></li>`;
+    })
+    .join("");
+  return `<h2>${escapeHtml(heading)}</h2><ul class="link-list">${items}</ul>`;
+}
+
+export function renderGroupBodyHtml(opts: {
+  id: string;
+  title: string;
+  owner: string;
+  scenes: Array<{ id: number; title?: string }>;
+  grants?: Grant[];
+  denies?: Deny[];
+  canManage: boolean;
+  accessSummary: string;
+  message?: string;
+}): string {
+  const notice = opts.message
+    ? `<p class="notice" role="status">${escapeHtml(opts.message)}</p>`
+    : "";
+  const scenes = opts.scenes.length
+    ? `<ul class="link-list">${opts.scenes
+        .map((scene) => {
+          const label = scene.title?.trim() ? scene.title : `Scene ${scene.id}`;
+          return `<li><a href="s/${scene.id}">${escapeHtml(label)}</a> <span class="muted">#${scene.id}</span></li>`;
+        })
+        .join("")}</ul>`
+    : `<p class="muted">No scenes in this group yet. Assign one from Edit → Groups.</p>`;
+  const access = opts.canManage
+    ? `<h2>Access</h2>
+    <p class="muted">Anyone granted rights here can use them on every scene in this group.</p>
+    ${renderAccessFormHtml(`g/${encodeURIComponent(opts.id)}/access`, opts.grants, opts.denies, "Save group access")}`
+    : `<h2>Access</h2><pre class="desc">${escapeHtml(opts.accessSummary)}</pre>`;
+  return `<p class="crumb"><a href="g">← Groups</a></p>
+    <h1>${escapeHtml(opts.title)} <span class="sub">#${escapeHtml(opts.id)}</span></h1>
+    ${bylineHtml(opts.owner)}
+    ${notice}
+    <h2>Scenes</h2>
+    ${scenes}
+    ${access}`;
 }
 
 export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""): string {
@@ -324,6 +392,19 @@ export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""
 
 export function renderMessageBodyHtml(title: string, message: string): string {
   return `<h1>${escapeHtml(title)}</h1><div class="desc">${formatProse(message)}</div>`;
+}
+
+function renderAccessFormHtml(
+  action: string,
+  grants: Grant[] | undefined,
+  denies: Deny[] | undefined,
+  submit: string,
+): string {
+  return `<form method="post" action="${escapeAttr(action)}" class="access-form">
+      ${renderJsonFieldHtml("Grants", "grantsJson", 6, grants ?? [], GRANTS_EXAMPLE, "Array of { who, rights }.")}
+      ${renderJsonFieldHtml("Denies", "deniesJson", 4, denies ?? [], DENIES_EXAMPLE, "Array of { who, rights? }. Omit rights to deny all.")}
+      <button type="submit">${escapeHtml(submit)}</button>
+    </form>`;
 }
 
 function renderJsonFieldHtml(

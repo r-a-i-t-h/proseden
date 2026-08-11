@@ -107,8 +107,9 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `POST` | `/s/:id/exits/delete` | Remove one or more exits (`exitId` / `exitIds`) |
 | `GET`/`PUT`/`POST` | `/s/:id/access` | Scene grants/denies (manage) |
 | `GET`/`PUT`/`POST` | `/u/:username/access` | User-level share-all (self or manager) |
+| `GET` | `/g` | Groups you can manage or see (auth) |
 | `POST` | `/g` | Create group (auth) |
-| `GET`/`PUT`/`POST` | `/g/:id` | Group details / update (manage) |
+| `GET`/`PUT`/`POST` | `/g/:id` | Group page; manage ACL if you have manage |
 | `GET`/`PUT`/`POST` | `/g/:id/access` | Group grants/denies |
 | `POST` | `/g/:id/scenes` | Add scene to group |
 | `POST` | `/s/:id/group` | Assign/clear scene group |

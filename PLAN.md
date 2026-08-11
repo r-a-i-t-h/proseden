@@ -73,7 +73,7 @@ flowchart TD
 - Scene `groupId` set exclusively (clear old group membership on move)
 - Group rights feed `canRead` / `canEdit` / `canManage`
 - APIs: `POST /g`, `GET/PUT /g/:id`, `POST /g/:id/scenes`, access endpoints
-- Sidebar: assign/remove current scene’s group (owner/manage)
+- Sidebar: assign/remove current scene’s group (owner/manage); group ACL on `/g/:id`
 
 ### Phase 4 — Navigation ✅
 

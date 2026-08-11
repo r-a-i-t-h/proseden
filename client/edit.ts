@@ -649,6 +649,15 @@ function organiseTool(manage: ManageContext | undefined, inspector: HTMLElement)
       }
     });
     wrap.append(el("p", { class: "edit-kicker" }, "Scene group"), field("Group", groupSelect), assign);
+    if (scene.groupId) {
+      wrap.append(
+        el(
+          "p",
+          {},
+          el("a", { href: `g/${encodeURIComponent(scene.groupId)}` }, "Edit this group's access"),
+        ),
+      );
+    }
   }
 
   const newTitle = el("input", { name: "groupTitle" });

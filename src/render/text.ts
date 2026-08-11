@@ -131,6 +131,29 @@ export function renderProfileText(opts: {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+export function renderGroupsIndexText(
+  managed: Array<{ id: string; title: string; owner: string; sceneCount: number }>,
+  readable: Array<{ id: string; title: string; owner: string; sceneCount: number }>,
+  basePath = "",
+): string {
+  const lines = ["[Groups]", ""];
+  const pushList = (heading: string, groups: typeof managed) => {
+    if (!groups.length) return;
+    lines.push(heading);
+    for (const group of groups) {
+      lines.push(
+        `  ${group.id}. ${group.title} (${group.owner}, ${group.sceneCount} scenes)  ${basePath}/g/${group.id}`,
+      );
+    }
+    lines.push("");
+  };
+  pushList("Manage:", managed);
+  pushList("Also visible:", readable);
+  if (!managed.length && !readable.length) lines.push("(none)");
+  lines.push(`Create: POST ${basePath}/g  title`);
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
 export function renderInventoryText(items: ArtefactRecord[], basePath = ""): string {
   const lines = ["[Inventory]", ""];
   if (!items.length) {

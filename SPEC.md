@@ -152,8 +152,9 @@ Public spaces need no authentication. Private scenes require an authenticated
 reader with access (owner, grants including `"*"`, group/user-level share, or
 staff). Editing uses `PUT`/`POST` and always requires authentication with edit
 or manage rights. The HTML shell includes login/register and, when signed in, a
-profile page to change password and set share-all grants, plus a
-management sidebar for CMS actions including scene ACL.
+profile page to change password and set share-all grants, group pages
+(`/g`, `/g/:id`) for group ACL, plus a management sidebar for CMS
+actions including scene ACL.
 
 Artefacts are collected as inventory *links* to the original; collecting does
 not remove them from their home scene.

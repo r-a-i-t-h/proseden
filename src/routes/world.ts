@@ -23,6 +23,8 @@ import {
   escapeHtml,
   renderArtefactBodyHtml,
   renderHtmlPage,
+  renderGroupBodyHtml,
+  renderGroupsIndexHtml,
   renderInventoryBodyHtml,
   renderMessageBodyHtml,
   renderProfileBodyHtml,
@@ -31,6 +33,7 @@ import {
 import { formatProse } from "../render/prose.js";
 import {
   renderArtefactText,
+  renderGroupsIndexText,
   renderInventoryText,
   renderMessageText,
   renderProfileText,
@@ -504,6 +507,41 @@ function parseFromScene(c: Context): number | undefined {
 
 // --- groups ---
 
+worldRoutes.get("/g", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) {
+    return page(
+      c,
+      401,
+      "Groups",
+      renderMessageBodyHtml("Groups", "Log in to view your groups."),
+      renderMessageText("Groups", "Authentication required."),
+    );
+  }
+
+  const managed: Array<{ id: string; title: string; owner: string; sceneCount: number }> = [];
+  const readable: Array<{ id: string; title: string; owner: string; sceneCount: number }> = [];
+  for (const group of world.listGroups()) {
+    const item = {
+      id: group.id,
+      title: group.title,
+      owner: group.owner,
+      sceneCount: group.sceneIds.length,
+    };
+    if (canManageGroup(user, group, world)) managed.push(item);
+    else if (canReadGroup(user, group, world)) readable.push(item);
+  }
+
+  return page(
+    c,
+    200,
+    "Groups",
+    renderGroupsIndexHtml({ managed, readable }),
+    renderGroupsIndexText(managed, readable, c.get("assetBase")),
+  );
+});
+
 worldRoutes.post("/g", async (c) => {
   const world = c.get("world");
   const user = c.get("user");
@@ -539,15 +577,28 @@ worldRoutes.get("/g/:id", (c) => {
     "",
     formatAccessSummary(group.grants, group.denies),
   ].join("\n");
+  const manage = canManageGroup(user, group, world);
+  const scenes = group.sceneIds
+    .map((sceneId) => world.getScene(sceneId))
+    .filter((scene): scene is NonNullable<typeof scene> => !!scene)
+    .map((scene) => ({ id: scene.id, title: scene.title }));
+  const message = c.req.query("updated") ? "Group access saved." : undefined;
   return page(
     c,
     200,
     group.title,
-    renderMessageBodyHtml(group.title, summary),
+    renderGroupBodyHtml({
+      id: group.id,
+      title: group.title,
+      owner: group.owner,
+      scenes,
+      grants: group.grants,
+      denies: group.denies,
+      canManage: manage,
+      accessSummary: formatAccessSummary(group.grants, group.denies),
+      message,
+    }),
     renderMessageText(`Group ${group.id}`, summary),
-    {
-      kind: "home",
-    },
   );
 });
 
@@ -609,7 +660,7 @@ async function updateGroupAccess(c: Context) {
     }
     const updated = await world.updateGroupAccess(id, patch);
     if (wantsJson(c)) return c.json({ grants: updated.grants, denies: updated.denies });
-    return c.redirect(`${c.get("assetBase")}/g/${id}`);
+    return c.redirect(`${c.get("assetBase")}/g/${id}?updated=1`);
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Invalid access payload");
   }

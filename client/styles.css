@@ -408,7 +408,8 @@ button:hover {
   align-self: start;
 }
 
-.profile-share {
+.profile-share,
+.access-form {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -417,7 +418,8 @@ button:hover {
   margin: 0.75rem 0 2rem;
 }
 
-.profile-share button {
+.profile-share button,
+.access-form button {
   align-self: start;
 }
 
