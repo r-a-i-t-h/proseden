@@ -137,8 +137,6 @@ worldRoutes.get("/s/:id", (c) => {
       canOrganise: canOrganise(user, world),
       canDelete: manage || isModerator(user, world),
       isManager: isManager(user, world),
-      userGrants: user?.grants,
-      userDenies: user?.denies,
       groups,
       entranceGroups,
     },
@@ -217,8 +215,6 @@ worldRoutes.get("/a/:id", (c) => {
           canManage(user, home, world)),
       isManager: isManager(user, world),
       collected,
-      userGrants: user?.grants,
-      userDenies: user?.denies,
     },
   );
 });
@@ -235,16 +231,27 @@ worldRoutes.get("/profile", (c) => {
     );
   }
 
-  const message = c.req.query("updated") ? "Password updated." : undefined;
+  const message = c.req.query("updated")
+    ? "Password updated."
+    : c.req.query("shared")
+      ? "Share-all saved."
+      : undefined;
   return page(
     c,
     200,
     "Profile",
-    renderProfileBodyHtml({ username: user.username, message }),
+    renderProfileBodyHtml({
+      username: user.username,
+      message,
+      grants: user.grants,
+      denies: user.denies,
+    }),
     renderProfileText({
       username: user.username,
       message,
       basePath: c.get("assetBase"),
+      grants: user.grants,
+      denies: user.denies,
     }),
   );
 });
@@ -275,8 +282,6 @@ worldRoutes.get("/inv", (c) => {
     renderInventoryText(items, assetBase),
     {
       kind: "inventory",
-      userGrants: user.grants,
-      userDenies: user.denies,
       isManager: isManager(user, world),
     },
   );
@@ -463,6 +468,9 @@ async function updateUserAccess(c: Context) {
     }
     const updated = await world.updateUserAccess(username, patch);
     if (wantsJson(c)) return c.json({ grants: updated.grants, denies: updated.denies });
+    if (username === user.username) {
+      return c.redirect(`${c.get("assetBase")}/profile?shared=1`);
+    }
     return c.redirect(`${c.get("assetBase")}/`);
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Invalid access payload");
@@ -539,8 +547,6 @@ worldRoutes.get("/g/:id", (c) => {
     renderMessageText(`Group ${group.id}`, summary),
     {
       kind: "home",
-      userGrants: user?.grants,
-      userDenies: user?.denies,
     },
   );
 });
@@ -1106,8 +1112,6 @@ worldRoutes.get("/s/:id/history", async (c) => {
       scene,
       canManage: canManage(user, scene, world),
       isManager: isManager(user, world),
-      userGrants: user?.grants,
-      userDenies: user?.denies,
     },
   );
 });

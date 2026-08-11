@@ -43,7 +43,7 @@ APIs (auth required for mutations):
 
 - `GET/PUT /s/:id/access`, `GET/PUT /u/:username/access` (owner or manage)
 - Same for groups once they exist
-- Sidebar: grant/deny lists; “share all my work” on own profile
+- Sidebar: grant/deny lists; share-all on `/profile`
 
 ## Implementation phases
 

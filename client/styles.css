@@ -408,6 +408,19 @@ button:hover {
   align-self: start;
 }
 
+.profile-share {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  max-width: 28rem;
+  margin: 0.75rem 0 2rem;
+}
+
+.profile-share button {
+  align-self: start;
+}
+
 .notice {
   margin: 0.75rem 0 0;
   padding: 0.4rem 0.55rem;

@@ -31,8 +31,6 @@ interface ManageContext {
   canAddExit?: boolean;
   canOrganise?: boolean;
   canDelete?: boolean;
-  userGrants?: unknown;
-  userDenies?: unknown;
   groups?: Array<{ id: string; title: string }>;
   entranceGroups?: Array<{ id: string; title: string; entranceSceneId: number }>;
 }
@@ -71,7 +69,6 @@ type ToolId =
   | "exits"
   | "access"
   | "organise"
-  | "share"
   | "danger";
 
 function readBootstrap(): EditBootstrap | null {
@@ -269,8 +266,6 @@ function toolLabel(id: ToolId, manage?: ManageContext): string {
       return "Access";
     case "organise":
       return "Groups";
-    case "share":
-      return "Share-all";
     case "danger":
       return "Delete";
   }
@@ -284,7 +279,6 @@ function availableTools(manage?: ManageContext): ToolId[] {
   if (manage?.kind === "scene" && manage.canAddExit) tools.push("exits");
   if (manage?.kind === "scene" && manage.canManage) tools.push("access");
   if (manage?.kind === "scene" && (manage.canManage || manage.canOrganise)) tools.push("organise");
-  tools.push("share");
   if (manage?.canDelete) tools.push("danger");
   return tools;
 }
@@ -323,8 +317,6 @@ function toolView(id: ToolId, boot: EditBootstrap, inspector: HTMLElement): HTML
       return accessTool(manage, inspector);
     case "organise":
       return organiseTool(manage, inspector);
-    case "share":
-      return shareTool(boot, inspector);
     case "danger":
       return dangerTool(manage, inspector);
   }
@@ -725,30 +717,6 @@ function organiseTool(manage: ManageContext | undefined, inspector: HTMLElement)
   });
   wrap.append(el("p", { class: "edit-kicker" }, "New entrance group"), field("Title", egTitle), createEg);
   return wrap;
-}
-
-function shareTool(boot: EditBootstrap, inspector: HTMLElement): HTMLElement {
-  const username = boot.user?.username;
-  if (!username) return el("p", { class: "muted" }, "Sign in to share.");
-  const form = el("div", { class: "edit-fields" });
-  form.append(
-    el("p", { class: "muted" }, "Applies to every scene and group you own."),
-    jsonField("Grants", "grantsJson", 4, boot.manage?.userGrants ?? [], GRANTS_EXAMPLE, "Array of { who, rights }."),
-    jsonField("Denies", "deniesJson", 3, boot.manage?.userDenies ?? [], DENIES_EXAMPLE, "Array of { who, rights? }."),
-  );
-  const save = el("button", { type: "button" }, "Save share-all");
-  save.addEventListener("click", async () => {
-    try {
-      await apiJson("PUT", `u/${encodeURIComponent(username)}/access`, {
-        grantsJson: inputValue(form, "grantsJson"),
-        deniesJson: inputValue(form, "deniesJson"),
-      });
-      window.location.reload();
-    } catch (err) {
-      setStatus(inspector, err instanceof Error ? err.message : "Save failed");
-    }
-  });
-  return el("div", { class: "stack" }, el("p", { class: "edit-kicker" }, "Share all my work"), form, save);
 }
 
 function dangerTool(manage: ManageContext | undefined, inspector: HTMLElement): HTMLElement {

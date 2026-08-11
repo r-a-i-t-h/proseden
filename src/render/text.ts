@@ -1,4 +1,5 @@
-import type { ArtefactRecord, ExitRecord, SceneRecord } from "../model/types.js";
+import { formatAccessSummary } from "../access/acl.js";
+import type { ArtefactRecord, Deny, ExitRecord, Grant, SceneRecord } from "../model/types.js";
 
 export function renderSceneText(opts: {
   scene: SceneRecord;
@@ -106,7 +107,13 @@ export function renderArtefactText(opts: {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-export function renderProfileText(opts: { username: string; message?: string; basePath?: string }): string {
+export function renderProfileText(opts: {
+  username: string;
+  message?: string;
+  basePath?: string;
+  grants?: Grant[];
+  denies?: Deny[];
+}): string {
   const base = opts.basePath ?? "";
   const lines = ["[Profile]", "", `Signed in as ${opts.username}`, ""];
   if (opts.message) {
@@ -115,6 +122,12 @@ export function renderProfileText(opts: { username: string; message?: string; ba
   lines.push("Change password:");
   lines.push(`  POST ${base}/auth/password`);
   lines.push("  currentPassword, newPassword, confirmPassword");
+  lines.push("");
+  lines.push("Share-all (every scene and group you own):");
+  lines.push(`  POST ${base}/u/${opts.username}/access`);
+  lines.push("  grantsJson, deniesJson");
+  lines.push("");
+  lines.push(formatAccessSummary(opts.grants, opts.denies));
   return `${lines.join("\n").trimEnd()}\n`;
 }
 

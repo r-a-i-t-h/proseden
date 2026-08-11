@@ -49,6 +49,8 @@ describe("profile and password change", () => {
     const html = await res.text();
     expect(html).toContain("Change password");
     expect(html).toContain('action="auth/password"');
+    expect(html).toContain("Share all my work");
+    expect(html).toContain('action="u/alice/access"');
     expect(html).toContain('href="profile"');
     expect(html).not.toContain("passwordHash");
     expect(html).not.toContain("passwordSalt");
@@ -157,6 +159,26 @@ describe("profile and password change", () => {
       }),
     });
     expect(short.status).toBe(400);
+  });
+
+  it("saves share-all from the profile form and redirects back", async () => {
+    const res = await app().request("/u/alice/access", {
+      method: "POST",
+      headers: auth({ "Content-Type": "application/x-www-form-urlencoded" }),
+      body: new URLSearchParams({
+        grantsJson: JSON.stringify([{ who: "bob", rights: ["read"] }]),
+        deniesJson: "[]",
+      }),
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/profile?shared=1");
+    expect(world.getUser("alice")?.grants).toEqual([{ who: "bob", rights: ["read"] }]);
+
+    const page = await app().request("/profile?shared=1", {
+      headers: { Accept: "text/html", ...auth() },
+    });
+    expect(await page.text()).toContain("Share-all saved.");
   });
 
   it("redirects HTML password changes back to the profile", async () => {

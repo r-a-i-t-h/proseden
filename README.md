@@ -97,7 +97,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `GET` | `/s/:id/go/:exit` | Follow exit by id or nickname (access-checked) |
 | `GET` | `/a/:id` | Artefact |
 | `GET` | `/inv` | Inventory (auth) |
-| `GET` | `/profile` | Profile and password form (auth) |
+| `GET` | `/profile` | Profile, password, and share-all (auth) |
 | `POST` | `/auth/register` `/auth/login` `/auth/logout` | Session cookie + optional JSON token |
 | `POST` | `/auth/password` | Change password (auth); other sessions for that user are dropped |
 | `POST` | `/s` | Create scene (auth) |

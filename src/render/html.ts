@@ -1,4 +1,4 @@
-import type { ArtefactRecord, ExitRecord, SceneRecord, UserRecord } from "../model/types.js";
+import type { ArtefactRecord, Deny, ExitRecord, Grant, SceneRecord, UserRecord } from "../model/types.js";
 import { escapeHtml, formatProse } from "./prose.js";
 
 export { escapeHtml } from "./prose.js";
@@ -37,9 +37,6 @@ export interface ManageContext {
   canDelete?: boolean;
   isManager?: boolean;
   collected?: boolean;
-  /** Current user's share-all ACL (for sidebar). */
-  userGrants?: import("../model/types.js").Grant[];
-  userDenies?: import("../model/types.js").Deny[];
   groups?: Array<{ id: string; title: string }>;
   entranceGroups?: Array<{ id: string; title: string; entranceSceneId: number }>;
 }
@@ -264,13 +261,26 @@ export function renderArtefactBodyHtml(opts: {
     }`;
 }
 
+const GRANTS_EXAMPLE = `[
+  { "who": "visitor", "rights": ["read"] },
+  { "who": "*", "rights": ["read", "edit"] }
+]`;
+
+const DENIES_EXAMPLE = `[
+  { "who": "bob", "rights": ["edit"] },
+  { "who": "carol" }
+]`;
+
 export function renderProfileBodyHtml(opts: {
   username: string;
   message?: string;
+  grants?: Grant[];
+  denies?: Deny[];
 }): string {
   const notice = opts.message
     ? `<p class="notice" role="status">${escapeHtml(opts.message)}</p>`
     : "";
+  const accessAction = `u/${encodeURIComponent(opts.username)}/access`;
   return `<h1>Profile</h1>
     ${bylineHtml(opts.username)}
     ${notice}
@@ -286,6 +296,13 @@ export function renderProfileBodyHtml(opts: {
         <input name="confirmPassword" type="password" autocomplete="new-password" required minlength="6" />
       </label>
       <button type="submit">Update password</button>
+    </form>
+    <h2>Share all my work</h2>
+    <p class="muted">Applies to every scene and group you own.</p>
+    <form method="post" action="${escapeAttr(accessAction)}" class="profile-share">
+      ${renderJsonFieldHtml("Grants", "grantsJson", 6, opts.grants ?? [], GRANTS_EXAMPLE, "Array of { who, rights }.")}
+      ${renderJsonFieldHtml("Denies", "deniesJson", 4, opts.denies ?? [], DENIES_EXAMPLE, "Array of { who, rights? }. Omit rights to deny all.")}
+      <button type="submit">Save share-all</button>
     </form>`;
 }
 
@@ -307,6 +324,29 @@ export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""
 
 export function renderMessageBodyHtml(title: string, message: string): string {
   return `<h1>${escapeHtml(title)}</h1><div class="desc">${formatProse(message)}</div>`;
+}
+
+function renderJsonFieldHtml(
+  label: string,
+  name: string,
+  rows: number,
+  value: unknown,
+  example: string,
+  note: string,
+): string {
+  return `<div class="json-field">
+      <div class="json-field-label">
+        <span>${escapeHtml(label)}</span>
+        <details class="json-format-help">
+          <summary class="json-format-info" title="Example ${escapeAttr(label)}">i</summary>
+          <div class="json-format-example">
+            <p class="muted">${escapeHtml(note)}</p>
+            <pre>${escapeHtml(example)}</pre>
+          </div>
+        </details>
+      </div>
+      <textarea name="${escapeAttr(name)}" rows="${rows}">${escapeHtml(JSON.stringify(value, null, 2))}</textarea>
+    </div>`;
 }
 
 function bylineHtml(owner: string): string {
