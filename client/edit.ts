@@ -194,7 +194,7 @@ function mount(boot: EditBootstrap): void {
 
   const enter = document.getElementById("edit-enter");
   if (enter instanceof HTMLAnchorElement) {
-    enter.textContent = "Done";
+    enter.textContent = "View";
     enter.href = boot.readHref;
     enter.id = "edit-leave";
     enter.addEventListener("click", (event) => {
@@ -211,22 +211,24 @@ function mount(boot: EditBootstrap): void {
   const nav = el("nav", { class: "edit-tools", "aria-label": "Editor tools" });
   const panel = el("div", { class: "edit-panel" });
 
-  const done = el("button", { type: "button", class: "edit-tool-btn" }, "Done");
-  done.addEventListener("click", () => leaveEditMode(boot.readHref));
-  const newBtn = el("button", { type: "button", class: "edit-tool-btn" }, "New scene");
-  newBtn.addEventListener("click", () => selectTool("new"));
-  toolbar.append(
-    done,
-    newBtn,
-    sceneSwitcher(boot.ownedScenes, manage),
-    el("a", { class: "edit-tool-link", href: "g" }, "Groups"),
-  );
+  const links = el("div", { class: "edit-toolbar-links" });
+  links.append(el("a", { class: "edit-tool-link", href: "g" }, "Groups"));
   if (boot.isManager) {
-    toolbar.append(
+    links.append(
       el("a", { class: "edit-tool-link", href: "admin" }, "Admin"),
       el("a", { class: "edit-tool-link", href: "staff" }, "Staff"),
     );
   }
+
+  const sceneTools = el("div", { class: "edit-toolbar-scenes" });
+  const newBtn = el(
+    "button",
+    { type: "button", class: "edit-tool-btn edit-new-scene", title: "New scene", "aria-label": "New scene" },
+    "+",
+  );
+  newBtn.addEventListener("click", () => selectTool("new"));
+  sceneTools.append(sceneSwitcher(boot.ownedScenes, manage), newBtn);
+  toolbar.append(links, sceneTools);
 
   const flash = sessionStorage.getItem(FLASH_KEY);
   if (flash) {
@@ -268,9 +270,9 @@ function toolLabel(id: ToolId, manage?: ManageContext): string {
     case "page":
       return manage?.kind === "artefact" ? "Artefact" : "Page";
     case "new":
-      return "New scene";
+      return "+ Scene";
     case "artefact":
-      return "New artefact";
+      return "+ Artefact";
     case "exits":
       return "Exits";
     case "access":
@@ -344,7 +346,7 @@ function sceneEditor(manage: ManageContext | undefined, inspector: HTMLElement):
   form.append(
     field("Title", title),
     field("Body", body),
-    jsonField("Details", "detailsJson", 4, scene.details, DETAILS_EXAMPLE, "Object of named closer-look texts."),
+    jsonField("Details", "detailsJson", 10, scene.details, DETAILS_EXAMPLE, "Object of named closer-look texts."),
     el(
       "label",
       { class: "edit-check" },
@@ -409,10 +411,10 @@ function artefactEditor(manage: ManageContext, inspector: HTMLElement): HTMLElem
   const form = el("div", { class: "edit-fields" });
   form.append(
     field("Title", el("input", { name: "title", value: artefact.title ?? "" })),
-    field("Body", el("textarea", { name: "body", rows: "8", required: true }, artefact.body)),
+    field("Body", el("textarea", { name: "body", rows: "10", required: true }, artefact.body)),
     field("Home scene", el("input", { name: "homeSceneId", type: "number", value: String(artefact.homeSceneId) })),
     field("Tags", el("input", { name: "tags", value: artefact.tags.join(", ") })),
-    jsonField("Details", "detailsJson", 4, artefact.details, DETAILS_EXAMPLE, "Object of named closer-look texts."),
+    jsonField("Details", "detailsJson", 10, artefact.details, DETAILS_EXAMPLE, "Object of named closer-look texts."),
     el(
       "label",
       { class: "edit-check" },
@@ -451,7 +453,7 @@ function newSceneTool(manage: ManageContext | undefined, inspector: HTMLElement)
   const form = el("div", { class: "edit-fields" });
   form.append(
     field("Title", el("input", { name: "title" })),
-    field("Body", el("textarea", { name: "body", rows: "5", required: true })),
+    field("Body", el("textarea", { name: "body", rows: "10", required: true })),
     el(
       "label",
       { class: "edit-check" },
@@ -517,7 +519,7 @@ function newArtefactTool(manage: ManageContext | undefined, inspector: HTMLEleme
   const form = el("div", { class: "edit-fields" });
   form.append(
     field("Title", el("input", { name: "title" })),
-    field("Body", el("textarea", { name: "body", rows: "5", required: true })),
+    field("Body", el("textarea", { name: "body", rows: "10", required: true })),
     field("Tags", el("input", { name: "tags", placeholder: "comma separated" })),
   );
   const create = el("button", { type: "button" }, "Create artefact");
@@ -614,8 +616,8 @@ function accessTool(manage: ManageContext | undefined, inspector: HTMLElement): 
   const form = el("div", { class: "edit-fields" });
   form.append(
     el("p", { class: "muted" }, "who + rights (read/edit/manage). Use * for everyone."),
-    jsonField("Grants", "grantsJson", 5, scene.grants ?? [], GRANTS_EXAMPLE, "Array of { who, rights }."),
-    jsonField("Denies", "deniesJson", 4, scene.denies ?? [], DENIES_EXAMPLE, "Array of { who, rights? }. Omit rights to deny all."),
+    jsonField("Grants", "grantsJson", 10, scene.grants ?? [], GRANTS_EXAMPLE, "Array of { who, rights }."),
+    jsonField("Denies", "deniesJson", 10, scene.denies ?? [], DENIES_EXAMPLE, "Array of { who, rights? }. Omit rights to deny all."),
   );
   const save = el("button", { type: "button" }, "Save access");
   save.addEventListener("click", async () => {

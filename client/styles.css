@@ -45,7 +45,7 @@ a:hover {
 }
 
 body.is-editing .app {
-  width: min(1240px, calc(100% - 2rem));
+  width: min(1280px, calc(100% - 2rem));
 }
 
 .top {
@@ -83,6 +83,17 @@ body.is-editing .app {
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: end;
+}
+
+.travel-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.travel-form input[name="to"] {
+  width: 5.5rem;
 }
 
 label {
@@ -157,7 +168,8 @@ button:hover {
 }
 
 .layout.with-manage {
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-columns: minmax(0, 1fr) minmax(400px, 480px);
+  gap: 1.25rem;
 }
 
 @media (max-width: 860px) {
@@ -306,19 +318,37 @@ button:hover {
   border: 1px solid var(--line);
 }
 
+.edit-toolbar-links,
+.edit-toolbar-scenes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.edit-toolbar-scenes {
+  margin-left: auto;
+  gap: 0.35rem;
+}
+
 .edit-tool-btn,
 .edit-toolbar button {
-  font-size: 0.9rem;
+  font-size: inherit;
+}
+
+.edit-new-scene {
+  padding: 0.25rem 0.55rem;
+  line-height: 1;
+  font-weight: 600;
 }
 
 .edit-tool-link {
-  font-size: 0.9rem;
+  font-size: inherit;
 }
 
 .edit-switcher {
-  margin-left: auto;
   min-width: 10rem;
-  font-size: 0.9rem;
+  font-size: inherit;
 }
 
 .edit-inspector {
@@ -332,26 +362,40 @@ button:hover {
 
 .edit-tools {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
+  flex-wrap: nowrap;
+  gap: 0.65rem;
   margin: 0 0 0.75rem;
   padding-bottom: 0.65rem;
   border-bottom: 1px solid var(--line);
 }
 
-.edit-tool-tab {
-  background: transparent;
-  color: var(--moss);
-  border-color: var(--line);
-  padding: 0.25rem 0.5rem;
-  font-size: 0.82rem;
-}
-
+.edit-tool-tab,
 .edit-tool-tab:hover,
 .edit-tool-tab.is-active {
-  background: var(--moss);
-  color: #f4f8f4;
-  border-color: var(--moss);
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.edit-tool-tab {
+  color: var(--leaf);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.edit-tool-tab:hover {
+  color: var(--ember);
+}
+
+.edit-tool-tab.is-active {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .edit-kicker {

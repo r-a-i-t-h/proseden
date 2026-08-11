@@ -24,7 +24,7 @@ export interface HtmlShellOptions {
   isManager?: boolean;
   /** Relative href that adds `?edit` (signed-in Edit control). */
   editHref?: string;
-  /** Relative href with `?edit` removed (Done). */
+  /** Relative href with `?edit` removed (View). */
   readHref?: string;
 }
 
@@ -450,8 +450,8 @@ function renderAccessFormHtml(
   submit: string,
 ): string {
   return `<form method="post" action="${escapeAttr(action)}" class="access-form">
-      ${renderJsonFieldHtml("Grants", "grantsJson", 6, grants ?? [], GRANTS_EXAMPLE, "Array of { who, rights }.")}
-      ${renderJsonFieldHtml("Denies", "deniesJson", 4, denies ?? [], DENIES_EXAMPLE, "Array of { who, rights? }. Omit rights to deny all.")}
+      ${renderJsonFieldHtml("Grants", "grantsJson", 10, grants ?? [], GRANTS_EXAMPLE, "Array of { who, rights }.")}
+      ${renderJsonFieldHtml("Denies", "deniesJson", 10, denies ?? [], DENIES_EXAMPLE, "Array of { who, rights? }. Omit rights to deny all.")}
       <button type="submit">${escapeHtml(submit)}</button>
     </form>`;
 }
