@@ -30,6 +30,7 @@ Environment:
 | `PROSEDEN_BASE_PATH` | _(empty)_ | URL prefix for subdirectory deploy, e.g. `proseden` or `worlds/alpha` |
 | `PROSEDEN_MANAGERS` | _(empty)_ | Comma-separated usernames granted `manager` on boot (may pre-provision names not yet registered) |
 | `PROSEDEN_SECURE_COOKIES` | _(empty)_ | Set `1` to mark session cookies `Secure` (also on when `NODE_ENV=production`) |
+| `PROSEDEN_BACKUP` | sibling `backup/` of the data dir | Timestamped `data/` archives (Admin + `proseden-update`) |
 
 Seed login: **gardener** / **garden**. Change it from **Profile** after you log in.
 
@@ -121,7 +122,10 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `DELETE`/`POST` | `/a/:id/delete` | Delete artefact (owner/manage/moderator) |
 | `GET` | `/staff` | List staff roles (manager) |
 | `PUT`/`POST` | `/staff/:username` | Set roles (manager) |
-| `GET` | `/admin` | Admin endpoint index (manager) |
+| `GET` | `/admin` | Admin: backups list + endpoint index (manager) |
+| `POST` | `/admin/backup` | Archive `data/` into `backup/` (manager) |
+| `GET` | `/admin/backup/:name` | Download a data archive (manager) |
+| `POST` | `/admin/backup/:name/delete` | Delete a data archive (manager) |
 | `POST` | `/admin/reload` | Reload in-memory world cache from disk (manager) |
 | `GET` | `/s/:id/history` | Edit log (readers) |
 | `GET` | `/s/:id/history/:version` | View retained snapshot |
@@ -146,7 +150,11 @@ data/
   scenes/<id>.md
   scenes/<id>.exits.json
   artefacts/<id>.md
+backup/
+  2026-08-11T201530Z.tar.gz   # data/ only; sibling of data/, never nested inside it
 ```
+
+Managers can create, download, and delete archives from **Admin**. `proseden-update` writes one snapshot before it touches the app. See [DEPLOY.md](DEPLOY.md) for the SSH one-liner and restore notes.
 
 Prose files use YAML frontmatter plus `## detail:<slug>` sections. Hash-leading lines in body/detail text are saved escaped (`\#`, `\##`) so they cannot be mistaken for section markers.
 

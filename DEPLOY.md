@@ -136,6 +136,7 @@ They do not share files. You can upgrade `test` and leave `www` alone.
   current -> releases/v0.1.0     # symlink to the running app
   releases/v0.1.0/               # unpacked tarball (dist, public, seed, node_modules)
   data/                          # live world — updates never replace this
+  backup/                        # timestamped data/ tarballs (not the app)
   env                            # PORT, PROSEDEN_* — edits survive updates
 
 /etc/systemd/system/proseden-www.service
@@ -180,12 +181,46 @@ sudo proseden-update --name www --version v0.2.0
 
 The updater:
 
+- **First** archives this instance’s `data/` to `backup/YYYY-MM-DDTHHMMSSZ.tar.gz` (aborts if that fails)
 - Downloads that release into `releases/<tag>/` for **that instance only**
 - Flips `current`
 - Runs `deploy/post-update.sh` against **this** instance’s `data/` (today a no-op; later releases may migrate files here)
 - Restarts `proseden-<name>`
 - Does **not** delete or re-seed `data/`, and does **not** rewrite `env`
 - Keeps one previous release folder so you can roll back by pointing `current` back and restarting
+
+### Data backups
+
+Archives are **data only** (never the app). They accumulate under `backup/`; nothing deletes them automatically.
+
+**From Admin** (signed in as a manager): open `/admin`, **Backup now**, then Download or Delete.
+
+**From SSH** (same files the Admin page lists):
+
+```bash
+sudo /opt/proseden/www/current/deploy/backup-data.sh
+# or, if that script is not on the running release yet:
+sudo mkdir -p /opt/proseden/www/backup
+sudo tar -czf /opt/proseden/www/backup/$(date -u +%Y-%m-%dT%H%M%SZ).tar.gz \
+  -C /opt/proseden/www/data .
+sudo chown -R proseden:proseden /opt/proseden/www/backup
+```
+
+Set `PROSEDEN_DATA` (and optionally `PROSEDEN_BACKUP`) when calling `backup-data.sh` if this instance’s `env` uses non-default paths. The helper defaults `PROSEDEN_BACKUP` to the `backup` sibling of the data directory.
+
+**Restore** is not in the web UI. Stop the service, replace `data/` from an archive, start again:
+
+```bash
+sudo systemctl stop proseden-www
+sudo rm -rf /opt/proseden/www/data
+sudo mkdir /opt/proseden/www/data
+sudo tar -xzf /opt/proseden/www/backup/2026-08-11T201530Z.tar.gz \
+  -C /opt/proseden/www/data
+sudo chown -R proseden:proseden /opt/proseden/www/data
+sudo systemctl start proseden-www
+```
+
+Rolling the app `current` symlink back does not undo a data migration. Restore a pre-update archive if the files in `data/` no longer match the older app.
 
 ## 9. Path mounts (optional): `proseden.co.uk/raith`
 

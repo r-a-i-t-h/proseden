@@ -33,7 +33,7 @@ describe("admin reload", () => {
     const sessions = new SessionStore();
     managerToken = sessions.create("alice").token;
     userToken = sessions.create("bob").token;
-    app = createApp({ world, sessions });
+    app = createApp({ world, sessions, backupDir: join(dataDir, "_backups") });
   });
 
   afterEach(async () => {
@@ -101,6 +101,7 @@ describe("admin reload", () => {
     expect(body.endpoints).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ method: "POST", path: "/admin/reload" }),
+        expect.objectContaining({ method: "POST", path: "/admin/backup" }),
       ]),
     );
   });

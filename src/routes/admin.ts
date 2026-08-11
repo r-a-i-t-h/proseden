@@ -1,18 +1,43 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { readFile } from "node:fs/promises";
 import { isManager } from "../access/permissions.js";
 import { apiError, ownedSceneLinksFor, wantsJson } from "../http.js";
 import { negotiateFormat } from "../render/format.js";
-import { editModeHrefs, renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
+import { editModeHrefs, escapeHtml, renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
+import {
+  backupPath,
+  createDataBackup,
+  deleteBackup,
+  listBackups,
+  type BackupInfo,
+} from "../store/backup.js";
 
 export const adminRoutes = new Hono();
 
-adminRoutes.get("/", (c) => {
+adminRoutes.get("/", async (c) => {
   const denied = requireManager(c);
   if (denied) return denied;
 
+  const backups = await listBackups(c.get("backupDir"));
+  const notice = adminNotice(c.req.query("backed-up"), c.req.query("deleted"));
   const endpoints = [
+    {
+      method: "POST",
+      path: "/admin/backup",
+      description: "Archive data/ into backup/",
+    },
+    {
+      method: "GET",
+      path: "/admin/backup/:name",
+      description: "Download a data archive",
+    },
+    {
+      method: "POST",
+      path: "/admin/backup/:name/delete",
+      description: "Delete a data archive",
+    },
     {
       method: "POST",
       path: "/admin/reload",
@@ -20,22 +45,14 @@ adminRoutes.get("/", (c) => {
     },
   ];
 
-  if (wantsJson(c)) return c.json({ ok: true, endpoints });
-  const lines = endpoints.map((e) => `${e.method} ${e.path} — ${e.description}`).join("\n");
+  if (wantsJson(c)) return c.json({ ok: true, endpoints, backups });
   if (negotiateFormat(c) === "text") {
-    return c.text(renderMessageText("Admin", lines));
+    return c.text(renderMessageText("Admin", formatAdminText(endpoints, backups)));
   }
-  const list = endpoints
-    .map((e) => `<li><code>${e.method} ${e.path}</code> — ${e.description}</li>`)
-    .join("");
   return c.html(
     renderHtmlPage({
       title: "Admin",
-      bodyHtml: `<h1>Admin</h1>
-        <ul class="link-list">${list}</ul>
-        <form method="post" action="admin/reload" class="stack">
-          <button type="submit">Reload world from disk</button>
-        </form>`,
+      bodyHtml: renderAdminHtml(endpoints, backups, notice),
       user: c.get("user"),
       assetBase: c.get("assetBase"),
       ownedScenes: ownedSceneLinksFor(c),
@@ -43,6 +60,73 @@ adminRoutes.get("/", (c) => {
       ...editModeHrefs(c.req.url, c.get("assetBase")),
     }),
   );
+});
+
+adminRoutes.post("/backup", async (c) => {
+  const denied = requireManager(c);
+  if (denied) return denied;
+
+  const world = c.get("world");
+  let created: BackupInfo;
+  try {
+    created = await createDataBackup(world.dataDir, c.get("backupDir"));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Backup failed";
+    return apiError(c, 400, message, { isManager: true });
+  }
+
+  if (wantsJson(c)) return c.json({ ok: true, ...created });
+  const message = `Archived data to ${created.name} (${formatBytes(created.size)}).`;
+  if (negotiateFormat(c) === "text") {
+    return c.text(renderMessageText("Backup", message));
+  }
+  return c.redirect(`${c.get("assetBase")}/admin?backed-up=${encodeURIComponent(created.name)}`);
+});
+
+adminRoutes.get("/backup/:name", async (c) => {
+  const denied = requireManager(c);
+  if (denied) return denied;
+
+  const name = c.req.param("name");
+  const path = backupPath(c.get("backupDir"), name);
+  if (!path) return apiError(c, 400, "Invalid backup name", { isManager: true });
+
+  let bytes: Buffer;
+  try {
+    bytes = await readFile(path);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return apiError(c, 404, "Backup not found", { isManager: true });
+    throw err;
+  }
+
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/gzip",
+      "Content-Length": String(bytes.length),
+      "Content-Disposition": `attachment; filename="${name}"`,
+    },
+  });
+});
+
+adminRoutes.post("/backup/:name/delete", async (c) => {
+  const denied = requireManager(c);
+  if (denied) return denied;
+
+  const name = c.req.param("name");
+  if (!backupPath(c.get("backupDir"), name)) {
+    return apiError(c, 400, "Invalid backup name", { isManager: true });
+  }
+
+  const removed = await deleteBackup(c.get("backupDir"), name);
+  if (!removed) return apiError(c, 404, "Backup not found", { isManager: true });
+
+  if (wantsJson(c)) return c.json({ ok: true, deleted: name });
+  if (negotiateFormat(c) === "text") {
+    return c.text(renderMessageText("Backup", `Deleted ${name}.`));
+  }
+  return c.redirect(`${c.get("assetBase")}/admin?deleted=${encodeURIComponent(name)}`);
 });
 
 adminRoutes.post("/reload", async (c) => {
@@ -86,4 +170,80 @@ function requireManager(c: Context) {
     return apiError(c, user ? 403 : 401, "Manager role required", { isManager: false });
   }
   return null;
+}
+
+function formatAdminText(
+  endpoints: Array<{ method: string; path: string; description: string }>,
+  backups: BackupInfo[],
+): string {
+  const lines = endpoints.map((e) => `${e.method} ${e.path} — ${e.description}`);
+  lines.push("", "Backups:");
+  if (!backups.length) lines.push("  (none)");
+  else {
+    for (const b of backups) {
+      lines.push(`  ${b.name}  ${formatBytes(b.size)}  ${b.mtime}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function adminNotice(backedUp?: string, deleted?: string): string {
+  if (backedUp) return `Archived data to ${backedUp}.`;
+  if (deleted) return `Deleted ${deleted}.`;
+  return "";
+}
+
+function renderAdminHtml(
+  endpoints: Array<{ method: string; path: string; description: string }>,
+  backups: BackupInfo[],
+  notice = "",
+): string {
+  const list = endpoints
+    .map((e) => `<li><code>${escapeHtml(e.method)} ${escapeHtml(e.path)}</code> — ${escapeHtml(e.description)}</li>`)
+    .join("");
+
+  const rows = backups.length
+    ? backups
+        .map((b) => {
+          const href = `admin/backup/${encodeURIComponent(b.name)}`;
+          return `<tr>
+            <td><code>${escapeHtml(b.name)}</code></td>
+            <td>${escapeHtml(formatBytes(b.size))}</td>
+            <td>${escapeHtml(b.mtime)}</td>
+            <td class="backup-actions">
+              <a href="${href}">Download</a>
+              <form method="post" action="${href}/delete" class="inline">
+                <button type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="4" class="muted">No archives yet.</td></tr>`;
+
+  const flash = notice ? `<p class="notice" role="status">${escapeHtml(notice)}</p>` : "";
+  return `<h1>Admin</h1>
+    ${flash}
+    <ul class="link-list">${list}</ul>
+    <h2>Data backups</h2>
+    <p class="muted">Archives <code>data/</code> only (not the app). Updates also write one here first.</p>
+    <form method="post" action="admin/backup" class="stack">
+      <button type="submit">Backup now</button>
+    </form>
+    <table class="backup-table">
+      <thead>
+        <tr><th>File</th><th>Size</th><th>Modified</th><th></th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <h2>World cache</h2>
+    <form method="post" action="admin/reload" class="stack">
+      <button type="submit">Reload world from disk</button>
+    </form>`;
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }

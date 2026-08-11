@@ -5,6 +5,7 @@ import { loadUser, sessionCookieNameForBase } from "./middleware/auth.js";
 import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { worldRoutes } from "./routes/world.js";
+import { defaultBackupDir } from "./store/backup.js";
 import type { WorldStore } from "./store/world.js";
 import "./context.js";
 
@@ -14,6 +15,8 @@ export function createApp(opts: {
   /** URL prefix with no trailing slash, e.g. "" or "/proseden" */
   assetBase?: string;
   staticRoot?: string;
+  /** Data archives directory (default: sibling `backup` of the world data dir). */
+  backupDir?: string;
 }) {
   const assetBase = normalizeBase(opts.assetBase ?? "");
   // strict:false so /proseden and /proseden/ both hit the app root under a base path
@@ -21,12 +24,14 @@ export function createApp(opts: {
     ? new Hono({ strict: false }).basePath(assetBase)
     : new Hono({ strict: false });
   const sessionCookieName = sessionCookieNameForBase(assetBase);
+  const backupDir = opts.backupDir ?? defaultBackupDir(opts.world.dataDir);
 
   app.use("*", async (c, next) => {
     c.set("world", opts.world);
     c.set("sessions", opts.sessions);
     c.set("assetBase", assetBase);
     c.set("sessionCookieName", sessionCookieName);
+    c.set("backupDir", backupDir);
     await next();
   });
 

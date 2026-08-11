@@ -17,6 +17,7 @@ Each process is a full Proseden server. They do not share memory, users, scenes,
 |---|---|
 | URL mount | `PROSEDEN_BASE_PATH` — e.g. `garden`, `attic`, or nested `worlds/alpha` |
 | World files | `PROSEDEN_DATA` — separate directory per instance |
+| Backups | `PROSEDEN_BACKUP` if data dirs are siblings (default is `../backup` next to the data dir, which would collide for `./data-garden` and `./data-attic`) |
 | Listen port | `PORT` — unique per process on the same machine |
 | Optional seed | `PROSEDEN_SEED` — only if an instance should boot from a non-default seed |
 
@@ -97,7 +98,7 @@ Point a browser at each mount (or at the proxy URLs) and confirm styles load and
 
 ## Checklist
 
-1. Unique `PROSEDEN_BASE_PATH` and `PROSEDEN_DATA` per instance.
+1. Unique `PROSEDEN_BASE_PATH` and `PROSEDEN_DATA` per instance (and `PROSEDEN_BACKUP` if data dirs share a parent).
 2. Unique `PORT` (or equivalent isolation) per process.
 3. Reverse proxy forwards the path **with** the prefix intact.
 4. Build client assets once (`npm run build` / `npm run build:client`) before starting.

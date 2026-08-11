@@ -10,6 +10,8 @@ export type AppVariables = {
   assetBase: string;
   /** Cookie name scoped to assetBase so multiple mounts on one domain do not clash */
   sessionCookieName: string;
+  /** Timestamped data archives; sibling of data/ by default */
+  backupDir: string;
 };
 
 declare module "hono" {

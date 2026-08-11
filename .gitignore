@@ -6,3 +6,4 @@ public/assets/
 *.log
 .env
 /data/
+/backup/

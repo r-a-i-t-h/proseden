@@ -69,6 +69,17 @@ need_cmd curl
 need_cmd tar
 need_cmd systemctl
 
+DATA=$(sed -n 's/^PROSEDEN_DATA=//p' "$ENV_FILE" | head -n 1)
+[ -n "$DATA" ] || DATA="$INSTANCE/data"
+BACKUP=$(sed -n 's/^PROSEDEN_BACKUP=//p' "$ENV_FILE" | head -n 1)
+[ -n "$BACKUP" ] || BACKUP="$INSTANCE/backup"
+
+APP_USER=proseden
+if [ -f "/etc/systemd/system/${SERVICE}.service" ]; then
+  u=$(sed -n 's/^User=//p' "/etc/systemd/system/${SERVICE}.service" | head -n 1)
+  [ -n "$u" ] && APP_USER=$u
+fi
+
 resolve_tag() {
   ver=$1
   if [ "$ver" != "latest" ]; then
@@ -120,6 +131,21 @@ fi
 
 info "upgrading $NAME: ${PREV:-unknown} → $TAG"
 
+# Snapshot data before downloading or swapping the app
+[ -d "$DATA" ] || err "data directory missing: $DATA"
+mkdir -p "$BACKUP"
+BACKUP_NAME=$(date -u +%Y-%m-%dT%H%M%SZ).tar.gz
+BACKUP_DEST="$BACKUP/$BACKUP_NAME"
+info "backing up data to $BACKUP_DEST"
+tar -czf "$BACKUP_DEST.partial" -C "$DATA" . || {
+  rm -f "$BACKUP_DEST.partial"
+  err "data backup failed — update aborted"
+}
+mv "$BACKUP_DEST.partial" "$BACKUP_DEST"
+if id "$APP_USER" >/dev/null 2>&1; then
+  chown -R "$APP_USER:$APP_USER" "$BACKUP"
+fi
+
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
@@ -152,19 +178,12 @@ fi
 
 ln -sfn "$REL_DIR" "$INSTANCE/current"
 
-APP_USER=proseden
-if [ -f "/etc/systemd/system/${SERVICE}.service" ]; then
-  u=$(sed -n 's/^User=//p' "/etc/systemd/system/${SERVICE}.service" | head -n 1)
-  [ -n "$u" ] && APP_USER=$u
-fi
 if id "$APP_USER" >/dev/null 2>&1; then
   chown -R "$APP_USER:$APP_USER" "$REL_DIR" "$INSTANCE/current"
 fi
 
-# Load PROSEDEN_DATA from env for the hook (do not source blindly)
-DATA=$(sed -n 's/^PROSEDEN_DATA=//p' "$ENV_FILE" | head -n 1)
-[ -n "$DATA" ] || DATA="$INSTANCE/data"
 export PROSEDEN_DATA=$DATA
+export PROSEDEN_BACKUP=$BACKUP
 export PROSEDEN_SEED=$INSTANCE/current/seed
 
 HOOK="$INSTANCE/current/deploy/post-update.sh"
