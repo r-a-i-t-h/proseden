@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Pack tarball
+        run: npm run pack
+        env:
+          VERSION: ${{ github.ref_name }}
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist-release/proseden.tar.gz \
+            dist-release/proseden-${GITHUB_REF_NAME}.tar.gz \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

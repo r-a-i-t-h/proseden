@@ -1,5 +1,7 @@
 # Hosting multiple Proseden instances on one domain
 
+For a full VPS walkthrough (installer, systemd, nginx `include`, updates) see [DEPLOY.md](DEPLOY.md). This page is the application-level contract: unique data dirs, unique ports, keep the URL prefix.
+
 Proseden can run several independent worlds under one hostname, each on its own URL prefix and data directory. Typical layout:
 
 | Public URL | Process | Data |

@@ -8,6 +8,7 @@
     "build": "vite build && tsc -p tsconfig.build.json",
     "build:client": "vite build",
     "start": "node dist/server.js",
+    "pack": "sh scripts/pack-release.sh",
     "seed:user": "tsx scripts/make-seed-user.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

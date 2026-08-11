@@ -2,7 +2,7 @@
 
 A prose-driven textual world served over HTTP. Scenes and artefacts are plain descriptions with optional closer details. Public scenes are open to anyone; private scenes and edits require authentication.
 
-See [SPEC.md](SPEC.md) for the product vision, [NAVIGATION.md](NAVIGATION.md) for teleport vs exit navigation, and [MULTI_INSTANCE.md](MULTI_INSTANCE.md) for hosting several worlds under one domain. This README covers the v1 implementation.
+See [SPEC.md](SPEC.md) for the product vision, [NAVIGATION.md](NAVIGATION.md) for teleport vs exit navigation, and [MULTI_INSTANCE.md](MULTI_INSTANCE.md) for hosting several worlds under one domain. To put Proseden on a VPS behind nginx, follow **[DEPLOY.md](DEPLOY.md)** (installer, updates, DNS, HTTPS). This README covers the v1 implementation.
 
 ## Quick start
 
@@ -35,6 +35,17 @@ Seed login: **gardener** / **garden**
 
 Demo invite: **visitor** / **visit** can read the Private Study (`/s/3`) via a scene grant.
 
+## Deploy on a VPS
+
+Novice-friendly walkthrough (DNS, Node, nginx, two subdomains, HTTPS, updates): **[DEPLOY.md](DEPLOY.md)**.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/r-a-i-t-h/proseden/main/deploy/install.sh \
+  | sudo bash -s -- --name www --server-name www.proseden.co.uk --port 8787
+```
+
+Each instance keeps its own app copy and `data/` directory. `sudo proseden-update --name test` upgrades only that world. Releases are GitHub Release tarballs (`npm run pack` / tag `v*`), not a live git checkout.
+
 ### Subdirectory / multiple copies
 
 See [MULTI_INSTANCE.md](MULTI_INSTANCE.md) for reverse-proxy examples, cookie isolation, and a checklist. Short version:
@@ -45,6 +56,7 @@ PROSEDEN_BASE_PATH=attic  PROSEDEN_DATA=./data-attic  PORT=8788 npm start
 ```
 
 Proxy `/garden/` and `/attic/` to those processes **without stripping the prefix**.
+
 ## Playing with curl
 
 ```bash
