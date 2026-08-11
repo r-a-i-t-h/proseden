@@ -189,7 +189,6 @@ export function renderSceneBodyHtml(opts: {
   }
 
   const detailLinks = Object.keys(scene.details)
-    .sort()
     .map(
       (name) =>
         `<li><a href="s/${scene.id}?${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
@@ -205,7 +204,7 @@ export function renderSceneBodyHtml(opts: {
 
   const exitLinks = exits
     .map((e) => {
-      return `<li><a href="s/${scene.id}/go/${e.exitId}"><span class="exit-id">${e.exitId}</span> ${escapeHtml(e.nickname)}</a></li>`;
+      return `<li><a href="s/${scene.id}/go/${e.exitId}">${escapeHtml(e.nickname)}</a></li>`;
     })
     .join("");
 
@@ -265,7 +264,6 @@ export function renderArtefactBodyHtml(opts: {
   }
 
   const detailLinks = Object.keys(artefact.details)
-    .sort()
     .map(
       (name) =>
         `<li><a href="a/${artefact.id}?${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,

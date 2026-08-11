@@ -33,7 +33,7 @@ export function renderSceneText(opts: {
     lines.push("");
     lines.push(scene.body);
     lines.push("");
-    const detailNames = Object.keys(scene.details).sort();
+    const detailNames = Object.keys(scene.details);
     if (detailNames.length) {
       lines.push("Details:");
       for (const name of detailNames) {
@@ -53,7 +53,7 @@ export function renderSceneText(opts: {
       lines.push("Exits:");
       for (const e of exits) {
         lines.push(
-          `  ${e.exitId}. ${e.nickname}  ${base}/s/${scene.id}/go/${e.exitId}`,
+          `  - ${e.nickname}  ${base}/s/${scene.id}/go/${e.exitId}`,
         );
       }
       lines.push("");
@@ -97,7 +97,7 @@ export function renderArtefactText(opts: {
     lines.push("");
     lines.push(artefact.body);
     lines.push("");
-    const detailNames = Object.keys(artefact.details).sort();
+    const detailNames = Object.keys(artefact.details);
     if (detailNames.length) {
       lines.push("Details:");
       for (const name of detailNames) {

@@ -574,7 +574,6 @@ function exitsTool(manage: ManageContext | undefined, inspector: HTMLElement): H
           "label",
           { class: "exit-remove-item" },
           el("input", { type: "checkbox", name: "exitId", value: String(exit.exitId) }),
-          el("span", { class: "exit-id" }, String(exit.exitId)),
           ` ${exit.nickname} `,
           el("span", { class: "muted" }, `→ ${exit.toSceneId}`),
         ),

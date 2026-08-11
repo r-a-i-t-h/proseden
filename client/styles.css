@@ -275,13 +275,6 @@ button:hover {
   margin: 0.35rem 0;
 }
 
-.exit-id {
-  display: inline-block;
-  min-width: 1.4rem;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
 .exit-remove-item {
   display: flex;
   flex-direction: row;
