@@ -106,6 +106,18 @@ export function renderArtefactText(opts: {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+export function renderProfileText(opts: { username: string; message?: string; basePath?: string }): string {
+  const base = opts.basePath ?? "";
+  const lines = ["[Profile]", "", `Signed in as ${opts.username}`, ""];
+  if (opts.message) {
+    lines.push(opts.message, "");
+  }
+  lines.push("Change password:");
+  lines.push(`  POST ${base}/auth/password`);
+  lines.push("  currentPassword, newPassword, confirmPassword");
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
 export function renderInventoryText(items: ArtefactRecord[], basePath = ""): string {
   const lines = ["[Inventory]", ""];
   if (!items.length) {

@@ -107,7 +107,7 @@ Watch the output. A healthy finish looks like `health check ok` and `Instance 'w
 
 Open `http://www.proseden.co.uk/` in a browser (or `http://YOUR.VPS.IP/` if you have not set DNS yet — only if this is the default nginx site). You should see the entrance scene.
 
-Default seed login: **gardener** / **garden**. Change that password after you log in.
+Default seed login: **gardener** / **garden**. Change it from **Profile** after you log in.
 
 ## 5. Install a second instance (test)
 

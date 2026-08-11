@@ -587,6 +587,18 @@ export class WorldStore implements AccessWorld {
     return user;
   }
 
+  async updatePassword(
+    username: string,
+    passwordHash: string,
+    passwordSalt: string,
+  ): Promise<UserRecord> {
+    const existing = this.users.get(username);
+    if (!existing) throw new Error("User not found");
+    const updated: UserRecord = { ...existing, passwordHash, passwordSalt };
+    await this.saveUser(updated);
+    return updated;
+  }
+
   async createScene(input: {
     owner: string;
     title?: string;

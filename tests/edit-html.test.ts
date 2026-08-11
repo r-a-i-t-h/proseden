@@ -65,6 +65,7 @@ describe("read-only HTML vs edit bootstrap", () => {
     const html = await res.text();
     expect(html).toContain('id="edit-enter"');
     expect(html).toContain("s/1?edit");
+    expect(html).toContain('href="profile"');
     expect(html).not.toContain("data-method");
     expect(html).not.toContain("Create scene");
     expect(html).toContain('"username":"gardener"');

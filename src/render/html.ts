@@ -127,6 +127,7 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
 function authLoggedIn(user: UserRecord, editHref: string): string {
   return `<span class="who">Signed in as <strong>${escapeHtml(user.username)}</strong></span>
     <a href="${escapeAttr(editHref)}" id="edit-enter">Edit</a>
+    <a href="profile">Profile</a>
     <a href="inv">Inventory</a>
     <form method="post" action="auth/logout" class="inline">
       <button type="submit">Log out</button>
@@ -261,6 +262,31 @@ export function renderArtefactBodyHtml(opts: {
           ? `<form method="post" action="a/${artefact.id}/collect/drop" class="reader-action"><button type="submit">Remove from inventory</button></form>`
           : `<form method="post" action="a/${artefact.id}/collect" class="reader-action"><button type="submit">Collect</button></form>`
     }`;
+}
+
+export function renderProfileBodyHtml(opts: {
+  username: string;
+  message?: string;
+}): string {
+  const notice = opts.message
+    ? `<p class="notice" role="status">${escapeHtml(opts.message)}</p>`
+    : "";
+  return `<h1>Profile</h1>
+    ${bylineHtml(opts.username)}
+    ${notice}
+    <h2>Change password</h2>
+    <form method="post" action="auth/password" class="profile-form">
+      <label>Current password
+        <input name="currentPassword" type="password" autocomplete="current-password" required />
+      </label>
+      <label>New password
+        <input name="newPassword" type="password" autocomplete="new-password" required minlength="6" />
+      </label>
+      <label>Confirm new password
+        <input name="confirmPassword" type="password" autocomplete="new-password" required minlength="6" />
+      </label>
+      <button type="submit">Update password</button>
+    </form>`;
 }
 
 export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""): string {

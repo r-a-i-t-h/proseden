@@ -31,7 +31,7 @@ Environment:
 | `PROSEDEN_MANAGERS` | _(empty)_ | Comma-separated usernames granted `manager` on boot (may pre-provision names not yet registered) |
 | `PROSEDEN_SECURE_COOKIES` | _(empty)_ | Set `1` to mark session cookies `Secure` (also on when `NODE_ENV=production`) |
 
-Seed login: **gardener** / **garden**
+Seed login: **gardener** / **garden**. Change it from **Profile** after you log in.
 
 Demo invite: **visitor** / **visit** can read the Private Study (`/s/3`) via a scene grant.
 
@@ -97,7 +97,9 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `GET` | `/s/:id/go/:exit` | Follow exit by id or nickname (access-checked) |
 | `GET` | `/a/:id` | Artefact |
 | `GET` | `/inv` | Inventory (auth) |
+| `GET` | `/profile` | Profile and password form (auth) |
 | `POST` | `/auth/register` `/auth/login` `/auth/logout` | Session cookie + optional JSON token |
+| `POST` | `/auth/password` | Change password (auth); other sessions for that user are dropped |
 | `POST` | `/s` | Create scene (auth) |
 | `PUT`/`POST` | `/s/:id` | Update scene (owner) |
 | `POST` | `/s/:id/exits` | Add directed exit (manage origin, or any user from a public junction) |

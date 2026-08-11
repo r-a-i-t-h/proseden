@@ -29,4 +29,12 @@ export class SessionStore {
   destroy(token: string | undefined | null): void {
     if (token) this.sessions.delete(token);
   }
+
+  destroyAllForUser(username: string, exceptToken?: string): void {
+    for (const [token, session] of this.sessions) {
+      if (session.username === username && token !== exceptToken) {
+        this.sessions.delete(token);
+      }
+    }
+  }
 }

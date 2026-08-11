@@ -25,6 +25,7 @@ import {
   renderHtmlPage,
   renderInventoryBodyHtml,
   renderMessageBodyHtml,
+  renderProfileBodyHtml,
   renderSceneBodyHtml,
 } from "../render/html.js";
 import { formatProse } from "../render/prose.js";
@@ -32,6 +33,7 @@ import {
   renderArtefactText,
   renderInventoryText,
   renderMessageText,
+  renderProfileText,
   renderSceneText,
 } from "../render/text.js";
 
@@ -218,6 +220,32 @@ worldRoutes.get("/a/:id", (c) => {
       userGrants: user?.grants,
       userDenies: user?.denies,
     },
+  );
+});
+
+worldRoutes.get("/profile", (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return page(
+      c,
+      401,
+      "Profile",
+      renderMessageBodyHtml("Profile", "Log in to view your profile."),
+      renderMessageText("Profile", "Authentication required."),
+    );
+  }
+
+  const message = c.req.query("updated") ? "Password updated." : undefined;
+  return page(
+    c,
+    200,
+    "Profile",
+    renderProfileBodyHtml({ username: user.username, message }),
+    renderProfileText({
+      username: user.username,
+      message,
+      basePath: c.get("assetBase"),
+    }),
   );
 });
 
