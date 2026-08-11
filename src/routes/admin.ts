@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { isManager } from "../access/permissions.js";
+import { apiError, ownedSceneLinksFor, wantsJson } from "../http.js";
 import { negotiateFormat } from "../render/format.js";
 import { renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
@@ -80,40 +81,7 @@ function requireManager(c: Context) {
   const world = c.get("world");
   const user = c.get("user");
   if (!isManager(user, world)) {
-    return apiError(c, user ? 403 : 401, "Manager role required");
+    return apiError(c, user ? 403 : 401, "Manager role required", { isManager: false });
   }
   return null;
-}
-
-function apiError(c: Context, status: 401 | 403, message: string) {
-  if (wantsJson(c) || negotiateFormat(c) === "text") {
-    if (wantsJson(c)) return c.json({ error: message }, status);
-    return c.text(renderMessageText("Error", message), status);
-  }
-  return c.html(
-    renderHtmlPage({
-      title: "Error",
-      bodyHtml: renderMessageBodyHtml("Error", message),
-      user: c.get("user"),
-      assetBase: c.get("assetBase"),
-      ownedScenes: ownedSceneLinksFor(c),
-      isManager: false,
-    }),
-    status,
-  );
-}
-
-function ownedSceneLinksFor(c: Context) {
-  const user = c.get("user");
-  const world = c.get("world");
-  if (!user) return [];
-  return world.listScenesOwnedBy(user.username).map((s) => ({
-    id: s.id,
-    title: s.title,
-  }));
-}
-
-function wantsJson(c: Context): boolean {
-  const accept = c.req.header("accept") ?? "";
-  return accept.includes("application/json") || c.req.query("format") === "json";
 }

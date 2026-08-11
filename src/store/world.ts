@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, access, rename, unlink } from "node:fs/promises";
+import { cp, mkdir, readdir, access, rename, rm, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { AccessWorld } from "../access/permissions.js";
 import { normalizeDenies, normalizeGrants, stripLegacyInvites } from "../access/acl.js";
@@ -24,7 +24,13 @@ import { parseProseDocument, serializeProseDocument } from "./markdown.js";
 
 export class WorldStore implements AccessWorld {
   readonly dataDir: string;
-  meta: MetaFile = { nextSceneId: 1, nextArtefactId: 1, nextGroupId: 1, nextEntranceGroupId: 1 };
+  meta: MetaFile = {
+    nextSceneId: 1,
+    nextArtefactId: 1,
+    nextGroupId: 1,
+    nextEntranceGroupId: 1,
+    entranceSceneId: 1,
+  };
   users = new Map<string, UserRecord>();
   scenes = new Map<number, SceneRecord>();
   exits = new Map<number, ExitRecord[]>();
@@ -39,7 +45,13 @@ export class WorldStore implements AccessWorld {
 
   /** Drop in-memory state and re-read everything from disk (no seed copy). */
   async reload(): Promise<void> {
-    this.meta = { nextSceneId: 1, nextArtefactId: 1, nextGroupId: 1, nextEntranceGroupId: 1 };
+    this.meta = {
+      nextSceneId: 1,
+      nextArtefactId: 1,
+      nextGroupId: 1,
+      nextEntranceGroupId: 1,
+      entranceSceneId: 1,
+    };
     this.staff = { roles: {} };
     this.users.clear();
     this.scenes.clear();
@@ -74,15 +86,16 @@ export class WorldStore implements AccessWorld {
     if (await exists(staffPath)) {
       this.staff = normalizeStaff(await readJson<Record<string, unknown>>(staffPath));
     }
-    const bootstrapped = this.applyManagerBootstrap();
-    if (bootstrapped || !(await exists(staffPath))) {
-      await this.saveStaff();
-    }
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".json")) {
       const raw = await readJson<Record<string, unknown>>(join(this.dataDir, "users", file));
       const user = normalizeUser(raw);
       this.users.set(user.username, user);
+    }
+
+    const bootstrapped = this.applyManagerBootstrap();
+    if (bootstrapped || !(await exists(staffPath))) {
+      await this.saveStaff();
     }
 
     for (const file of await listFiles(join(this.dataDir, "scenes"), ".md")) {
@@ -243,6 +256,7 @@ export class WorldStore implements AccessWorld {
   }): Promise<GroupRecord> {
     const id = String(this.meta.nextGroupId ?? 1);
     this.meta.nextGroupId = (this.meta.nextGroupId ?? 1) + 1;
+    await this.saveMeta();
     const group: GroupRecord = {
       id,
       owner: input.owner,
@@ -253,7 +267,6 @@ export class WorldStore implements AccessWorld {
       createdAt: nowIso(),
     };
     await this.saveGroup(group);
-    await this.saveMeta();
     return group;
   }
 
@@ -329,6 +342,7 @@ export class WorldStore implements AccessWorld {
     if (!this.scenes.has(input.entranceSceneId)) throw new Error("Entrance scene not found");
     const id = String(this.meta.nextEntranceGroupId ?? 1);
     this.meta.nextEntranceGroupId = (this.meta.nextEntranceGroupId ?? 1) + 1;
+    await this.saveMeta();
     const sceneIds = [...new Set([input.entranceSceneId, ...(input.sceneIds ?? [])])];
     const group: EntranceGroupRecord = {
       id,
@@ -344,7 +358,6 @@ export class WorldStore implements AccessWorld {
         await this.saveScene({ ...scene, entranceGroupId: id });
       }
     }
-    await this.saveMeta();
     return group;
   }
 
@@ -381,13 +394,6 @@ export class WorldStore implements AccessWorld {
     const updated: SceneRecord = { ...scene, entranceGroupId };
     await this.saveScene(updated);
     return updated;
-  }
-
-  async updateSceneFlags(
-    id: number,
-    patch: Partial<Pick<SceneRecord, "isJunction" | "visibility" | "title" | "body" | "details">>,
-  ): Promise<SceneRecord> {
-    return this.updateScene(id, patch);
   }
 
   findExit(fromSceneId: number, exitKey: string): ExitRecord | undefined {
@@ -456,24 +462,56 @@ export class WorldStore implements AccessWorld {
     return this.staff;
   }
 
+  worldEntranceSceneId(): number {
+    const id = this.meta.entranceSceneId ?? 1;
+    return Number.isFinite(id) && id > 0 ? id : 1;
+  }
+
   async deleteScene(id: number): Promise<void> {
-    if (!this.scenes.has(id)) throw new Error("Scene not found");
-    const groupId = this.scenes.get(id)?.groupId;
-    const egId = this.scenes.get(id)?.entranceGroupId;
+    const scene = this.scenes.get(id);
+    if (!scene) throw new Error("Scene not found");
+    if (id === this.worldEntranceSceneId()) {
+      throw new Error("Cannot delete the world entrance scene");
+    }
+
+    for (const eg of this.entranceGroups.values()) {
+      if (eg.entranceSceneId !== id) continue;
+      const remaining = eg.sceneIds.filter((s) => s !== id);
+      if (remaining.length > 0) {
+        throw new Error(
+          `Scene ${id} is the entrance for "${eg.title}" (#${eg.id}); reassign the entrance or clear other members first`,
+        );
+      }
+      this.entranceGroups.delete(eg.id);
+      try {
+        await unlink(join(this.dataDir, "entrance-groups", `${eg.id}.json`));
+      } catch {
+        /* ignore */
+      }
+    }
+
+    for (const artefact of [...this.artefacts.values()].filter((a) => a.homeSceneId === id)) {
+      await this.deleteArtefact(artefact.id);
+    }
+
+    for (const [fromId, exits] of [...this.exits.entries()]) {
+      if (fromId === id) continue;
+      const filtered = exits.filter((e) => e.toSceneId !== id);
+      if (filtered.length !== exits.length) {
+        await this.saveExits(fromId, filtered);
+      }
+    }
+
+    const groupId = scene.groupId;
+    const egId = scene.entranceGroupId;
     this.scenes.delete(id);
     this.exits.delete(id);
-    const scenePath = join(this.dataDir, "scenes", `${id}.md`);
-    const exitsPath = join(this.dataDir, "scenes", `${id}.exits.json`);
-    try {
-      await unlink(scenePath);
-    } catch {
-      /* ignore */
-    }
-    try {
-      await unlink(exitsPath);
-    } catch {
-      /* ignore */
-    }
+
+    await rm(join(this.dataDir, "scenes", `${id}.md`), { force: true });
+    await rm(join(this.dataDir, "scenes", `${id}.exits.json`), { force: true });
+    await rm(join(this.dataDir, "scenes", `${id}.edits.jsonl`), { force: true });
+    await rm(join(this.dataDir, "scenes", `${id}.versions`), { recursive: true, force: true });
+
     if (groupId) {
       const g = this.groups.get(groupId);
       if (g) {
@@ -494,11 +532,9 @@ export class WorldStore implements AccessWorld {
   async deleteArtefact(id: number): Promise<void> {
     if (!this.artefacts.has(id)) throw new Error("Artefact not found");
     this.artefacts.delete(id);
-    try {
-      await unlink(join(this.dataDir, "artefacts", `${id}.md`));
-    } catch {
-      /* ignore */
-    }
+    await rm(join(this.dataDir, "artefacts", `${id}.md`), { force: true });
+    await rm(join(this.dataDir, "artefacts", `${id}.edits.jsonl`), { force: true });
+    await rm(join(this.dataDir, "artefacts", `${id}.versions`), { recursive: true, force: true });
     for (const user of this.users.values()) {
       if (user.inventory.some((i) => i.artefactId === id)) {
         await this.saveUser({
@@ -513,6 +549,7 @@ export class WorldStore implements AccessWorld {
     const env = process.env.PROSEDEN_MANAGERS ?? "";
     let changed = false;
     for (const name of env.split(",").map((s) => s.trim()).filter(Boolean)) {
+      // Allow names that are not users yet (pre-provision via env).
       const roles = new Set(this.staff.roles[name] ?? []);
       if (!roles.has("manager")) {
         roles.add("manager");
@@ -558,6 +595,7 @@ export class WorldStore implements AccessWorld {
     visibility?: SceneRecord["visibility"];
   }): Promise<SceneRecord> {
     const id = this.meta.nextSceneId++;
+    await this.saveMeta();
     const createdAt = nowIso();
     const scene: SceneRecord = {
       id,
@@ -571,7 +609,6 @@ export class WorldStore implements AccessWorld {
     };
     await this.saveScene(scene);
     await this.saveExits(id, []);
-    await this.saveMeta();
     return scene;
   }
 
@@ -588,7 +625,7 @@ export class WorldStore implements AccessWorld {
     const at = nowIso();
     const updated: SceneRecord = {
       ...existing,
-      ...patch,
+      ...definedEntries(patch),
       details: patch.details ?? existing.details,
       modifiedAt: [...existing.modifiedAt, at],
     };
@@ -625,7 +662,7 @@ export class WorldStore implements AccessWorld {
     const at = nowIso();
     const updated: ArtefactRecord = {
       ...existing,
-      ...patch,
+      ...definedEntries(patch),
       details: patch.details ?? existing.details,
       tags: patch.tags ?? existing.tags,
       modifiedAt: [...existing.modifiedAt, at],
@@ -772,6 +809,15 @@ export class WorldStore implements AccessWorld {
     return exit;
   }
 
+  async removeExit(fromSceneId: number, exitKey: string): Promise<ExitRecord> {
+    if (!this.scenes.has(fromSceneId)) throw new Error("From scene not found");
+    const exit = this.findExit(fromSceneId, exitKey);
+    if (!exit) throw new Error(`No exit matching "${exitKey}"`);
+    const exits = this.getExits(fromSceneId).filter((e) => e.exitId !== exit.exitId);
+    await this.saveExits(fromSceneId, exits);
+    return exit;
+  }
+
   async createArtefact(input: {
     owner: string;
     homeSceneId: number;
@@ -782,6 +828,7 @@ export class WorldStore implements AccessWorld {
   }): Promise<ArtefactRecord> {
     if (!this.scenes.has(input.homeSceneId)) throw new Error("Home scene not found");
     const id = this.meta.nextArtefactId++;
+    await this.saveMeta();
     const createdAt = nowIso();
     const artefact: ArtefactRecord = {
       id,
@@ -795,7 +842,6 @@ export class WorldStore implements AccessWorld {
       details: input.details ?? {},
     };
     await this.saveArtefact(artefact);
-    await this.saveMeta();
     return artefact;
   }
 
@@ -832,11 +878,14 @@ function normalizeMeta(raw: Record<string, unknown>): MetaFile {
   const nextArtefactId = Number(raw.nextArtefactId ?? 1);
   const nextGroupId = Number(raw.nextGroupId ?? 1);
   const nextEntranceGroupId = Number(raw.nextEntranceGroupId ?? 1);
+  const entranceSceneId = Number(raw.entranceSceneId ?? 1);
   return {
     nextSceneId: Number.isFinite(nextSceneId) ? nextSceneId : 1,
     nextArtefactId: Number.isFinite(nextArtefactId) ? nextArtefactId : 1,
     nextGroupId: Number.isFinite(nextGroupId) ? nextGroupId : 1,
     nextEntranceGroupId: Number.isFinite(nextEntranceGroupId) ? nextEntranceGroupId : 1,
+    entranceSceneId:
+      Number.isFinite(entranceSceneId) && entranceSceneId > 0 ? entranceSceneId : 1,
   };
 }
 
@@ -959,6 +1008,16 @@ function changedFields(
     if (JSON.stringify(prev[key]) !== JSON.stringify(value)) fields.push(key);
   }
   return fields;
+}
+
+function definedEntries<T extends object>(patch: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
+    if (value !== undefined) {
+      (out as Record<string, unknown>)[key] = value;
+    }
+  }
+  return out;
 }
 
 async function exists(path: string): Promise<boolean> {

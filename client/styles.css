@@ -190,6 +190,22 @@ button:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.exit-remove-item {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  cursor: pointer;
+  color: inherit;
+  font-size: inherit;
+}
+
+.manage-exit-list input[type="checkbox"] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
 .manage {
   background: var(--sidebar);
   border: 1px solid var(--line);

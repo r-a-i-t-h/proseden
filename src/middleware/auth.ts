@@ -30,12 +30,3 @@ export const loadUser = createMiddleware(async (c, next) => {
 
   await next();
 });
-
-export function requireUser() {
-  return createMiddleware(async (c, next) => {
-    if (!c.get("user")) {
-      return c.json({ error: "Authentication required" }, 401);
-    }
-    await next();
-  });
-}

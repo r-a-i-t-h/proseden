@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canAddExit,
   canEdit,
   canEditArtefact,
   canEditGroup,
@@ -9,11 +10,13 @@ import {
   canRead,
   canReadArtefact,
   canReadGroup,
+  canRemoveExit,
   hasRight,
   isManager,
   isModerator,
 } from "../src/access/permissions.js";
 import { artefact, group, scene, user, world } from "./helpers/fixtures.js";
+import type { ExitRecord } from "../src/model/types.js";
 
 const alice = user("alice");
 const bob = user("bob");
@@ -155,7 +158,7 @@ describe("staff roles on scenes", () => {
     expect(canEdit(bob, privateScene, w)).toBe(true);
     expect(canManage(bob, privateScene, w)).toBe(false);
     expect(canOrganise(bob, w)).toBe(true);
-    expect(isModerator(bob, w)).toBe(true);
+    expect(isModerator(bob, w)).toBe(false);
     expect(isManager(bob, w)).toBe(false);
   });
 
@@ -252,5 +255,53 @@ describe("group ACL", () => {
     });
     const w = world({ users: [alice] });
     expect(canReadGroup(undefined, g, w)).toBe(true);
+  });
+});
+
+describe("junction exit add / remove", () => {
+  const junction = scene(1, "alice", { visibility: "public", isJunction: true });
+  const bobRoom = scene(2, "bob", { visibility: "public" });
+  const carolRoom = scene(3, "carol", { visibility: "public" });
+  const toBob: ExitRecord = {
+    exitId: 1,
+    nickname: "bob-wing",
+    toSceneId: 2,
+    createdAt: "2020-01-01T00:00:00.000Z",
+  };
+  const toCarol: ExitRecord = {
+    exitId: 2,
+    nickname: "carol-wing",
+    toSceneId: 3,
+    createdAt: "2020-01-01T00:00:00.000Z",
+  };
+
+  it("lets any signed-in user add exits from a public junction", () => {
+    const w = world({
+      users: [alice, bob, carol],
+      scenes: [junction, bobRoom, carolRoom],
+    });
+    expect(canAddExit(bob, junction, w)).toBe(true);
+    expect(canAddExit(carol, junction, w)).toBe(true);
+    expect(canAddExit(undefined, junction, w)).toBe(false);
+  });
+
+  it("lets junction visitors remove only exits to their own scenes", () => {
+    const w = world({
+      users: [alice, bob, carol],
+      scenes: [junction, bobRoom, carolRoom],
+    });
+    expect(canRemoveExit(bob, junction, toBob, w)).toBe(true);
+    expect(canRemoveExit(bob, junction, toCarol, w)).toBe(false);
+    expect(canRemoveExit(carol, junction, toCarol, w)).toBe(true);
+    expect(canRemoveExit(carol, junction, toBob, w)).toBe(false);
+  });
+
+  it("lets the junction owner remove any exit", () => {
+    const w = world({
+      users: [alice, bob, carol],
+      scenes: [junction, bobRoom, carolRoom],
+    });
+    expect(canRemoveExit(alice, junction, toBob, w)).toBe(true);
+    expect(canRemoveExit(alice, junction, toCarol, w)).toBe(true);
   });
 });

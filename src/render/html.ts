@@ -15,13 +15,13 @@ export interface HtmlShellOptions {
   ownedScenes?: OwnedSceneLink[];
   /** Staff manager — shows /admin and /staff links in the sidebar. */
   isManager?: boolean;
-  flash?: string;
 }
 
 export interface ManageContext {
   kind: "scene" | "artefact" | "inventory" | "home";
   scene?: SceneRecord;
   artefact?: ArtefactRecord;
+  exits?: Array<ExitRecord & { canRemove?: boolean }>;
   canEdit?: boolean;
   canManage?: boolean;
   /** Add exit from this scene (manage/organise, or public junction). */
@@ -61,7 +61,6 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
     </header>
     <div class="layout${user ? " with-manage" : ""}">
       <main class="prose">
-        ${opts.flash ? `<p class="flash">${escapeHtml(opts.flash)}</p>` : ""}
         ${opts.bodyHtml}
       </main>
       ${user ? manageSidebar(opts.manage, user, opts.isManager ?? opts.manage?.isManager, opts.ownedScenes ?? []) : ""}
@@ -215,6 +214,7 @@ function manageSidebar(
       `<form method="post" action="s" class="stack">
       <label>Title <input name="title" /></label>
       <label>Body <textarea name="body" rows="4" required></textarea></label>
+      <input type="hidden" name="visibility" value="private" />
       <label><input type="checkbox" name="visibility" value="public" /> Public</label>
       <button type="submit">Create scene</button>
     </form>`,
@@ -238,10 +238,10 @@ function manageSidebar(
           example: DETAILS_JSON_EXAMPLE,
           exampleNote: "Object of named closer-look texts (string values).",
         })}
-        <label><input type="checkbox" name="visibility" value="public" ${scene.visibility === "public" ? "checked" : ""} /> Public</label>
+        <label><input type="hidden" name="visibility" value="private" /><input type="checkbox" name="visibility" value="public" ${scene.visibility === "public" ? "checked" : ""} /> Public</label>
         ${
           manage.canManage
-            ? `<label><input type="checkbox" name="isJunction" value="true" ${scene.isJunction ? "checked" : ""} /> Public junction</label>`
+            ? `<label><input type="hidden" name="isJunction" value="false" /><input type="checkbox" name="isJunction" value="true" ${scene.isJunction ? "checked" : ""} /> Public junction</label>`
             : ""
         }
         <label><input type="checkbox" name="retainSnapshot" value="true" /> Keep version snapshot</label>
@@ -273,6 +273,29 @@ function manageSidebar(
         <label>Nickname <input name="nickname" required /></label>
         <label>To scene id <input name="toSceneId" type="number" min="1" required /></label>
         <button type="submit">Add exit</button>
+      </form>`,
+        ),
+      );
+    }
+    if (manage.canAddExit && manage.exits?.some((e) => e.canRemove)) {
+      const removable = manage.exits.filter((e) => e.canRemove);
+      const exitRows = removable
+        .map(
+          (e) => `<li>
+          <label class="exit-remove-item">
+            <input type="checkbox" name="exitId" value="${e.exitId}" />
+            <span class="exit-id">${e.exitId}</span> ${escapeHtml(e.nickname)}
+            <span class="muted">→ ${e.toSceneId}</span>
+          </label>
+        </li>`,
+        )
+        .join("");
+      sections.push(
+        manageSection(
+          "Remove exit",
+          `<form method="post" action="s/${scene.id}/exits/delete" class="stack" data-confirm="Remove the selected exits?">
+        <ul class="link-list manage-exit-list">${exitRows}</ul>
+        <button type="submit">Remove</button>
       </form>`,
         ),
       );
@@ -347,7 +370,7 @@ function manageSidebar(
       sections.push(
         manageSection(
           "Delete scene",
-          `<form method="post" action="s/${scene.id}/delete" class="stack">
+          `<form method="post" action="s/${scene.id}/delete" class="stack" data-confirm="Delete scene ${scene.id}? Homed artefacts and inbound exits will be removed.">
         <button type="submit">Delete scene ${scene.id}</button>
       </form>`,
         ),
@@ -404,7 +427,7 @@ function manageSidebar(
       sections.push(
         manageSection(
           "Delete artefact",
-          `<form method="post" action="a/${a.id}/delete" class="stack">
+          `<form method="post" action="a/${a.id}/delete" class="stack" data-confirm="Delete artefact ${a.id}?">
         <button type="submit">Delete artefact</button>
       </form>`,
         ),
@@ -563,7 +586,7 @@ export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""
 }
 
 export function renderMessageBodyHtml(title: string, message: string): string {
-  return `<h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>`;
+  return `<h1>${escapeHtml(title)}</h1><div class="desc">${formatProse(message)}</div>`;
 }
 
 function formatProse(text: string): string {

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { deleteCookie, setCookie } from "hono/cookie";
 import { hashPassword, verifyPassword } from "../auth/password.js";
+import { ownedSceneLinksFor, wantsJson } from "../http.js";
 import { negotiateFormat } from "../render/format.js";
 import { renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
@@ -39,6 +40,7 @@ authRoutes.post("/register", async (c) => {
     sameSite: "Lax",
     path: c.get("assetBase") || "/",
     maxAge: 60 * 60 * 24 * 14,
+    secure: cookieSecure(),
   });
 
   if (body.json) {
@@ -65,6 +67,7 @@ authRoutes.post("/login", async (c) => {
     sameSite: "Lax",
     path: c.get("assetBase") || "/",
     maxAge: 60 * 60 * 24 * 14,
+    secure: cookieSecure(),
   });
   if (body.json) {
     return c.json({ ok: true, username: user.username, token: session.token });
@@ -85,6 +88,10 @@ authRoutes.post("/logout", async (c) => {
   return c.redirect(`${c.get("assetBase")}/`);
 });
 
+function cookieSecure(): boolean {
+  return process.env.NODE_ENV === "production" || process.env.PROSEDEN_SECURE_COOKIES === "1";
+}
+
 async function readAuthBody(c: Context): Promise<{
   username?: string;
   password?: string;
@@ -101,11 +108,6 @@ async function readAuthBody(c: Context): Promise<{
     password: String(form.password ?? ""),
     json: wantsJson(c),
   };
-}
-
-function wantsJson(c: Context): boolean {
-  const accept = c.req.header("accept") ?? "";
-  return accept.includes("application/json") || c.req.query("format") === "json";
 }
 
 function respond(c: Context, status: 400 | 401 | 409, title: string, message: string) {
@@ -126,14 +128,4 @@ function respond(c: Context, status: 400 | 401 | 409, title: string, message: st
     }),
     status,
   );
-}
-
-function ownedSceneLinksFor(c: Context) {
-  const user = c.get("user");
-  const world = c.get("world");
-  if (!user) return [];
-  return world.listScenesOwnedBy(user.username).map((s) => ({
-    id: s.id,
-    title: s.title,
-  }));
 }

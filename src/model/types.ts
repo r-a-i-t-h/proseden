@@ -104,6 +104,8 @@ export interface MetaFile {
   nextArtefactId: number;
   nextGroupId?: number;
   nextEntranceGroupId?: number;
+  /** Scene id served at `/` and `/s` (default 1). */
+  entranceSceneId?: number;
 }
 
 export interface SessionRecord {

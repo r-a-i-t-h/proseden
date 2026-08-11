@@ -8,9 +8,10 @@ See [SPEC.md](SPEC.md) for the product vision, [NAVIGATION.md](NAVIGATION.md) fo
 
 ```bash
 npm install
-npm run build:client   # Vite assets → public/assets (base: './')
-npm run dev            # http://127.0.0.1:8787
+npm run dev            # vite build + http://127.0.0.1:8787
 ```
+
+`npm run build:client` alone rebuilds Vite assets into `public/assets` (base: `./`) when you change CSS/JS without restarting the server.
 
 Production-style:
 
@@ -27,7 +28,8 @@ Environment:
 | `PROSEDEN_DATA` | `./data` | Live world files (created from `seed/` on first boot); use a distinct directory per instance |
 | `PROSEDEN_SEED` | `./seed` | Seed copied when `data/meta.json` is missing |
 | `PROSEDEN_BASE_PATH` | _(empty)_ | URL prefix for subdirectory deploy, e.g. `proseden` or `worlds/alpha` |
-| `PROSEDEN_MANAGERS` | _(empty)_ | Comma-separated usernames granted `manager` on boot |
+| `PROSEDEN_MANAGERS` | _(empty)_ | Comma-separated usernames granted `manager` on boot (may pre-provision names not yet registered) |
+| `PROSEDEN_SECURE_COOKIES` | _(empty)_ | Set `1` to mark session cookies `Secure` (also on when `NODE_ENV=production`) |
 
 Seed login: **gardener** / **garden**
 
@@ -87,6 +89,8 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `POST` | `/s` | Create scene (auth) |
 | `PUT`/`POST` | `/s/:id` | Update scene (owner) |
 | `POST` | `/s/:id/exits` | Add directed exit (manage origin, or any user from a public junction) |
+| `DELETE`/`POST` | `/s/:id/exits/:exit/delete` | Remove one exit (manage/organise any; on a public junction, also exits to scenes you own) |
+| `POST` | `/s/:id/exits/delete` | Remove one or more exits (`exitId` / `exitIds`) |
 | `GET`/`PUT`/`POST` | `/s/:id/access` | Scene grants/denies (manage) |
 | `GET`/`PUT`/`POST` | `/u/:username/access` | User-level share-all (self or manager) |
 | `POST` | `/g` | Create group (auth) |

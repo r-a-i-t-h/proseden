@@ -78,15 +78,19 @@ export function group(
 
 export function world(opts: {
   users?: UserRecord[];
+  scenes?: SceneRecord[];
   groups?: GroupRecord[];
   roles?: Record<string, StaffRole[]>;
 }): AccessWorld {
   const users = new Map((opts.users ?? []).map((u) => [u.username, u]));
+  const scenes = new Map((opts.scenes ?? []).map((s) => [s.id, s]));
   const groups = new Map((opts.groups ?? []).map((g) => [g.id, g]));
   const roles = opts.roles ?? {};
   return {
     getUser: (username) => users.get(username),
+    getScene: (id) => scenes.get(id),
     getGroup: (id) => groups.get(id),
+    getEntranceGroup: () => undefined,
     rolesFor: (username) => roles[username] ?? [],
   };
 }

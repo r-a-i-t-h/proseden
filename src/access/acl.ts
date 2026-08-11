@@ -1,5 +1,5 @@
 import type { Deny, Grant, Right } from "../model/types.js";
-import { ALL_RIGHTS, RIGHT_RANK } from "../model/types.js";
+import { RIGHT_RANK } from "../model/types.js";
 
 /** True if `have` covers `need` (manage ⊃ edit ⊃ read). */
 export function rightsCover(have: Right[], need: Right): boolean {
@@ -157,5 +157,3 @@ export function stripLegacyInvites<T extends { invites?: string[]; grants?: Gran
   const { invites: _invites, ...rest } = meta;
   return rest;
 }
-
-export { ALL_RIGHTS };

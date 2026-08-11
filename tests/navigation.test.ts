@@ -135,7 +135,7 @@ async function createNavWorld(): Promise<{
   };
 }
 
-function auth(token: string, extra: HeadersInit = {}): HeadersInit {
+function auth(token: string, extra: Record<string, string> = {}): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
     Accept: "text/plain",

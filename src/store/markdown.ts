@@ -25,7 +25,11 @@ export function serializeProseDocument(
     .join("\n\n");
 
   const content = [body.trim(), detailBlocks].filter(Boolean).join("\n\n");
-  return matter.stringify(`${content}\n`, meta);
+  const cleanMeta: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(meta as Record<string, unknown>)) {
+    if (value !== undefined) cleanMeta[key] = value;
+  }
+  return matter.stringify(`${content}\n`, cleanMeta);
 }
 
 function splitDetails(content: string): { body: string; details: Record<string, string> } {

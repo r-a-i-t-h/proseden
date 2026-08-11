@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 export async function readText(path: string): Promise<string> {
@@ -20,14 +20,9 @@ export async function writeJsonAtomic(path: string, value: unknown): Promise<voi
   await writeTextAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-/** Append a line (creates file if missing). Single-process safe via read-modify-write. */
+/** Append a line (creates file if missing). Uses OS append for concurrent safety. */
 export async function appendLineAtomic(path: string, line: string): Promise<void> {
-  let existing = "";
-  try {
-    existing = await readText(path);
-  } catch {
-    existing = "";
-  }
-  const next = existing.endsWith("\n") || existing === "" ? existing : `${existing}\n`;
-  await writeTextAtomic(path, `${next}${line.endsWith("\n") ? line : `${line}\n`}`);
+  await mkdir(dirname(path), { recursive: true });
+  const payload = line.endsWith("\n") ? line : `${line}\n`;
+  await appendFile(path, payload, "utf8");
 }

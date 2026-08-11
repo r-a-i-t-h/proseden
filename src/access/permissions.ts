@@ -1,6 +1,7 @@
 import type {
   ArtefactRecord,
   EntranceGroupRecord,
+  ExitRecord,
   GroupRecord,
   Right,
   SceneRecord,
@@ -11,13 +12,13 @@ import { grantCovers, matchesDeny } from "./acl.js";
 
 /**
  * Lookup surface for access evaluation.
- * Groups / entrance groups / staff plug in as phases land.
  */
 export interface AccessWorld {
   getUser(username: string): UserRecord | undefined;
-  getGroup?(id: string): GroupRecord | undefined;
-  getEntranceGroup?(id: string): EntranceGroupRecord | undefined;
-  rolesFor?(username: string): StaffRole[];
+  getScene(id: number): SceneRecord | undefined;
+  getGroup(id: string): GroupRecord | undefined;
+  getEntranceGroup(id: string): EntranceGroupRecord | undefined;
+  rolesFor(username: string): StaffRole[];
 }
 
 /**
@@ -80,6 +81,24 @@ export function canAddExit(
   if (!user) return false;
   if (canManage(user, scene, world) || canOrganise(user, world)) return true;
   return Boolean(scene.isJunction && scene.visibility === "public");
+}
+
+/**
+ * Remove an exit originating at `fromScene`.
+ * Manage/organise may remove any; on a public junction, signed-in users may only
+ * remove exits that lead to a scene they own.
+ */
+export function canRemoveExit(
+  user: UserRecord | undefined,
+  fromScene: SceneRecord,
+  exit: ExitRecord,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  if (canManage(user, fromScene, world) || canOrganise(user, world)) return true;
+  if (!canAddExit(user, fromScene, world)) return false;
+  const dest = world.getScene(exit.toSceneId);
+  return !!dest && dest.owner === user.username;
 }
 
 export function canReadArtefact(
@@ -156,7 +175,7 @@ function isDenied(
   if (!user) return false;
   const owner = world.getUser(scene.owner);
   if (matchesDeny(owner?.denies, user.username, right)) return true;
-  if (scene.groupId && world.getGroup) {
+  if (scene.groupId) {
     const group = world.getGroup(scene.groupId);
     if (group && matchesDeny(group.denies, user.username, right)) return true;
   }
@@ -172,7 +191,7 @@ function isGranted(
 ): boolean {
   const who = user?.username;
   if (grantCovers(scene.grants, who, right)) return true;
-  if (scene.groupId && world.getGroup) {
+  if (scene.groupId) {
     const group = world.getGroup(scene.groupId);
     if (group && grantCovers(group.grants, who, right)) return true;
   }
@@ -182,13 +201,13 @@ function isGranted(
 }
 
 /**
- * Staff roles (Phase 5):
- * - moderator: edit (prose) worldwide, not manage / restructure
- * - organiser: graph structure via canOrganise (not full ACL manage)
+ * Staff roles:
+ * - moderator: edit (prose) worldwide; may delete unacceptable content
+ * - organiser: graph structure via canOrganise (not full ACL manage / delete)
  * - manager: full manage + personnel APIs
  */
 function staffCovers(user: UserRecord, right: Right, world: AccessWorld): boolean {
-  const roles = world.rolesFor?.(user.username) ?? [];
+  const roles = world.rolesFor(user.username) ?? [];
   if (!roles.length) return false;
   if (right === "read" || right === "edit") {
     if (roles.includes("moderator") || roles.includes("organiser") || roles.includes("manager")) {
@@ -207,21 +226,18 @@ export function canOrganise(
   world: AccessWorld,
 ): boolean {
   if (!user) return false;
-  const roles = world.rolesFor?.(user.username) ?? [];
+  const roles = world.rolesFor(user.username) ?? [];
   return roles.includes("organiser") || roles.includes("manager");
 }
 
+/** Moderators and managers may remove unacceptable content. */
 export function isModerator(
   user: UserRecord | undefined,
   world: AccessWorld,
 ): boolean {
   if (!user) return false;
-  const roles = world.rolesFor?.(user.username) ?? [];
-  return (
-    roles.includes("moderator") ||
-    roles.includes("organiser") ||
-    roles.includes("manager")
-  );
+  const roles = world.rolesFor(user.username) ?? [];
+  return roles.includes("moderator") || roles.includes("manager");
 }
 
 export function isManager(
@@ -229,5 +245,5 @@ export function isManager(
   world: AccessWorld,
 ): boolean {
   if (!user) return false;
-  return (world.rolesFor?.(user.username) ?? []).includes("manager");
+  return world.rolesFor(user.username).includes("manager");
 }

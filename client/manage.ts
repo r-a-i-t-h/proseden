@@ -1,4 +1,14 @@
 function enhanceForms(): void {
+  document.querySelectorAll<HTMLFormElement>("form[data-confirm]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      const message = form.dataset.confirm;
+      if (message && !window.confirm(message)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    });
+  });
+
   document.querySelectorAll<HTMLFormElement>("form[data-method]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
       const method = (form.dataset.method || "POST").toUpperCase();
@@ -8,13 +18,13 @@ function enhanceForms(): void {
       const action = form.getAttribute("action") || window.location.href;
       const body = new FormData(form);
 
-      // Prefer JSON for non-GET mutations from the sidebar so checkboxes serialize cleanly
       const payload: Record<string, unknown> = {};
       body.forEach((value, key) => {
+        // When hidden+checkbox share a name, keep the last value (checkbox if checked).
         payload[key] = value;
       });
 
-      // Explicit visibility for edit forms
+      // Explicit boolean-ish fields for JSON PUT (FormData omits unchecked boxes).
       if (form.querySelector('input[name="visibility"][type="checkbox"]')) {
         const checked = form.querySelector<HTMLInputElement>(
           'input[name="visibility"][type="checkbox"]',
@@ -54,29 +64,6 @@ function enhanceForms(): void {
       }
       const err = await response.json().catch(() => ({ error: response.statusText }));
       alert(err.error || "Request failed");
-    });
-  });
-
-  // Ensure checkbox visibility is sent on ordinary POST edit/create forms too
-  document.querySelectorAll<HTMLFormElement>("form.stack").forEach((form) => {
-    form.addEventListener("submit", () => {
-      const checkbox = form.querySelector<HTMLInputElement>(
-        'input[name="visibility"][type="checkbox"]',
-      );
-      if (!checkbox) return;
-      let hidden = form.querySelector<HTMLInputElement>('input[name="visibility"][type="hidden"]');
-      if (!hidden) {
-        hidden = document.createElement("input");
-        hidden.type = "hidden";
-        hidden.name = "visibility";
-        form.appendChild(hidden);
-      }
-      if (checkbox.checked) {
-        hidden.value = "public";
-        checkbox.disabled = true; // avoid duplicate field names
-      } else {
-        hidden.value = "private";
-      }
     });
   });
 }

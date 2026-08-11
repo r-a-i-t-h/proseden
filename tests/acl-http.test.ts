@@ -79,7 +79,7 @@ async function createTestWorld(): Promise<{
   return { world, sessions, app, dataDir, tokens };
 }
 
-function auth(token: string): HeadersInit {
+function auth(token: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
     Accept: "application/json",
@@ -282,6 +282,58 @@ describe("HTTP ACL enforcement", () => {
       body: JSON.stringify({ nickname: "hall", toSceneId: 1 }),
     });
     expect(organise.status).toBe(201);
+  });
+
+  it("lets junction visitors remove only exits to their own scenes", async () => {
+    const { app, tokens, world } = harness;
+
+    const carolExit = await world.addExit(3, "carol-wing", 1);
+    // Scene 1 is owned by alice; create a carol-owned target and exit to it.
+    const carolScene = await world.createScene({
+      owner: "carol",
+      title: "Carol annex",
+      body: "hers",
+      visibility: "public",
+    });
+    const toCarol = await world.addExit(3, "to-carol", carolScene.id);
+    const bobScene = await world.createScene({
+      owner: "bob",
+      title: "Bob annex",
+      body: "his",
+      visibility: "public",
+    });
+    const toBob = await world.addExit(3, "to-bob", bobScene.id);
+
+    const carolOwn = await app.request(`/s/3/exits/${toCarol.exitId}/delete`, {
+      method: "POST",
+      headers: auth(tokens.carol),
+    });
+    expect(carolOwn.status).toBe(200);
+    expect(world.findExit(3, String(toCarol.exitId))).toBeUndefined();
+
+    const carolOthers = await app.request(`/s/3/exits/${toBob.exitId}/delete`, {
+      method: "POST",
+      headers: auth(tokens.carol),
+    });
+    expect(carolOthers.status).toBe(403);
+    expect(world.findExit(3, String(toBob.exitId))).toBeTruthy();
+
+    const ownerAny = await app.request(`/s/3/exits/${carolExit.exitId}/delete`, {
+      method: "POST",
+      headers: auth(tokens.alice),
+    });
+    expect(ownerAny.status).toBe(200);
+    expect(world.findExit(3, String(carolExit.exitId))).toBeUndefined();
+
+    const bobAgain = await world.addExit(3, "to-bob-again", bobScene.id);
+    const bulk = await app.request("/s/3/exits/delete", {
+      method: "POST",
+      headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
+      body: JSON.stringify({ exitIds: [toBob.exitId, bobAgain.exitId] }),
+    });
+    expect(bulk.status).toBe(200);
+    expect(world.findExit(3, String(toBob.exitId))).toBeUndefined();
+    expect(world.findExit(3, String(bobAgain.exitId))).toBeUndefined();
   });
 
   it("blocks reading and collecting artefacts in unreadable homes", async () => {

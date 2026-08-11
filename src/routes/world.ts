@@ -11,10 +11,12 @@ import {
   canRead,
   canReadArtefact,
   canReadGroup,
+  canRemoveExit,
   isManager,
   isModerator,
 } from "../access/permissions.js";
-import type { StaffRole, UserRecord } from "../model/types.js";
+import { apiError, ownedSceneLinks, wantsJson } from "../http.js";
+import type { StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
   escapeHtml,
@@ -23,7 +25,6 @@ import {
   renderInventoryBodyHtml,
   renderMessageBodyHtml,
   renderSceneBodyHtml,
-  type OwnedSceneLink,
 } from "../render/html.js";
 import {
   renderArtefactText,
@@ -31,14 +32,17 @@ import {
   renderMessageText,
   renderSceneText,
 } from "../render/text.js";
-import type { WorldStore } from "../store/world.js";
 
 export const worldRoutes = new Hono();
 
-const ENTRANCE_SCENE_ID = 1;
-
-worldRoutes.get("/", (c) => c.redirect(`${c.get("assetBase")}/s/${ENTRANCE_SCENE_ID}`));
-worldRoutes.get("/s", (c) => c.redirect(`${c.get("assetBase")}/s/${ENTRANCE_SCENE_ID}`));
+worldRoutes.get("/", (c) => {
+  const world = c.get("world");
+  return c.redirect(`${c.get("assetBase")}/s/${world.worldEntranceSceneId()}`);
+});
+worldRoutes.get("/s", (c) => {
+  const world = c.get("world");
+  return c.redirect(`${c.get("assetBase")}/s/${world.worldEntranceSceneId()}`);
+});
 
 worldRoutes.get("/s/:id", (c) => {
   const world = c.get("world");
@@ -119,6 +123,10 @@ worldRoutes.get("/s/:id", (c) => {
     {
       kind: "scene",
       scene,
+      exits: exits.map((e) => ({
+        ...e,
+        canRemove: canRemoveExit(user, scene, e, world),
+      })),
       canEdit: canEdit(user, scene, world),
       canManage: manage,
       canAddExit: canAddExit(user, scene, world),
@@ -250,11 +258,18 @@ worldRoutes.post("/s", async (c) => {
   const text = String(body.body ?? "");
   if (!text.trim()) return apiError(c, 400, "Body is required");
 
+  let details: Record<string, string>;
+  try {
+    details = parseDetails(body.detailsJson ?? body.details);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Invalid details JSON");
+  }
+
   const scene = await world.createScene({
     owner: user.username,
     title: optionalString(body.title),
     body: text,
-    details: parseDetails(body.detailsJson ?? body.details),
+    details,
     visibility: body.visibility === "public" || body.visibility === true ? "public" : "private",
   });
 
@@ -279,10 +294,14 @@ async function updateScene(c: Context) {
   if (!canEdit(user, scene, world)) return apiError(c, 403, "Not allowed to edit this scene");
 
   const body = await readBody(c);
-  const details =
-    body.detailsJson !== undefined || body.details !== undefined
-      ? parseDetails(body.detailsJson ?? body.details)
-      : undefined;
+  let details: Record<string, string> | undefined;
+  if (body.detailsJson !== undefined || body.details !== undefined) {
+    try {
+      details = parseDetails(body.detailsJson ?? body.details);
+    } catch (err) {
+      return apiError(c, 400, err instanceof Error ? err.message : "Invalid details JSON");
+    }
+  }
 
   let visibility = scene.visibility;
   if (body.visibility !== undefined) {
@@ -295,7 +314,10 @@ async function updateScene(c: Context) {
   let isJunction = scene.isJunction;
   if (body.isJunction !== undefined && canManage(user, scene, world)) {
     isJunction =
-      body.isJunction === true || body.isJunction === "true" || body.isJunction === "on";
+      body.isJunction === true ||
+      body.isJunction === "true" ||
+      body.isJunction === "on" ||
+      body.isJunction === "1";
   }
 
   const updated = await world.updateScene(
@@ -478,7 +500,7 @@ worldRoutes.get("/g/:id", (c) => {
     c,
     200,
     group.title,
-    renderMessageBodyHtml(group.title, summary.replace(/\n/g, "<br />")),
+    renderMessageBodyHtml(group.title, summary),
     renderMessageText(`Group ${group.id}`, summary),
     {
       kind: "home",
@@ -643,6 +665,75 @@ worldRoutes.post("/s/:id/exits", async (c) => {
   }
 });
 
+worldRoutes.delete("/s/:id/exits/:exit", async (c) => removeExit(c));
+worldRoutes.post("/s/:id/exits/:exit/delete", async (c) => removeExit(c));
+worldRoutes.post("/s/:id/exits/delete", async (c) => removeExits(c));
+
+async function removeExit(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const id = Number(c.req.param("id"));
+  const exitKey = decodeURIComponent(String(c.req.param("exit") ?? ""));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  const exit = world.findExit(id, exitKey);
+  if (!exit) return apiError(c, 404, `No exit matching "${exitKey}"`);
+  if (!canRemoveExit(user, scene, exit, world)) {
+    return apiError(c, 403, "Not allowed to remove this exit");
+  }
+
+  try {
+    const removed = await world.removeExit(id, exitKey);
+    if (wantsJson(c)) return c.json(removed);
+    return c.redirect(`${c.get("assetBase")}/s/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not remove exit");
+  }
+}
+
+async function removeExits(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const id = Number(c.req.param("id"));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+
+  const body = await readBody(c);
+  const keys = collectExitKeys(body);
+  if (!keys.length) return apiError(c, 400, "Select at least one exit to remove");
+
+  const removed = [];
+  for (const key of keys) {
+    const exit = world.findExit(id, key);
+    if (!exit) return apiError(c, 404, `No exit matching "${key}"`);
+    if (!canRemoveExit(user, scene, exit, world)) {
+      return apiError(c, 403, `Not allowed to remove exit ${exit.exitId}`);
+    }
+    removed.push(await world.removeExit(id, String(exit.exitId)));
+  }
+
+  if (wantsJson(c)) return c.json({ ok: true, removed });
+  return c.redirect(`${c.get("assetBase")}/s/${id}`);
+}
+
+function collectExitKeys(body: Record<string, unknown>): string[] {
+  const raw = body.exitId ?? body.exitIds ?? body.exit;
+  if (raw === undefined || raw === null || raw === "") return [];
+  if (Array.isArray(raw)) {
+    return raw.map(String).map((s) => s.trim()).filter(Boolean);
+  }
+  const text = String(raw).trim();
+  if (!text) return [];
+  if (text.includes(",")) {
+    return text.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  return [text];
+}
+
 worldRoutes.post("/eg", async (c) => {
   const world = c.get("world");
   const user = c.get("user");
@@ -710,12 +801,19 @@ worldRoutes.post("/a", async (c) => {
   if (!home) return apiError(c, 404, "Home scene not found");
   if (!canEdit(user, home, world)) return apiError(c, 403, "Not allowed to place artefacts here");
 
+  let details: Record<string, string>;
+  try {
+    details = parseDetails(body.detailsJson ?? body.details);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Invalid details JSON");
+  }
+
   const artefact = await world.createArtefact({
     owner: user.username,
     homeSceneId,
     title: optionalString(body.title),
     body: text,
-    details: parseDetails(body.detailsJson ?? body.details),
+    details,
     tags: parseTags(body.tags),
   });
 
@@ -741,15 +839,16 @@ async function updateArtefact(c: Context) {
 
   const body = await readBody(c);
   try {
+    let details: Record<string, string> | undefined;
+    if (body.detailsJson !== undefined || body.details !== undefined) {
+      details = parseDetails(body.detailsJson ?? body.details);
+    }
     const updated = await world.updateArtefact(
       id,
       {
         title: body.title !== undefined ? optionalString(body.title) : artefact.title,
         body: body.body !== undefined ? String(body.body) : artefact.body,
-        details:
-          body.detailsJson !== undefined || body.details !== undefined
-            ? parseDetails(body.detailsJson ?? body.details)
-            : undefined,
+        details,
         tags: body.tags !== undefined ? parseTags(body.tags) : undefined,
         homeSceneId: body.homeSceneId !== undefined ? Number(body.homeSceneId) : undefined,
       },
@@ -811,7 +910,11 @@ async function deleteScene(c: Context) {
   if (!canManage(user, scene, world) && !isModerator(user, world)) {
     return apiError(c, 403, "Not allowed to delete this scene");
   }
-  await world.deleteScene(id);
+  try {
+    await world.deleteScene(id);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not delete scene");
+  }
   if (wantsJson(c)) return c.json({ ok: true });
   return c.redirect(`${c.get("assetBase")}/`);
 }
@@ -910,7 +1013,11 @@ async function setStaff(c: Context) {
   } else if (typeof body.roles === "string") {
     roles = body.roles.split(",").map((s) => s.trim()).filter(Boolean) as StaffRole[];
   } else if (typeof body.rolesJson === "string") {
-    roles = JSON.parse(body.rolesJson) as StaffRole[];
+    try {
+      roles = JSON.parse(body.rolesJson) as StaffRole[];
+    } catch {
+      return apiError(c, 400, "Invalid rolesJson");
+    }
   }
   try {
     const staff = await world.setStaffRoles(username, roles);
@@ -1048,11 +1155,21 @@ worldRoutes.get("/a/:id/history", async (c) => {
         })
         .join("\n")
     : "(no edits logged)";
+  const htmlList = log.length
+    ? `<ul class="link-list">${log
+        .map((e) => {
+          const link = e.versionId
+            ? ` <a href="a/${id}/history/${encodeURIComponent(e.versionId)}">view</a>`
+            : "";
+          return `<li>${escapeHtml(e.at)} · ${escapeHtml(e.by)} · ${escapeHtml(e.fields.join(", ") || "—")}${e.retained ? " · retained" : ""}${link}</li>`;
+        })
+        .join("")}</ul>`
+    : `<p class="muted">No edits logged.</p>`;
   return page(
     c,
     200,
     `History · Artefact ${id}`,
-    `<p class="crumb"><a href="a/${id}">← Artefact ${id}</a></p><h1>History</h1><pre>${escapeHtml(lines)}</pre>`,
+    `<p class="crumb"><a href="a/${id}">← Artefact ${id}</a></p><h1>History</h1>${htmlList}`,
     renderMessageText(`History · Artefact ${id}`, lines),
   );
 });
@@ -1149,54 +1266,27 @@ function page(
   );
 }
 
-function ownedSceneLinks(world: WorldStore, user: UserRecord | undefined): OwnedSceneLink[] {
-  if (!user) return [];
-  return world.listScenesOwnedBy(user.username).map((s) => ({
-    id: s.id,
-    title: s.title,
-  }));
-}
-
-function apiError(c: Context, status: 400 | 401 | 403 | 404, message: string) {
-  if (wantsJson(c) || negotiateFormat(c) === "text") {
-    if (wantsJson(c)) return c.json({ error: message }, status);
-    return c.text(renderMessageText("Error", message), status);
-  }
-  const user = c.get("user");
-  const world = c.get("world");
-  return c.html(
-    renderHtmlPage({
-      title: "Error",
-      bodyHtml: renderMessageBodyHtml("Error", message),
-      user,
-      assetBase: c.get("assetBase"),
-      ownedScenes: ownedSceneLinks(world, user),
-      isManager: isManager(user, world),
-    }),
-    status,
-  );
-}
-
 async function readBody(c: Context): Promise<Record<string, unknown>> {
   const contentType = c.req.header("content-type") ?? "";
   if (contentType.includes("application/json")) {
     return (await c.req.json()) as Record<string, unknown>;
   }
-  const form = await c.req.parseBody();
+  const form = await c.req.parseBody({ all: true });
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(form)) {
-    out[k] = typeof v === "string" ? v : String(v);
-  }
-  // checkbox absence means private
-  if (!("visibility" in out) && c.req.method !== "GET") {
-    // only force private when form intentionally editing visibility fields present in edit forms
+    if (Array.isArray(v)) {
+      const strings = v.filter((item): item is string => typeof item === "string");
+      // Multi-select fields keep every value; hidden+checkbox pairs keep the last.
+      if (k === "exitId" || k === "exitIds" || k === "exit") {
+        out[k] = strings.length <= 1 ? (strings[0] ?? "") : strings;
+      } else {
+        out[k] = strings.at(-1) ?? String(v.at(-1));
+      }
+    } else {
+      out[k] = typeof v === "string" ? v : String(v);
+    }
   }
   return out;
-}
-
-function wantsJson(c: Context): boolean {
-  const accept = c.req.header("accept") ?? "";
-  return accept.includes("application/json") || c.req.query("format") === "json";
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -1226,9 +1316,19 @@ function parseDetails(value: unknown): Record<string, string> {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return {};
-    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      throw new Error("Details must be a JSON object");
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Details must be a JSON object");
+    }
     const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(parsed)) out[k] = String(v);
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      out[k] = String(v);
+    }
     return out;
   }
   return {};
