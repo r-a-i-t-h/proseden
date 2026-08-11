@@ -6,9 +6,10 @@
 #   PROSEDEN_DATA   this instance's data directory (never re-seed it)
 #   PROSEDEN_SEED   seed tree from the new release (reference only)
 #
-# Add versioned migrations here later, e.g. rewrite a field in meta.json.
-# Exit non-zero to abort the update (the previous release directory is kept).
+# Applies deploy/migrations/NNN-*.sh where NNN is greater than the current
+# schemaVersion (missing / non-numeric = 0). Exit non-zero to abort the
+# update (the previous release directory is kept).
 set -eu
 
-echo "post-update: no data migrations in this release (data=$PROSEDEN_DATA)"
-exit 0
+ROOT=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+exec "$ROOT/migrate.sh"

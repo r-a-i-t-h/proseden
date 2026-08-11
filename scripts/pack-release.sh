@@ -44,7 +44,10 @@ mkdir -p "$DEST"
 cp -R dist public seed deploy package.json package-lock.json "$DEST/"
 printf '%s\n' "$TAG" >"$DEST/VERSION"
 chmod 755 "$DEST/deploy/install.sh" "$DEST/deploy/update.sh" "$DEST/deploy/post-update.sh" \
-  "$DEST/deploy/backup-data.sh"
+  "$DEST/deploy/backup-data.sh" "$DEST/deploy/migrate.sh"
+if [ -d "$DEST/deploy/migrations" ]; then
+  find "$DEST/deploy/migrations" -name '*.sh' -exec chmod 755 {} +
+fi
 
 echo "pack-release: production node_modules"
 (

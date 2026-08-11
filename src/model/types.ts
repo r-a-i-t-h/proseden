@@ -106,6 +106,8 @@ export interface MetaFile {
   nextEntranceGroupId?: number;
   /** Scene id served at `/` and `/s` (default 1). */
   entranceSceneId?: number;
+  /** Written only by deploy/migrations. Missing means schema v0. */
+  schemaVersion?: number;
 }
 
 export interface SessionRecord {

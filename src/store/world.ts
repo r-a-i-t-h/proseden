@@ -1004,7 +1004,8 @@ function normalizeMeta(raw: Record<string, unknown>): MetaFile {
   const nextGroupId = Number(raw.nextGroupId ?? 1);
   const nextEntranceGroupId = Number(raw.nextEntranceGroupId ?? 1);
   const entranceSceneId = Number(raw.entranceSceneId ?? 1);
-  return {
+  const schemaVersion = Number(raw.schemaVersion);
+  const meta: MetaFile = {
     nextSceneId: Number.isFinite(nextSceneId) ? nextSceneId : 1,
     nextArtefactId: Number.isFinite(nextArtefactId) ? nextArtefactId : 1,
     nextGroupId: Number.isFinite(nextGroupId) ? nextGroupId : 1,
@@ -1012,6 +1013,10 @@ function normalizeMeta(raw: Record<string, unknown>): MetaFile {
     entranceSceneId:
       Number.isFinite(entranceSceneId) && entranceSceneId > 0 ? entranceSceneId : 1,
   };
+  if (Number.isFinite(schemaVersion)) {
+    meta.schemaVersion = schemaVersion;
+  }
+  return meta;
 }
 
 function normalizeUser(raw: Record<string, unknown>): UserRecord {
