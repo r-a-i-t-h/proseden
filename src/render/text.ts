@@ -25,7 +25,7 @@ export function renderSceneText(opts: {
     lines.push(`[Scene ${scene.id}${scene.title ? `: ${scene.title}` : ""}]`);
     if (scene.owner) lines.push(`by ${scene.owner}`);
     {
-      const tags = [scene.visibility];
+      const tags: string[] = [scene.visibility];
       if (scene.isJunction && scene.visibility === "public") tags.push("junction");
       if (opts.isEntrance) tags.push("entrance");
       lines.push(`visibility: ${tags.join(" · ")}`);
