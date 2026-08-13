@@ -315,8 +315,31 @@ The Proseden site is not enabled, or another `default_server` wins. Check `ls /e
 **Styles missing / 404 on `/assets/`**  
 The process is running from a tree that was not packed with `public/assets`. Re-install from an official Release tarball, not a git clone.
 
-**Live chat / SSE stalls or never connects**  
-`/live/events` needs `proxy_buffering off` and a long `proxy_read_timeout` (bundled nginx templates include a dedicated `location`). Re-run install/update so site configs refresh, or add those directives manually. See [LIVE.md](LIVE.md).
+**Live chat stuck on “Connecting…”**  
+The UI waits for the first SSE event. If nginx buffers `/live/events`, the browser never receives it (the Node process is fine — `/live/here` still works). `proseden-update` does **not** rewrite nginx site files (certbot owns them).
+
+On a root-mounted instance (e.g. www on port 3336), add a dedicated location **above** `location /` in the site file (often `/etc/nginx/sites-available/proseden-www`), then reload:
+
+```nginx
+location /live/events {
+    proxy_pass http://127.0.0.1:3336;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Connection "";
+    proxy_buffering off;
+    proxy_cache off;
+    gzip off;
+    proxy_read_timeout 24h;
+}
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Use the matching loopback port from that instance’s `env`. Path mounts need `/<base>/live/events` instead (see `deploy/nginx/location.conf`). App releases also send `X-Accel-Buffering: no` so buffering is disabled even without this block. See [LIVE.md](LIVE.md).
 
 **Update left the world empty**  
 Updates never copy `seed/` over existing `data/`. If `data/meta.json` was deleted, the next start *will* re-seed. Restore `data/` from backup if you still have one.

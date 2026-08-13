@@ -47,6 +47,10 @@ liveRoutes.get("/events", async (c) => {
     });
   }
 
+  // nginx proxies buffer by default; without this (or proxy_buffering off),
+  // EventSource hangs on "Connecting…" until the buffer fills.
+  c.header("X-Accel-Buffering", "no");
+
   return streamSSE(c, async (stream) => {
     let closed = false;
     const conn = presence.connect({
@@ -65,13 +69,16 @@ liveRoutes.get("/events", async (c) => {
     presence.setSend(conn.connectionId, send);
 
     const snap = hub.snapshot(sceneId);
-    send({
-      kind: "presence.snapshot",
-      ts: new Date().toISOString(),
-      sceneId,
-      here: snap.here,
-      messages: snap.messages,
-      shouts: snap.shouts,
+    await stream.writeSSE({
+      event: "presence.snapshot",
+      data: JSON.stringify({
+        kind: "presence.snapshot",
+        ts: new Date().toISOString(),
+        sceneId,
+        here: snap.here,
+        messages: snap.messages,
+        shouts: snap.shouts,
+      } satisfies LiveEvent),
     });
 
     const cleanup = () => {

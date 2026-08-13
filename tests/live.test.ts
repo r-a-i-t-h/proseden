@@ -223,6 +223,29 @@ describe("live presence and chat", () => {
     expect(res.status).toBe(400);
   });
 
+  it("SSE /live/events disables proxy buffering and streams a snapshot", async () => {
+    const res = await app.request(`/live/events?scene=${sceneIds.public}`, {
+      headers: { Accept: "text/event-stream" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/text\/event-stream/);
+    expect(res.headers.get("x-accel-buffering")).toBe("no");
+
+    const reader = res.body?.getReader();
+    expect(reader).toBeTruthy();
+    const decoder = new TextDecoder();
+    let buf = "";
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline && !buf.includes("presence.snapshot")) {
+      const { value, done } = await reader!.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+    }
+    await reader!.cancel();
+    expect(buf).toContain("event: presence.snapshot");
+    expect(buf).toContain(`"sceneId":${sceneIds.public}`);
+  });
+
   it("say works when present", async () => {
     presence.connect({
       userKey: "u:alice",

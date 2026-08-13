@@ -17,6 +17,7 @@ Preference: `localStorage` key `proseden-panel` = `live` \| `edit` (absent = Vie
 ## Transport
 
 - **SSE** `GET /live/events?scene=<id>` — snapshot then stream (`presence.*`, `chat.*`).
+- Responses set `X-Accel-Buffering: no` so nginx does not buffer the stream (UI otherwise sticks on “Connecting…”). Deploy templates also use a dedicated `location` with `proxy_buffering off` — see [DEPLOY.md](DEPLOY.md) if an older site file is missing it.
 - **POST** `/live/say`, `/live/shout` — require an active presence connection.
 - Guests get a short-lived guest cookie on public scenes; join requires sign-in.
 
