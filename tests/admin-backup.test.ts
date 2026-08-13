@@ -57,24 +57,24 @@ describe("admin backups", () => {
   }
 
   it("requires a manager to create or list backups", async () => {
-    const anon = await app.request("/admin/backup", {
+    const anon = await app.request("/data/backup", {
       method: "POST",
       headers: { Accept: "application/json" },
     });
     expect(anon.status).toBe(401);
 
-    const user = await app.request("/admin/backup", {
+    const user = await app.request("/data/backup", {
       method: "POST",
       headers: auth(userToken),
     });
     expect(user.status).toBe(403);
 
-    const list = await app.request("/admin", { headers: auth(userToken) });
+    const list = await app.request("/data", { headers: auth(userToken) });
     expect(list.status).toBe(403);
   });
 
   it("creates a data-only archive and lists it", async () => {
-    const created = await app.request("/admin/backup", {
+    const created = await app.request("/data/backup", {
       method: "POST",
       headers: auth(managerToken),
     });
@@ -84,7 +84,7 @@ describe("admin backups", () => {
     expect(body.name).toMatch(BACKUP_NAME_RE);
     expect(body.size).toBeGreaterThan(0);
 
-    const listed = await app.request("/admin", { headers: auth(managerToken) });
+    const listed = await app.request("/data", { headers: auth(managerToken) });
     expect(listed.status).toBe(200);
     const index = (await listed.json()) as {
       backups: Array<{ name: string; size: number }>;
@@ -93,7 +93,7 @@ describe("admin backups", () => {
     expect(index.backups).toEqual([expect.objectContaining({ name: body.name, size: body.size })]);
     expect(index.endpoints).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ method: "POST", path: "/admin/backup" }),
+        expect.objectContaining({ method: "POST", path: "/data/backup" }),
       ]),
     );
 
@@ -114,13 +114,13 @@ describe("admin backups", () => {
   });
 
   it("downloads and deletes an archive", async () => {
-    const created = await app.request("/admin/backup", {
+    const created = await app.request("/data/backup", {
       method: "POST",
       headers: auth(managerToken),
     });
     const { name } = (await created.json()) as { name: string };
 
-    const download = await app.request(`/admin/backup/${name}`, {
+    const download = await app.request(`/data/backup/${name}`, {
       headers: { Authorization: `Bearer ${managerToken}` },
     });
     expect(download.status).toBe(200);
@@ -129,19 +129,19 @@ describe("admin backups", () => {
     const bytes = Buffer.from(await download.arrayBuffer());
     expect(bytes.length).toBeGreaterThan(0);
 
-    const denied = await app.request(`/admin/backup/${name}`, {
+    const denied = await app.request(`/data/backup/${name}`, {
       headers: auth(userToken),
     });
     expect(denied.status).toBe(403);
 
-    const removed = await app.request(`/admin/backup/${name}/delete`, {
+    const removed = await app.request(`/data/backup/${name}/delete`, {
       method: "POST",
       headers: auth(managerToken),
     });
     expect(removed.status).toBe(200);
     expect(await removed.json()).toEqual({ ok: true, deleted: name });
 
-    const missing = await app.request(`/admin/backup/${name}`, {
+    const missing = await app.request(`/data/backup/${name}`, {
       headers: { Authorization: `Bearer ${managerToken}` },
     });
     expect(missing.status).toBe(404);
@@ -150,12 +150,12 @@ describe("admin backups", () => {
   it("rejects path-like backup names", async () => {
     await mkdir(backupDir, { recursive: true });
     await writeFile(join(backupDir, "nope.tar.gz"), "x");
-    const res = await app.request("/admin/backup/../data/meta.json", {
+    const res = await app.request("/data/backup/../data/meta.json", {
       headers: { Authorization: `Bearer ${managerToken}` },
     });
     expect([400, 404]).toContain(res.status);
 
-    const sneaky = await app.request("/admin/backup/nope.tar.gz", {
+    const sneaky = await app.request("/data/backup/nope.tar.gz", {
       headers: { Authorization: `Bearer ${managerToken}` },
     });
     expect(sneaky.status).toBe(400);

@@ -48,13 +48,13 @@ describe("admin reload", () => {
   }
 
   it("requires a manager", async () => {
-    const anon = await app.request("/admin/reload", {
+    const anon = await app.request("/data/reload", {
       method: "POST",
       headers: { Accept: "application/json" },
     });
     expect(anon.status).toBe(401);
 
-    const user = await app.request("/admin/reload", {
+    const user = await app.request("/data/reload", {
       method: "POST",
       headers: auth(userToken),
     });
@@ -78,7 +78,7 @@ describe("admin reload", () => {
     await rm(join(dataDir, "scenes", "2.md"));
     await rm(join(dataDir, "scenes", "2.exits.json"), { force: true });
 
-    const res = await app.request("/admin/reload", {
+    const res = await app.request("/data/reload", {
       method: "POST",
       headers: auth(managerToken),
     });
@@ -91,7 +91,7 @@ describe("admin reload", () => {
   });
 
   it("lists admin endpoints for managers", async () => {
-    const res = await app.request("/admin", { headers: auth(managerToken) });
+    const res = await app.request("/data", { headers: auth(managerToken) });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       ok: boolean;
@@ -100,8 +100,8 @@ describe("admin reload", () => {
     expect(body.ok).toBe(true);
     expect(body.endpoints).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ method: "POST", path: "/admin/reload" }),
-        expect.objectContaining({ method: "POST", path: "/admin/backup" }),
+        expect.objectContaining({ method: "POST", path: "/data/reload" }),
+        expect.objectContaining({ method: "POST", path: "/data/backup" }),
       ]),
     );
   });

@@ -492,7 +492,7 @@ describe("live presence and chat", () => {
     await app.request(`/s/${sceneIds.public}`, {
       headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
     });
-    const res = await app.request("/admin", {
+    const res = await app.request("/data", {
       headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
     });
     expect(res.status).toBe(200);

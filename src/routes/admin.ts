@@ -35,22 +35,22 @@ adminRoutes.get("/", async (c) => {
   const endpoints = [
     {
       method: "POST",
-      path: "/admin/backup",
+      path: "/data/backup",
       description: "Archive data/ into backup/",
     },
     {
       method: "GET",
-      path: "/admin/backup/:name",
+      path: "/data/backup/:name",
       description: "Download a data archive",
     },
     {
       method: "POST",
-      path: "/admin/backup/:name/delete",
+      path: "/data/backup/:name/delete",
       description: "Delete a data archive",
     },
     {
       method: "POST",
-      path: "/admin/reload",
+      path: "/data/reload",
       description: "Reload the in-memory world cache from disk",
     },
   ];
@@ -62,9 +62,9 @@ adminRoutes.get("/", async (c) => {
   return page(
     c,
     200,
-    "Admin",
+    "Data",
     renderAdminHtml(endpoints, backups, notice, back),
-    renderMessageText("Admin", formatAdminText(endpoints, backups)),
+    renderMessageText("Data", formatAdminText(endpoints, backups)),
   );
 });
 
@@ -86,7 +86,7 @@ adminRoutes.post("/backup", async (c) => {
   if (negotiateFormat(c) === "text") {
     return c.text(renderMessageText("Backup", message));
   }
-  return c.redirect(`${c.get("assetBase")}/admin?backed-up=${encodeURIComponent(created.name)}`);
+  return c.redirect(`${c.get("assetBase")}/data?backed-up=${encodeURIComponent(created.name)}`);
 });
 
 adminRoutes.get("/backup/:name", async (c) => {
@@ -132,7 +132,7 @@ adminRoutes.post("/backup/:name/delete", async (c) => {
   if (negotiateFormat(c) === "text") {
     return c.text(renderMessageText("Backup", `Deleted ${name}.`));
   }
-  return c.redirect(`${c.get("assetBase")}/admin?deleted=${encodeURIComponent(name)}`);
+  return c.redirect(`${c.get("assetBase")}/data?deleted=${encodeURIComponent(name)}`);
 });
 
 adminRoutes.post("/reload", async (c) => {
@@ -205,7 +205,7 @@ function renderAdminHtml(
   const rows = backups.length
     ? backups
         .map((b) => {
-          const href = `admin/backup/${encodeURIComponent(b.name)}`;
+          const href = `data/backup/${encodeURIComponent(b.name)}`;
           return `<tr>
             <td><code>${escapeHtml(b.name)}</code></td>
             <td>${escapeHtml(formatBytes(b.size))}</td>
@@ -222,12 +222,12 @@ function renderAdminHtml(
     : `<tr><td colspan="4" class="muted">No archives yet.</td></tr>`;
 
   const flash = notice ? `<p class="notice" role="status">${escapeHtml(notice)}</p>` : "";
-  return `${renderPageBackCrumb(back)}<h1>Admin</h1>
+  return `${renderPageBackCrumb(back)}<h1>Data</h1>
     ${flash}
     <ul class="link-list">${list}</ul>
     <h2>Data backups</h2>
     <p class="muted">Archives <code>data/</code> only (not the app). Updates also write one here first.</p>
-    <form method="post" action="admin/backup" class="stack">
+    <form method="post" action="data/backup" class="stack">
       <button type="submit">Backup now</button>
     </form>
     <table class="backup-table">
@@ -237,7 +237,7 @@ function renderAdminHtml(
       <tbody>${rows}</tbody>
     </table>
     <h2>World cache</h2>
-    <form method="post" action="admin/reload" class="stack">
+    <form method="post" action="data/reload" class="stack">
       <button type="submit">Reload world from disk</button>
     </form>`;
 }

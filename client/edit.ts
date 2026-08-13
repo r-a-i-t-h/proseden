@@ -173,7 +173,7 @@ function checked(root: ParentNode, name: string): boolean {
   return !!root.querySelector<HTMLInputElement>(`input[name="${name}"][type="checkbox"]`)?.checked;
 }
 
-/** Mount edit tools once into `pane`. Toolbar is placed after the site header. */
+/** Mount edit tools once into `pane`. Caller places the sidebar toolbar into `#edit-root`. */
 export function mountEdit(boot: EditBootstrap, pane: HTMLElement): { toolbar: HTMLElement } {
   const manage = boot.manage;
   const user = boot.user;
@@ -190,27 +190,21 @@ export function mountEdit(boot: EditBootstrap, pane: HTMLElement): { toolbar: HT
   const nav = el("nav", { class: "edit-tools", "aria-label": "Editor tools" });
   const panel = el("div", { class: "edit-panel" });
 
+  const sceneTools = el("div", { class: "edit-toolbar-scenes" });
+  sceneTools.append(sceneSwitcher(boot.ownedScenes, manage));
+
   const links = el("div", { class: "edit-toolbar-links" });
   links.append(el("a", { class: "edit-tool-link", href: "g" }, "Groups"));
+  if (boot.isModerator) {
+    links.append(el("a", { class: "edit-tool-link", href: "live/admin" }, "Live Admin"));
+  }
   if (boot.isManager) {
     links.append(
-      el("a", { class: "edit-tool-link", href: "admin" }, "Admin"),
+      el("a", { class: "edit-tool-link", href: "data" }, "Data"),
       el("a", { class: "edit-tool-link", href: "staff" }, "Staff"),
     );
   }
-  if (boot.isModerator) {
-    links.append(el("a", { class: "edit-tool-link", href: "live/admin" }, "Live admin"));
-  }
-
-  const sceneTools = el("div", { class: "edit-toolbar-scenes" });
-  const newBtn = el(
-    "button",
-    { type: "button", class: "edit-tool-btn edit-new-scene", title: "New scene", "aria-label": "New scene" },
-    "+",
-  );
-  newBtn.addEventListener("click", () => selectTool("new"));
-  sceneTools.append(sceneSwitcher(boot.ownedScenes, manage), newBtn);
-  toolbar.append(links, sceneTools);
+  toolbar.append(sceneTools, links);
 
   const flash = sessionStorage.getItem(FLASH_KEY);
   if (flash) {
@@ -241,9 +235,6 @@ export function mountEdit(boot: EditBootstrap, pane: HTMLElement): { toolbar: HT
 
   inspector.append(nav, panel);
   pane.replaceChildren(inspector);
-  const app = document.querySelector(".app");
-  const header = document.querySelector(".top");
-  if (app && header) header.insertAdjacentElement("afterend", toolbar);
   renderPanel();
   return { toolbar };
 }

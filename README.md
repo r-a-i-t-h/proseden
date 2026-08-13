@@ -122,11 +122,11 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `DELETE`/`POST` | `/a/:id/delete` | Delete artefact (owner/manage/moderator) |
 | `GET` | `/staff` | List staff roles (manager) |
 | `PUT`/`POST` | `/staff/:username` | Set roles (manager) |
-| `GET` | `/admin` | Admin: backups list + endpoint index (manager) |
-| `POST` | `/admin/backup` | Archive `data/` into `backup/` (manager) |
-| `GET` | `/admin/backup/:name` | Download a data archive (manager) |
-| `POST` | `/admin/backup/:name/delete` | Delete a data archive (manager) |
-| `POST` | `/admin/reload` | Reload in-memory world cache from disk (manager) |
+| `GET` | `/data` | Data: backups list + endpoint index (manager) |
+| `POST` | `/data/backup` | Archive `data/` into `backup/` (manager) |
+| `GET` | `/data/backup/:name` | Download a data archive (manager) |
+| `POST` | `/data/backup/:name/delete` | Delete a data archive (manager) |
+| `POST` | `/data/reload` | Reload in-memory world cache from disk (manager) |
 | `GET` | `/s/:id/history` | Edit log (readers) |
 | `GET` | `/s/:id/history/:version` | View retained snapshot |
 | `POST` | `/s/:id/history/:version/restore` | Restore snapshot (manage) |
@@ -154,7 +154,7 @@ backup/
   2026-08-11T201530Z.tar.gz   # data/ only; sibling of data/, never nested inside it
 ```
 
-Managers can create, download, and delete archives from **Admin**. `proseden-update` writes one snapshot before it touches the app. See [DEPLOY.md](DEPLOY.md) for the SSH one-liner and restore notes.
+Managers can create, download, and delete archives from **Data**. `proseden-update` writes one snapshot before it touches the app. See [DEPLOY.md](DEPLOY.md) for the SSH one-liner and restore notes.
 
 Prose files use YAML frontmatter plus `## detail:<slug>` sections. Hash-leading lines in body/detail text are saved escaped (`\#`, `\##`) so they cannot be mistaken for section markers.
 

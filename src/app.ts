@@ -53,7 +53,7 @@ export function createApp(opts: {
   app.get("/health", (c) => c.json({ ok: true, name: "proseden" }));
 
   app.route("/auth", authRoutes);
-  app.route("/admin", adminRoutes);
+  app.route("/data", adminRoutes);
   app.route("/live", liveRoutes);
   app.route("/", worldRoutes);
 

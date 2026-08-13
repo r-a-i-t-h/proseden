@@ -30,7 +30,7 @@ export interface HtmlShellOptions {
   manage?: ManageContext;
   /** Scenes owned by the signed-in user (sidebar jump list). */
   ownedScenes?: OwnedSceneLink[];
-  /** Staff manager — shows /admin and /staff links in the sidebar. */
+  /** Staff manager — shows /data and /staff links in the sidebar. */
   isManager?: boolean;
   /** Moderator or manager — live admin / purge. */
   isModerator?: boolean;

@@ -201,9 +201,9 @@ PROSEDEN_DATA=./data sh deploy/migrate.sh
 
 Archives are **data only** (never the app). They accumulate under `backup/`; nothing deletes them automatically.
 
-**From Admin** (signed in as a manager): open `/admin`, **Backup now**, then Download or Delete.
+**From Data** (signed in as a manager): open `/data`, **Backup now**, then Download or Delete.
 
-**From SSH** (same files the Admin page lists):
+**From SSH** (same files the Data page lists):
 
 ```bash
 sudo /opt/proseden/www/current/deploy/backup-data.sh

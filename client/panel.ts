@@ -87,6 +87,7 @@ function bootPanel(): void {
     const result = mountEdit(boot, editPane);
     editToolbar = result.toolbar;
     editToolbar.hidden = true;
+    root.prepend(editToolbar);
     editMounted = true;
   }
 
