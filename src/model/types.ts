@@ -129,6 +129,9 @@ export interface EditLogEntry {
   versionId?: string;
 }
 
+/** Scene or artefact — shared by HTML/text entity page templates. */
+export type EntityKind = "scene" | "artefact";
+
 export const ALL_RIGHTS: Right[] = ["read", "edit", "manage"];
 
 export const RIGHT_RANK: Record<Right, number> = {

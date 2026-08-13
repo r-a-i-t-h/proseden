@@ -17,31 +17,32 @@ import {
   isManager,
   isModerator,
 } from "../access/permissions.js";
-import { apiError, liveSceneIdForUser, ownedSceneLinks, sceneBackLink, wantsJson } from "../http.js";
+import { apiError, page, sceneBackLink, wantsJson } from "../http.js";
 import { prepareJsonTextarea } from "../json-textarea.js";
 import type { StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
-  editModeHrefs,
   escapeHtml,
   renderArtefactBodyHtml,
-  renderHtmlPage,
+  renderEditHistoryBodyHtml,
   renderGroupBodyHtml,
   renderGroupsIndexHtml,
   renderInventoryBodyHtml,
   renderMessageBodyHtml,
   renderProfileBodyHtml,
   renderSceneBodyHtml,
+  renderSnapshotBodyHtml,
   renderStaffBodyHtml,
 } from "../render/html.js";
-import { formatProse } from "../render/prose.js";
 import {
   renderArtefactText,
+  renderEditHistoryText,
   renderGroupsIndexText,
   renderInventoryText,
   renderMessageText,
   renderProfileText,
   renderSceneText,
+  renderSnapshotText,
 } from "../render/text.js";
 
 export const worldRoutes = new Hono();
@@ -1125,9 +1126,7 @@ worldRoutes.get("/staff", (c) => {
     return apiError(c, user ? 403 : 401, "Manager role required");
   }
   if (wantsJson(c)) return c.json(world.staff);
-  if (negotiateFormat(c) === "text") {
-    return c.text(renderMessageText("Staff", JSON.stringify(world.staff.roles, null, 2)));
-  }
+  const staffText = JSON.stringify(world.staff.roles, null, 2);
   const rows = Object.entries(world.staff.roles)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(
@@ -1141,7 +1140,7 @@ worldRoutes.get("/staff", (c) => {
     200,
     "Staff",
     renderStaffBodyHtml({ rowsHtml: rows, back }),
-    renderMessageText("Staff", JSON.stringify(world.staff.roles, null, 2)),
+    renderMessageText("Staff", staffText),
   );
 });
 
@@ -1189,32 +1188,12 @@ worldRoutes.get("/s/:id/history", async (c) => {
   const log = await world.listEditLog("scenes", id);
   const assetBase = c.get("assetBase");
   if (wantsJson(c)) return c.json({ edits: log });
-  const lines = log.length
-    ? log
-        .map((e) => {
-          const snap = e.versionId
-            ? `  snapshot: ${assetBase}/s/${id}/history/${encodeURIComponent(e.versionId)}`
-            : "";
-          return `${e.at} by ${e.by} [${e.fields.join(", ") || "—"}]${e.retained ? " (retained)" : ""}${snap ? `\n${snap}` : ""}`;
-        })
-        .join("\n")
-    : "(no edits logged)";
-  const htmlList = log.length
-    ? `<ul class="link-list">${log
-        .map((e) => {
-          const link = e.versionId
-            ? ` <a href="s/${id}/history/${encodeURIComponent(e.versionId)}">view</a>`
-            : "";
-          return `<li>${escapeHtml(e.at)} · ${escapeHtml(e.by)} · ${escapeHtml(e.fields.join(", ") || "—")}${e.retained ? " · retained" : ""}${link}</li>`;
-        })
-        .join("")}</ul>`
-    : `<p class="muted">No edits logged.</p>`;
   return page(
     c,
     200,
     `History · Scene ${id}`,
-    `<p class="crumb"><a href="s/${id}">← Scene ${id}</a></p><h1>History</h1>${htmlList}`,
-    renderMessageText(`History · Scene ${id}`, lines),
+    renderEditHistoryBodyHtml({ kind: "scene", id, log }),
+    renderEditHistoryText({ kind: "scene", id, log, basePath: assetBase }),
     {
       kind: "scene",
       scene,
@@ -1236,25 +1215,26 @@ worldRoutes.get("/s/:id/history/:version", async (c) => {
   }
   const snap = await world.getSceneSnapshot(id, versionId);
   if (!snap) return apiError(c, 404, "Snapshot not found");
-  const assetBase = c.get("assetBase");
   const manage = canManage(user, scene, world);
   return page(
     c,
     200,
     `Snapshot ${versionId}`,
-    `<p class="crumb"><a href="s/${id}/history">← History</a></p>
-      <h1>Snapshot <span class="sub">${escapeHtml(versionId)}</span></h1>
-      <p class="meta">${escapeHtml(snap.title ?? `Scene ${id}`)}</p>
-      <div class="desc">${formatProse(snap.body)}</div>
-      ${
-        manage
-          ? `<form method="post" action="s/${id}/history/${encodeURIComponent(versionId)}/restore" class="stack"><button type="submit">Restore this version</button></form>`
-          : ""
-      }`,
-    renderMessageText(
-      `Snapshot ${versionId}`,
-      `${snap.title ?? `Scene ${id}`}\n\n${snap.body}\n`,
-    ),
+    renderSnapshotBodyHtml({
+      kind: "scene",
+      id,
+      versionId,
+      body: snap.body,
+      title: snap.title,
+      canRestore: manage,
+    }),
+    renderSnapshotText({
+      kind: "scene",
+      id,
+      versionId,
+      body: snap.body,
+      title: snap.title,
+    }),
   );
 });
 
@@ -1289,32 +1269,12 @@ worldRoutes.get("/a/:id/history", async (c) => {
   const log = await world.listEditLog("artefacts", id);
   const assetBase = c.get("assetBase");
   if (wantsJson(c)) return c.json({ edits: log });
-  const lines = log.length
-    ? log
-        .map((e) => {
-          const snap = e.versionId
-            ? `  snapshot: ${assetBase}/a/${id}/history/${encodeURIComponent(e.versionId)}`
-            : "";
-          return `${e.at} by ${e.by} [${e.fields.join(", ") || "—"}]${e.retained ? " (retained)" : ""}${snap ? `\n${snap}` : ""}`;
-        })
-        .join("\n")
-    : "(no edits logged)";
-  const htmlList = log.length
-    ? `<ul class="link-list">${log
-        .map((e) => {
-          const link = e.versionId
-            ? ` <a href="a/${id}/history/${encodeURIComponent(e.versionId)}">view</a>`
-            : "";
-          return `<li>${escapeHtml(e.at)} · ${escapeHtml(e.by)} · ${escapeHtml(e.fields.join(", ") || "—")}${e.retained ? " · retained" : ""}${link}</li>`;
-        })
-        .join("")}</ul>`
-    : `<p class="muted">No edits logged.</p>`;
   return page(
     c,
     200,
     `History · Artefact ${id}`,
-    `<p class="crumb"><a href="a/${id}">← Artefact ${id}</a></p><h1>History</h1>${htmlList}`,
-    renderMessageText(`History · Artefact ${id}`, lines),
+    renderEditHistoryBodyHtml({ kind: "artefact", id, log }),
+    renderEditHistoryText({ kind: "artefact", id, log, basePath: assetBase }),
   );
 });
 
@@ -1331,7 +1291,6 @@ worldRoutes.get("/a/:id/history/:version", async (c) => {
   }
   const snap = await world.getArtefactSnapshot(id, versionId);
   if (!snap) return apiError(c, 404, "Snapshot not found");
-  const assetBase = c.get("assetBase");
   const canRestore =
     !!user &&
     (user.username === artefact.owner || canManage(user, home, world));
@@ -1339,15 +1298,14 @@ worldRoutes.get("/a/:id/history/:version", async (c) => {
     c,
     200,
     `Snapshot ${versionId}`,
-    `<p class="crumb"><a href="a/${id}/history">← History</a></p>
-      <h1>Snapshot <span class="sub">${escapeHtml(versionId)}</span></h1>
-      <div class="desc">${formatProse(snap.body)}</div>
-      ${
-        canRestore
-          ? `<form method="post" action="a/${id}/history/${encodeURIComponent(versionId)}/restore" class="stack"><button type="submit">Restore this version</button></form>`
-          : ""
-      }`,
-    renderMessageText(`Snapshot ${versionId}`, snap.body),
+    renderSnapshotBodyHtml({
+      kind: "artefact",
+      id,
+      versionId,
+      body: snap.body,
+      canRestore,
+    }),
+    renderSnapshotText({ kind: "artefact", id, versionId, body: snap.body }),
   );
 });
 
@@ -1377,49 +1335,6 @@ worldRoutes.post("/a/:id/history/:version/restore", async (c) => {
 
 function isTruthy(value: unknown): boolean {
   return value === true || value === "true" || value === "on" || value === "1";
-}
-
-function page(
-  c: Context,
-  status: number,
-  title: string,
-  htmlBody: string,
-  textBody: string,
-  manage?: Parameters<typeof renderHtmlPage>[0]["manage"],
-) {
-  const format = negotiateFormat(c);
-  if (format === "text") {
-    return c.text(textBody, status as 200);
-  }
-  const user = c.get("user");
-  const world = c.get("world");
-  const hrefs = editModeHrefs(c.req.url, c.get("assetBase"));
-  // Detail views stay on the scene; artefact pages count as present at home.
-  // Elsewhere (inventory, profile, groups, …) keep Live at the user's last readable scene.
-  let liveSceneId =
-    manage?.kind === "scene" && manage.scene
-      ? manage.scene.id
-      : manage?.kind === "artefact" && manage.artefact
-        ? manage.artefact.homeSceneId
-        : undefined;
-  if (liveSceneId === undefined) {
-    liveSceneId = liveSceneIdForUser(user, world);
-  }
-  return c.html(
-    renderHtmlPage({
-      title,
-      bodyHtml: htmlBody,
-      user,
-      assetBase: c.get("assetBase"),
-      manage,
-      ownedScenes: ownedSceneLinks(world, user),
-      isManager: isManager(user, world),
-      isModerator: isModerator(user, world),
-      liveSceneId,
-      ...hrefs,
-    }),
-    status as 200,
-  );
 }
 
 async function readBody(c: Context): Promise<Record<string, unknown>> {

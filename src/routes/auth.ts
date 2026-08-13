@@ -3,9 +3,8 @@ import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { canRead } from "../access/permissions.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
-import { ownedSceneLinksFor, wantsJson } from "../http.js";
-import { negotiateFormat } from "../render/format.js";
-import { editModeHrefs, renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
+import { page, wantsJson } from "../http.js";
+import { renderMessageBodyHtml } from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
 import type { UserRecord } from "../model/types.js";
 import type { WorldStore } from "../store/world.js";
@@ -216,19 +215,11 @@ function respond(c: Context, status: 400 | 401 | 409, title: string, message: st
   if (wantsJson(c)) {
     return c.json({ error: message }, status);
   }
-  const format = negotiateFormat(c);
-  if (format === "text") {
-    return c.text(renderMessageText(title, message), status);
-  }
-  return c.html(
-    renderHtmlPage({
-      title,
-      bodyHtml: renderMessageBodyHtml(title, message),
-      user: c.get("user"),
-      assetBase: c.get("assetBase"),
-      ownedScenes: ownedSceneLinksFor(c),
-      ...editModeHrefs(c.req.url, c.get("assetBase")),
-    }),
+  return page(
+    c,
     status,
+    title,
+    renderMessageBodyHtml(title, message),
+    renderMessageText(title, message),
   );
 }

@@ -1,10 +1,11 @@
 import type { Context } from "hono";
-import { canRead, isManager } from "./access/permissions.js";
+import { canRead, isManager, isModerator } from "./access/permissions.js";
 import { negotiateFormat } from "./render/format.js";
 import {
   editModeHrefs,
   renderHtmlPage,
   renderMessageBodyHtml,
+  type ManageContext,
   type OwnedSceneLink,
   type PageBackLink,
 } from "./render/html.js";
@@ -52,6 +53,59 @@ export function sceneBackLink(user: UserRecord, world: WorldStore): PageBackLink
   return { href: "./", label: "← Back", history: true };
 }
 
+export interface PageShellOverrides {
+  isManager?: boolean;
+  isModerator?: boolean;
+}
+
+/**
+ * Negotiate text vs HTML and wrap HTML in the shared site shell
+ * (header, edit bootstrap, live scene binding, owned-scene list).
+ */
+export function page(
+  c: Context,
+  status: number,
+  title: string,
+  htmlBody: string,
+  textBody: string,
+  manage?: ManageContext,
+  shell?: PageShellOverrides,
+) {
+  const format = negotiateFormat(c);
+  if (format === "text") {
+    return c.text(textBody, status as 200);
+  }
+  const user = c.get("user");
+  const world = c.get("world");
+  const hrefs = editModeHrefs(c.req.url, c.get("assetBase"));
+  // Detail views stay on the scene; artefact pages count as present at home.
+  // Elsewhere (inventory, profile, groups, …) keep Live at the user's last readable scene.
+  let liveSceneId =
+    manage?.kind === "scene" && manage.scene
+      ? manage.scene.id
+      : manage?.kind === "artefact" && manage.artefact
+        ? manage.artefact.homeSceneId
+        : undefined;
+  if (liveSceneId === undefined) {
+    liveSceneId = liveSceneIdForUser(user, world);
+  }
+  return c.html(
+    renderHtmlPage({
+      title,
+      bodyHtml: htmlBody,
+      user,
+      assetBase: c.get("assetBase"),
+      manage,
+      ownedScenes: ownedSceneLinks(world, user),
+      isManager: shell?.isManager ?? isManager(user, world),
+      isModerator: shell?.isModerator ?? isModerator(user, world),
+      liveSceneId,
+      ...hrefs,
+    }),
+    status as 200,
+  );
+}
+
 export function apiError(
   c: Context,
   status: 400 | 401 | 403 | 404,
@@ -62,18 +116,13 @@ export function apiError(
     if (wantsJson(c)) return c.json({ error: message }, status);
     return c.text(renderMessageText("Error", message), status);
   }
-  const user = c.get("user");
-  const world = c.get("world");
-  return c.html(
-    renderHtmlPage({
-      title: "Error",
-      bodyHtml: renderMessageBodyHtml("Error", message),
-      user,
-      assetBase: c.get("assetBase"),
-      ownedScenes: ownedSceneLinks(world, user),
-      isManager: opts?.isManager ?? isManager(user, world),
-      ...editModeHrefs(c.req.url, c.get("assetBase")),
-    }),
+  return page(
+    c,
     status,
+    "Error",
+    renderMessageBodyHtml("Error", message),
+    renderMessageText("Error", message),
+    undefined,
+    { isManager: opts?.isManager },
   );
 }

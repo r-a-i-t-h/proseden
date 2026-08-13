@@ -3,20 +3,15 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
-import { canRead, isManager, isModerator } from "../access/permissions.js";
-import { apiError, liveSceneIdForUser, ownedSceneLinks, sceneBackLink, wantsJson } from "../http.js";
+import { canRead, isModerator } from "../access/permissions.js";
+import { apiError, page, sceneBackLink, wantsJson } from "../http.js";
 import type { LiveEvent } from "../live/types.js";
 import { HEARTBEAT_INTERVAL_MS } from "../live/types.js";
-import { negotiateFormat } from "../render/format.js";
 import {
-  editModeHrefs,
   escapeHtml,
-  renderHtmlPage,
-  renderMessageBodyHtml,
   renderPageBackCrumb,
   type PageBackLink,
 } from "../render/html.js";
-import { renderMessageText } from "../render/text.js";
 
 export const liveRoutes = new Hono();
 
@@ -266,23 +261,13 @@ liveRoutes.get("/admin", (c) => {
     return c.json({ users: recentUsers, buffers });
   }
 
-  const format = negotiateFormat(c);
   const back = sceneBackLink(user!, world);
-  const bodyHtml = renderLiveAdminHtml(recentUsers, buffers, back);
-  const textBody = renderLiveAdminText(recentUsers, buffers);
-  if (format === "text") return c.text(textBody);
-  return c.html(
-    renderHtmlPage({
-      title: "Live admin",
-      bodyHtml,
-      user,
-      assetBase: c.get("assetBase"),
-      ownedScenes: ownedSceneLinks(world, user),
-      isManager: isManager(user, world),
-      isModerator: true,
-      liveSceneId: liveSceneIdForUser(user, world),
-      ...editModeHrefs(c.req.url, c.get("assetBase")),
-    }),
+  return page(
+    c,
+    200,
+    "Live admin",
+    renderLiveAdminHtml(recentUsers, buffers, back),
+    renderLiveAdminText(recentUsers, buffers),
   );
 });
 

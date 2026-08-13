@@ -2,10 +2,20 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatJsonTextarea } from "../json-textarea.js";
-import type { ArtefactRecord, Deny, ExitRecord, Grant, SceneRecord, UserRecord } from "../model/types.js";
+import type {
+  ArtefactRecord,
+  Deny,
+  EditLogEntry,
+  EntityKind,
+  ExitRecord,
+  Grant,
+  SceneRecord,
+  UserRecord,
+} from "../model/types.js";
 import { escapeHtml, formatProse } from "./prose.js";
 
 export { escapeHtml } from "./prose.js";
+export type { EntityKind } from "../model/types.js";
 
 export interface OwnedSceneLink {
   id: number;
@@ -193,6 +203,105 @@ function modeSwitchHtml(opts: { canLive: boolean; canEdit: boolean }): string {
     </div>`;
 }
 
+function entityKindLabel(kind: EntityKind): string {
+  return kind === "scene" ? "Scene" : "Artefact";
+}
+
+function entityPath(kind: EntityKind, id: number): string {
+  return kind === "scene" ? `s/${id}` : `a/${id}`;
+}
+
+function entityDisplayTitle(kind: EntityKind, id: number, title?: string): string {
+  return title?.trim() ? title : `${entityKindLabel(kind)} ${id}`;
+}
+
+/** Detail sub-page shared by scenes and artefacts. */
+export function renderEntityDetailHtml(opts: {
+  kind: EntityKind;
+  id: number;
+  title?: string;
+  owner: string;
+  detail: string;
+  text?: string;
+}): string {
+  const label = entityDisplayTitle(opts.kind, opts.id, opts.title);
+  const path = entityPath(opts.kind, opts.id);
+  return `<p class="crumb"><a href="${path}">← ${entityKindLabel(opts.kind)} ${opts.id}</a></p>
+    <h1>${escapeHtml(label)} <span class="detail-sub">detail: ${escapeHtml(opts.detail)}</span></h1>
+    ${bylineHtml(opts.owner)}
+    <div class="desc">${formatProse(opts.text ?? `No detail named “${opts.detail}”.`)}</div>`;
+}
+
+function renderEntityHeadingHtml(opts: {
+  kind: EntityKind;
+  id: number;
+  title?: string;
+  owner: string;
+}): string {
+  const label = entityDisplayTitle(opts.kind, opts.id, opts.title);
+  return `<h1>${escapeHtml(label)} <span class="sub">#${opts.id}</span></h1>
+    ${bylineHtml(opts.owner)}`;
+}
+
+function renderDetailsSectionHtml(
+  kind: EntityKind,
+  id: number,
+  details: Record<string, string>,
+): string {
+  const names = Object.keys(details);
+  if (!names.length) return "";
+  const path = entityPath(kind, id);
+  const items = names
+    .map(
+      (name) =>
+        `<li><a href="${path}?${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
+    )
+    .join("");
+  return `<section><h2>Details</h2><ul class="link-list">${items}</ul></section>`;
+}
+
+export function renderEditHistoryBodyHtml(opts: {
+  kind: EntityKind;
+  id: number;
+  log: EditLogEntry[];
+}): string {
+  const path = entityPath(opts.kind, opts.id);
+  const htmlList = opts.log.length
+    ? `<ul class="link-list">${opts.log
+        .map((e) => {
+          const link = e.versionId
+            ? ` <a href="${path}/history/${encodeURIComponent(e.versionId)}">view</a>`
+            : "";
+          return `<li>${escapeHtml(e.at)} · ${escapeHtml(e.by)} · ${escapeHtml(e.fields.join(", ") || "—")}${e.retained ? " · retained" : ""}${link}</li>`;
+        })
+        .join("")}</ul>`
+    : `<p class="muted">No edits logged.</p>`;
+  return `<p class="crumb"><a href="${path}">← ${entityKindLabel(opts.kind)} ${opts.id}</a></p><h1>History</h1>${htmlList}`;
+}
+
+export function renderSnapshotBodyHtml(opts: {
+  kind: EntityKind;
+  id: number;
+  versionId: string;
+  body: string;
+  title?: string;
+  canRestore: boolean;
+}): string {
+  const path = entityPath(opts.kind, opts.id);
+  const meta =
+    opts.kind === "scene"
+      ? `<p class="meta">${escapeHtml(opts.title ?? `Scene ${opts.id}`)}</p>`
+      : "";
+  const restore = opts.canRestore
+    ? `<form method="post" action="${path}/history/${encodeURIComponent(opts.versionId)}/restore" class="stack"><button type="submit">Restore this version</button></form>`
+    : "";
+  return `<p class="crumb"><a href="${path}/history">← History</a></p>
+    <h1>Snapshot <span class="sub">${escapeHtml(opts.versionId)}</span></h1>
+    ${meta}
+    <div class="desc">${formatProse(opts.body)}</div>
+    ${restore}`;
+}
+
 export function renderSceneBodyHtml(opts: {
   scene: SceneRecord;
   exits: ExitRecord[];
@@ -206,19 +315,15 @@ export function renderSceneBodyHtml(opts: {
   const { scene, exits, artefacts, detail, isEntrance } = opts;
 
   if (detail) {
-    const text = scene.details[detail];
-    return `<p class="crumb"><a href="s/${scene.id}">← Scene ${scene.id}</a></p>
-      <h1>${escapeHtml(scene.title ?? `Scene ${scene.id}`)} <span class="detail-sub">detail: ${escapeHtml(detail)}</span></h1>
-      ${bylineHtml(scene.owner)}
-      <div class="desc">${formatProse(text ?? `No detail named “${detail}”.`)}</div>`;
+    return renderEntityDetailHtml({
+      kind: "scene",
+      id: scene.id,
+      title: scene.title,
+      owner: scene.owner,
+      detail,
+      text: scene.details[detail],
+    });
   }
-
-  const detailLinks = Object.keys(scene.details)
-    .map(
-      (name) =>
-        `<li><a href="s/${scene.id}?${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
-    )
-    .join("");
 
   const artefactLinks = artefacts
     .map((a) => {
@@ -240,11 +345,15 @@ export function renderSceneBodyHtml(opts: {
     isEntrance ? "entrance" : "",
   ].filter(Boolean);
 
-  return `<h1>${escapeHtml(scene.title ?? `Scene ${scene.id}`)} <span class="sub">#${scene.id}</span></h1>
-    ${bylineHtml(scene.owner)}
+  return `${renderEntityHeadingHtml({
+      kind: "scene",
+      id: scene.id,
+      title: scene.title,
+      owner: scene.owner,
+    })}
     <p class="meta">${badges.join(" · ")}</p>
     <div class="desc">${formatProse(scene.body)}</div>
-    ${detailLinks ? `<section><h2>Details</h2><ul class="link-list">${detailLinks}</ul></section>` : ""}
+    ${renderDetailsSectionHtml("scene", scene.id, scene.details)}
     ${artefactLinks ? `<section><h2>Artefacts</h2><ul class="link-list">${artefactLinks}</ul></section>` : ""}
     ${exitLinks ? `<section><h2>Exits</h2><ul class="link-list">${exitLinks}</ul></section>` : ""}
     <section>
@@ -281,26 +390,26 @@ export function renderArtefactBodyHtml(opts: {
   const { artefact, detail } = opts;
 
   if (detail) {
-    const text = artefact.details[detail];
-    return `<p class="crumb"><a href="a/${artefact.id}">← Artefact ${artefact.id}</a></p>
-      <h1>${escapeHtml(artefact.title ?? `Artefact ${artefact.id}`)} <span class="detail-sub">detail: ${escapeHtml(detail)}</span></h1>
-      ${bylineHtml(artefact.owner)}
-      <div class="desc">${formatProse(text ?? `No detail named “${detail}”.`)}</div>`;
+    return renderEntityDetailHtml({
+      kind: "artefact",
+      id: artefact.id,
+      title: artefact.title,
+      owner: artefact.owner,
+      detail,
+      text: artefact.details[detail],
+    });
   }
 
-  const detailLinks = Object.keys(artefact.details)
-    .map(
-      (name) =>
-        `<li><a href="a/${artefact.id}?${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
-    )
-    .join("");
-
   return `<p class="crumb"><a href="s/${artefact.homeSceneId}?from=${artefact.homeSceneId}">← Scene ${artefact.homeSceneId}</a></p>
-    <h1>${escapeHtml(artefact.title ?? `Artefact ${artefact.id}`)} <span class="sub">#${artefact.id}</span></h1>
-    ${bylineHtml(artefact.owner)}
+    ${renderEntityHeadingHtml({
+      kind: "artefact",
+      id: artefact.id,
+      title: artefact.title,
+      owner: artefact.owner,
+    })}
     ${artefact.tags.length ? `<p class="meta">${escapeHtml(artefact.tags.join(", "))}</p>` : ""}
     <div class="desc">${formatProse(artefact.body)}</div>
-    ${detailLinks ? `<section><h2>Details</h2><ul class="link-list">${detailLinks}</ul></section>` : ""}
+    ${renderDetailsSectionHtml("artefact", artefact.id, artefact.details)}
     ${
       opts.collected === undefined
         ? ""

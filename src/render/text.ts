@@ -1,5 +1,50 @@
 import { formatAccessSummary } from "../access/acl.js";
-import type { ArtefactRecord, Deny, ExitRecord, Grant, SceneRecord } from "../model/types.js";
+import type {
+  ArtefactRecord,
+  Deny,
+  EditLogEntry,
+  EntityKind,
+  ExitRecord,
+  Grant,
+  SceneRecord,
+} from "../model/types.js";
+
+function entityKindLabel(kind: EntityKind): string {
+  return kind === "scene" ? "Scene" : "Artefact";
+}
+
+function entityPathPrefix(kind: EntityKind): string {
+  return kind === "scene" ? "s" : "a";
+}
+
+function entityTextTitle(
+  kind: EntityKind,
+  id: number,
+  title?: string,
+  detail?: string,
+): string {
+  const name = title ? `: ${title}` : "";
+  const kindCap = entityKindLabel(kind);
+  if (detail) return `[${kindCap} ${id}${name} — detail:${detail}]`;
+  return `[${kindCap} ${id}${name}]`;
+}
+
+function appendDetailLines(
+  lines: string[],
+  kind: EntityKind,
+  id: number,
+  details: Record<string, string>,
+  base: string,
+): void {
+  const detailNames = Object.keys(details);
+  if (!detailNames.length) return;
+  const prefix = entityPathPrefix(kind);
+  lines.push("Details:");
+  for (const name of detailNames) {
+    lines.push(`  - ${name}  ${base}/${prefix}/${id}?${encodeURIComponent(name)}`);
+  }
+  lines.push("");
+}
 
 export function renderSceneText(opts: {
   scene: SceneRecord;
@@ -17,12 +62,12 @@ export function renderSceneText(opts: {
 
   if (detail) {
     const text = scene.details[detail];
-    lines.push(`[Scene ${scene.id}${scene.title ? `: ${scene.title}` : ""} — detail:${detail}]`);
+    lines.push(entityTextTitle("scene", scene.id, scene.title, detail));
     if (scene.owner) lines.push(`by ${scene.owner}`);
     lines.push("");
     lines.push(text ?? `(No detail named "${detail}".)`);
   } else {
-    lines.push(`[Scene ${scene.id}${scene.title ? `: ${scene.title}` : ""}]`);
+    lines.push(entityTextTitle("scene", scene.id, scene.title));
     if (scene.owner) lines.push(`by ${scene.owner}`);
     {
       const tags: string[] = [scene.visibility];
@@ -33,14 +78,7 @@ export function renderSceneText(opts: {
     lines.push("");
     lines.push(scene.body);
     lines.push("");
-    const detailNames = Object.keys(scene.details);
-    if (detailNames.length) {
-      lines.push("Details:");
-      for (const name of detailNames) {
-        lines.push(`  - ${name}  ${base}/s/${scene.id}?${encodeURIComponent(name)}`);
-      }
-      lines.push("");
-    }
+    appendDetailLines(lines, "scene", scene.id, scene.details, base);
     if (artefacts.length) {
       lines.push("Artefacts:");
       for (const a of artefacts) {
@@ -52,9 +90,7 @@ export function renderSceneText(opts: {
     if (exits.length) {
       lines.push("Exits:");
       for (const e of exits) {
-        lines.push(
-          `  - ${e.nickname}  ${base}/s/${scene.id}/go/${e.exitId}`,
-        );
+        lines.push(`  - ${e.nickname}  ${base}/s/${scene.id}/go/${e.exitId}`);
       }
       lines.push("");
     }
@@ -83,32 +119,58 @@ export function renderArtefactText(opts: {
 
   if (detail) {
     const text = artefact.details[detail];
-    lines.push(
-      `[Artefact ${artefact.id}${artefact.title ? `: ${artefact.title}` : ""} — detail:${detail}]`,
-    );
+    lines.push(entityTextTitle("artefact", artefact.id, artefact.title, detail));
     if (artefact.owner) lines.push(`by ${artefact.owner}`);
     lines.push("");
     lines.push(text ?? `(No detail named "${detail}".)`);
   } else {
-    lines.push(`[Artefact ${artefact.id}${artefact.title ? `: ${artefact.title}` : ""}]`);
+    lines.push(entityTextTitle("artefact", artefact.id, artefact.title));
     if (artefact.owner) lines.push(`by ${artefact.owner}`);
     lines.push(`home: ${base}/s/${artefact.homeSceneId}?from=${artefact.homeSceneId}`);
     if (artefact.tags.length) lines.push(`tags: ${artefact.tags.join(", ")}`);
     lines.push("");
     lines.push(artefact.body);
     lines.push("");
-    const detailNames = Object.keys(artefact.details);
-    if (detailNames.length) {
-      lines.push("Details:");
-      for (const name of detailNames) {
-        lines.push(
-          `  - ${name}  ${base}/a/${artefact.id}?${encodeURIComponent(name)}`,
-        );
-      }
-    }
+    appendDetailLines(lines, "artefact", artefact.id, artefact.details, base);
   }
 
   return `${lines.join("\n").trimEnd()}\n`;
+}
+
+export function renderEditHistoryText(opts: {
+  kind: EntityKind;
+  id: number;
+  log: EditLogEntry[];
+  basePath?: string;
+}): string {
+  const base = opts.basePath ?? "";
+  const prefix = entityPathPrefix(opts.kind);
+  const title = `History · ${entityKindLabel(opts.kind)} ${opts.id}`;
+  const lines = opts.log.length
+    ? opts.log
+        .map((e) => {
+          const snap = e.versionId
+            ? `  snapshot: ${base}/${prefix}/${opts.id}/history/${encodeURIComponent(e.versionId)}`
+            : "";
+          return `${e.at} by ${e.by} [${e.fields.join(", ") || "—"}]${e.retained ? " (retained)" : ""}${snap ? `\n${snap}` : ""}`;
+        })
+        .join("\n")
+    : "(no edits logged)";
+  return renderMessageText(title, lines);
+}
+
+export function renderSnapshotText(opts: {
+  kind: EntityKind;
+  id: number;
+  versionId: string;
+  body: string;
+  title?: string;
+}): string {
+  const message =
+    opts.kind === "scene"
+      ? `${opts.title ?? `Scene ${opts.id}`}\n\n${opts.body}\n`
+      : opts.body;
+  return renderMessageText(`Snapshot ${opts.versionId}`, message);
 }
 
 export function renderProfileText(opts: {

@@ -1,19 +1,16 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { readFile } from "node:fs/promises";
-import { isManager, isModerator } from "../access/permissions.js";
+import { isManager } from "../access/permissions.js";
 import {
   apiError,
-  liveSceneIdForUser,
-  ownedSceneLinksFor,
+  page,
   sceneBackLink,
   wantsJson,
 } from "../http.js";
 import { negotiateFormat } from "../render/format.js";
 import {
-  editModeHrefs,
   escapeHtml,
-  renderHtmlPage,
   renderMessageBodyHtml,
   renderPageBackCrumb,
   type PageBackLink,
@@ -59,25 +56,15 @@ adminRoutes.get("/", async (c) => {
   ];
 
   if (wantsJson(c)) return c.json({ ok: true, endpoints, backups });
-  if (negotiateFormat(c) === "text") {
-    return c.text(renderMessageText("Admin", formatAdminText(endpoints, backups)));
-  }
   const user = c.get("user")!;
   const world = c.get("world");
   const back = sceneBackLink(user, world);
-  return c.html(
-    renderHtmlPage({
-      title: "Admin",
-      bodyHtml: renderAdminHtml(endpoints, backups, notice, back),
-      user,
-      assetBase: c.get("assetBase"),
-      ownedScenes: ownedSceneLinksFor(c),
-      isManager: true,
-      // Managers are moderators; needed for Edit toolbar → Live admin.
-      isModerator: isModerator(user, world),
-      liveSceneId: liveSceneIdForUser(user, world),
-      ...editModeHrefs(c.req.url, c.get("assetBase")),
-    }),
+  return page(
+    c,
+    200,
+    "Admin",
+    renderAdminHtml(endpoints, backups, notice, back),
+    renderMessageText("Admin", formatAdminText(endpoints, backups)),
   );
 });
 
@@ -166,22 +153,12 @@ adminRoutes.post("/reload", async (c) => {
 
   if (wantsJson(c)) return c.json(summary);
   const message = `Reloaded from disk: ${summary.scenes} scenes, ${summary.artefacts} artefacts, ${summary.users} users.`;
-  if (negotiateFormat(c) === "text") {
-    return c.text(renderMessageText("Reload", message));
-  }
-  const user = c.get("user");
-  return c.html(
-    renderHtmlPage({
-      title: "Reload",
-      bodyHtml: renderMessageBodyHtml("Reload", message),
-      user,
-      assetBase: c.get("assetBase"),
-      ownedScenes: ownedSceneLinksFor(c),
-      isManager: true,
-      isModerator: isModerator(user, world),
-      liveSceneId: liveSceneIdForUser(user, world),
-      ...editModeHrefs(c.req.url, c.get("assetBase")),
-    }),
+  return page(
+    c,
+    200,
+    "Reload",
+    renderMessageBodyHtml("Reload", message),
+    renderMessageText("Reload", message),
   );
 });
 
