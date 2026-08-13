@@ -322,6 +322,11 @@ const DENIES_EXAMPLE = `[
 
 export type PageBackLink = { href: string; label: string; history?: boolean };
 
+export function renderPageBackCrumb(back?: PageBackLink): string {
+  if (!back) return "";
+  return `<p class="crumb"><a href="${escapeAttr(back.href)}"${back.history ? ' data-nav="back"' : ""}>${escapeHtml(back.label)}</a></p>`;
+}
+
 export function renderProfileBodyHtml(opts: {
   username: string;
   message?: string;
@@ -329,14 +334,11 @@ export function renderProfileBodyHtml(opts: {
   denies?: Deny[];
   back?: PageBackLink;
 }): string {
-  const crumb = opts.back
-    ? `<p class="crumb"><a href="${escapeAttr(opts.back.href)}"${opts.back.history ? ' data-nav="back"' : ""}>${escapeHtml(opts.back.label)}</a></p>`
-    : "";
   const notice = opts.message
     ? `<p class="notice" role="status">${escapeHtml(opts.message)}</p>`
     : "";
   const accessAction = `u/${encodeURIComponent(opts.username)}/access`;
-  return `${crumb}<h1>Profile</h1>
+  return `${renderPageBackCrumb(opts.back)}<h1>Profile</h1>
     ${bylineHtml(opts.username)}
     ${notice}
     <h2>Change password</h2>
@@ -368,8 +370,9 @@ export interface GroupListItem {
 export function renderGroupsIndexHtml(opts: {
   managed: GroupListItem[];
   readable: GroupListItem[];
+  back?: PageBackLink;
 }): string {
-  return `<h1>Groups</h1>
+  return `${renderPageBackCrumb(opts.back)}<h1>Groups</h1>
     <p class="muted">Rights on a group apply to every scene in it.</p>
     ${renderGroupListSection("Groups you manage", opts.managed)}
     ${renderGroupListSection("Other groups you can see", opts.readable)}
@@ -403,6 +406,7 @@ export function renderGroupBodyHtml(opts: {
   canTransfer?: boolean;
   accessSummary: string;
   message?: string;
+  back?: PageBackLink;
 }): string {
   const notice = opts.message
     ? `<p class="notice" role="status">${escapeHtml(opts.message)}</p>`
@@ -423,7 +427,7 @@ export function renderGroupBodyHtml(opts: {
   const transfer = opts.canTransfer
     ? renderTransferFormHtml(`g/${encodeURIComponent(opts.id)}/transfer`, opts.owner, "group")
     : "";
-  return `<p class="crumb"><a href="g">← Groups</a></p>
+  return `${renderPageBackCrumb(opts.back)}<p class="crumb"><a href="g">← Groups</a></p>
     <h1>${escapeHtml(opts.title)} <span class="sub">#${escapeHtml(opts.id)}</span></h1>
     ${bylineHtml(opts.owner)}
     ${notice}
@@ -437,9 +441,7 @@ export function renderInventoryBodyHtml(
   items: ArtefactRecord[],
   back?: PageBackLink,
 ): string {
-  const crumb = back
-    ? `<p class="crumb"><a href="${escapeAttr(back.href)}"${back.history ? ' data-nav="back"' : ""}>${escapeHtml(back.label)}</a></p>`
-    : "";
+  const crumb = renderPageBackCrumb(back);
   if (!items.length) {
     return `${crumb}<h1>Inventory</h1><p class="muted">Empty — collect artefacts you love.</p>`;
   }
@@ -453,6 +455,43 @@ export function renderInventoryBodyHtml(
     })
     .join("");
   return `${crumb}<h1>Inventory</h1><ul class="link-list">${list}</ul>`;
+}
+
+export function renderStaffBodyHtml(opts: {
+  rowsHtml: string;
+  back?: PageBackLink;
+}): string {
+  return `${renderPageBackCrumb(opts.back)}<h1>Staff</h1>
+      ${opts.rowsHtml ? `<ul class="link-list">${opts.rowsHtml}</ul>` : `<p class="muted">No staff roles assigned.</p>`}
+      <h2>Assign staff role</h2>
+      <form method="post" action="staff/" class="stack" id="staff-form">
+        <label>Username <input name="username" required /></label>
+        <label>Roles (comma: moderator, organiser, manager) <input name="roles" placeholder="moderator" /></label>
+        <button type="submit">Save roles</button>
+      </form>
+      <script>
+        (function () {
+          var form = document.getElementById("staff-form");
+          if (!form) return;
+          form.addEventListener("submit", function (ev) {
+            ev.preventDefault();
+            var username = form.querySelector('input[name="username"]').value.trim();
+            var roles = form.querySelector('input[name="roles"]').value;
+            if (!username) return;
+            form.action = "staff/" + encodeURIComponent(username);
+            var body = new URLSearchParams();
+            body.set("roles", roles);
+            fetch(form.action, {
+              method: "POST",
+              headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+              body: body,
+            }).then(function (r) {
+              if (r.ok) window.location.reload();
+              else r.json().then(function (err) { alert(err.error || "Failed"); });
+            });
+          });
+        })();
+      </script>`;
 }
 
 export function renderMessageBodyHtml(title: string, message: string): string {

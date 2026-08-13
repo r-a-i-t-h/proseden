@@ -144,8 +144,10 @@ export function renderGroupsIndexText(
   managed: Array<{ id: string; title: string; owner: string; sceneCount: number }>,
   readable: Array<{ id: string; title: string; owner: string; sceneCount: number }>,
   basePath = "",
+  back?: { href: string; label: string },
 ): string {
   const lines = ["[Groups]", ""];
+  if (back) lines.push(`${back.label}  ${basePath}/${back.href.replace(/^\.\//, "")}`, "");
   const pushList = (heading: string, groups: typeof managed) => {
     if (!groups.length) return;
     lines.push(heading);

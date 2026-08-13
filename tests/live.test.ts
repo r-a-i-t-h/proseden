@@ -459,4 +459,59 @@ describe("live presence and chat", () => {
     expect(html).toContain(`← Scene ${sceneIds.public}`);
     expect(html).not.toContain('data-nav="back"');
   });
+
+  it("groups keeps Live at lastSceneId and links back", async () => {
+    await app.request(`/s/${sceneIds.public}`, {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    const res = await app.request("/g", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
+    expect(html).toContain(`← Scene ${sceneIds.public}`);
+  });
+
+  it("staff keeps Live at lastSceneId and links back", async () => {
+    await world.setStaffRoles("alice", ["manager"]);
+    await app.request(`/s/${sceneIds.public}`, {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    const res = await app.request("/staff", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
+    expect(html).toContain(`← Scene ${sceneIds.public}`);
+  });
+
+  it("admin keeps Live at lastSceneId and links back", async () => {
+    await world.setStaffRoles("alice", ["manager"]);
+    await app.request(`/s/${sceneIds.public}`, {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    const res = await app.request("/admin", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
+    expect(html).toContain(`← Scene ${sceneIds.public}`);
+    expect(html).toContain('"isModerator":true');
+  });
+
+  it("live admin keeps Live at lastSceneId and links back", async () => {
+    await app.request(`/s/${sceneIds.public}`, {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.mod}` },
+    });
+    const res = await app.request("/live/admin", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.mod}` },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
+    expect(html).toContain(`← Scene ${sceneIds.public}`);
+  });
 });

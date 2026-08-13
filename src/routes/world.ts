@@ -17,7 +17,7 @@ import {
   isManager,
   isModerator,
 } from "../access/permissions.js";
-import { apiError, ownedSceneLinks, wantsJson } from "../http.js";
+import { apiError, liveSceneIdForUser, ownedSceneLinks, sceneBackLink, wantsJson } from "../http.js";
 import { prepareJsonTextarea } from "../json-textarea.js";
 import type { StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
@@ -32,6 +32,7 @@ import {
   renderMessageBodyHtml,
   renderProfileBodyHtml,
   renderSceneBodyHtml,
+  renderStaffBodyHtml,
 } from "../render/html.js";
 import { formatProse } from "../render/prose.js";
 import {
@@ -585,12 +586,13 @@ worldRoutes.get("/g", (c) => {
     else if (canReadGroup(user, group, world)) readable.push(item);
   }
 
+  const back = sceneBackLink(user, world);
   return page(
     c,
     200,
     "Groups",
-    renderGroupsIndexHtml({ managed, readable }),
-    renderGroupsIndexText(managed, readable, c.get("assetBase")),
+    renderGroupsIndexHtml({ managed, readable, back }),
+    renderGroupsIndexText(managed, readable, c.get("assetBase"), back),
   );
 });
 
@@ -639,6 +641,7 @@ worldRoutes.get("/g/:id", (c) => {
     : c.req.query("transferred")
       ? "Group transferred."
       : undefined;
+  const back = user ? sceneBackLink(user, world) : undefined;
   return page(
     c,
     200,
@@ -654,6 +657,7 @@ worldRoutes.get("/g/:id", (c) => {
       canTransfer: canTransferGroup(user, group, world),
       accessSummary: formatAccessSummary(group.grants, group.denies),
       message,
+      back,
     }),
     renderMessageText(`Group ${group.id}`, summary),
   );
@@ -1131,41 +1135,12 @@ worldRoutes.get("/staff", (c) => {
         `<li><strong>${escapeHtml(username)}</strong> — ${escapeHtml(roles.join(", ") || "(none)")}</li>`,
     )
     .join("");
+  const back = user ? sceneBackLink(user, world) : undefined;
   return page(
     c,
     200,
     "Staff",
-    `<h1>Staff</h1>
-      ${rows ? `<ul class="link-list">${rows}</ul>` : `<p class="muted">No staff roles assigned.</p>`}
-      <h2>Assign staff role</h2>
-      <form method="post" action="staff/" class="stack" id="staff-form">
-        <label>Username <input name="username" required /></label>
-        <label>Roles (comma: moderator, organiser, manager) <input name="roles" placeholder="moderator" /></label>
-        <button type="submit">Save roles</button>
-      </form>
-      <script>
-        (function () {
-          var form = document.getElementById("staff-form");
-          if (!form) return;
-          form.addEventListener("submit", function (ev) {
-            ev.preventDefault();
-            var username = form.querySelector('input[name="username"]').value.trim();
-            var roles = form.querySelector('input[name="roles"]').value;
-            if (!username) return;
-            form.action = "staff/" + encodeURIComponent(username);
-            var body = new URLSearchParams();
-            body.set("roles", roles);
-            fetch(form.action, {
-              method: "POST",
-              headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-              body: body,
-            }).then(function (r) {
-              if (r.ok) window.location.reload();
-              else r.json().then(function (err) { alert(err.error || "Failed"); });
-            });
-          });
-        })();
-      </script>`,
+    renderStaffBodyHtml({ rowsHtml: rows, back }),
     renderMessageText("Staff", JSON.stringify(world.staff.roles, null, 2)),
   );
 });
@@ -1420,16 +1395,15 @@ function page(
   const world = c.get("world");
   const hrefs = editModeHrefs(c.req.url, c.get("assetBase"));
   // Detail views stay on the scene; artefact pages count as present at home.
-  // Elsewhere (inventory, profile, …) keep Live at the user's last readable scene.
+  // Elsewhere (inventory, profile, groups, …) keep Live at the user's last readable scene.
   let liveSceneId =
     manage?.kind === "scene" && manage.scene
       ? manage.scene.id
       : manage?.kind === "artefact" && manage.artefact
         ? manage.artefact.homeSceneId
         : undefined;
-  if (liveSceneId === undefined && user?.lastSceneId !== undefined) {
-    const last = world.getScene(user.lastSceneId);
-    if (last && canRead(user, last, world)) liveSceneId = last.id;
+  if (liveSceneId === undefined) {
+    liveSceneId = liveSceneIdForUser(user, world);
   }
   return c.html(
     renderHtmlPage({
@@ -1478,18 +1452,6 @@ function sceneGroupSummary(
   if (!groupId) return undefined;
   const group = world.getGroup(groupId);
   return group ? { id: group.id, title: group.title } : { id: groupId, title: `Group ${groupId}` };
-}
-
-function sceneBackLink(
-  user: import("../model/types.js").UserRecord,
-  world: import("../store/world.js").WorldStore,
-): { href: string; label: string; history?: true } {
-  const last =
-    user.lastSceneId !== undefined ? world.getScene(user.lastSceneId) : undefined;
-  if (last && canRead(user, last, world)) {
-    return { href: `s/${last.id}`, label: `← Scene ${last.id}` };
-  }
-  return { href: "./", label: "← Back", history: true };
 }
 
 /** Omitted keepAccess defaults on; form uses hidden 0 + checkbox 1. */

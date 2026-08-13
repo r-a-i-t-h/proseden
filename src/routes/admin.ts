@@ -1,10 +1,23 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { readFile } from "node:fs/promises";
-import { isManager } from "../access/permissions.js";
-import { apiError, ownedSceneLinksFor, wantsJson } from "../http.js";
+import { isManager, isModerator } from "../access/permissions.js";
+import {
+  apiError,
+  liveSceneIdForUser,
+  ownedSceneLinksFor,
+  sceneBackLink,
+  wantsJson,
+} from "../http.js";
 import { negotiateFormat } from "../render/format.js";
-import { editModeHrefs, escapeHtml, renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
+import {
+  editModeHrefs,
+  escapeHtml,
+  renderHtmlPage,
+  renderMessageBodyHtml,
+  renderPageBackCrumb,
+  type PageBackLink,
+} from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
 import {
   backupPath,
@@ -49,14 +62,20 @@ adminRoutes.get("/", async (c) => {
   if (negotiateFormat(c) === "text") {
     return c.text(renderMessageText("Admin", formatAdminText(endpoints, backups)));
   }
+  const user = c.get("user")!;
+  const world = c.get("world");
+  const back = sceneBackLink(user, world);
   return c.html(
     renderHtmlPage({
       title: "Admin",
-      bodyHtml: renderAdminHtml(endpoints, backups, notice),
-      user: c.get("user"),
+      bodyHtml: renderAdminHtml(endpoints, backups, notice, back),
+      user,
       assetBase: c.get("assetBase"),
       ownedScenes: ownedSceneLinksFor(c),
       isManager: true,
+      // Managers are moderators; needed for Edit toolbar → Live admin.
+      isModerator: isModerator(user, world),
+      liveSceneId: liveSceneIdForUser(user, world),
       ...editModeHrefs(c.req.url, c.get("assetBase")),
     }),
   );
@@ -150,14 +169,17 @@ adminRoutes.post("/reload", async (c) => {
   if (negotiateFormat(c) === "text") {
     return c.text(renderMessageText("Reload", message));
   }
+  const user = c.get("user");
   return c.html(
     renderHtmlPage({
       title: "Reload",
       bodyHtml: renderMessageBodyHtml("Reload", message),
-      user: c.get("user"),
+      user,
       assetBase: c.get("assetBase"),
       ownedScenes: ownedSceneLinksFor(c),
       isManager: true,
+      isModerator: isModerator(user, world),
+      liveSceneId: liveSceneIdForUser(user, world),
       ...editModeHrefs(c.req.url, c.get("assetBase")),
     }),
   );
@@ -197,6 +219,7 @@ function renderAdminHtml(
   endpoints: Array<{ method: string; path: string; description: string }>,
   backups: BackupInfo[],
   notice = "",
+  back?: PageBackLink,
 ): string {
   const list = endpoints
     .map((e) => `<li><code>${escapeHtml(e.method)} ${escapeHtml(e.path)}</code> — ${escapeHtml(e.description)}</li>`)
@@ -222,7 +245,7 @@ function renderAdminHtml(
     : `<tr><td colspan="4" class="muted">No archives yet.</td></tr>`;
 
   const flash = notice ? `<p class="notice" role="status">${escapeHtml(notice)}</p>` : "";
-  return `<h1>Admin</h1>
+  return `${renderPageBackCrumb(back)}<h1>Admin</h1>
     ${flash}
     <ul class="link-list">${list}</ul>
     <h2>Data backups</h2>

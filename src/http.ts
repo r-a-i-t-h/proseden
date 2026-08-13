@@ -1,11 +1,12 @@
 import type { Context } from "hono";
-import { isManager } from "./access/permissions.js";
+import { canRead, isManager } from "./access/permissions.js";
 import { negotiateFormat } from "./render/format.js";
 import {
   editModeHrefs,
   renderHtmlPage,
   renderMessageBodyHtml,
   type OwnedSceneLink,
+  type PageBackLink,
 } from "./render/html.js";
 import { renderMessageText } from "./render/text.js";
 import type { UserRecord } from "./model/types.js";
@@ -29,6 +30,26 @@ export function ownedSceneLinks(
 
 export function ownedSceneLinksFor(c: Context): OwnedSceneLink[] {
   return ownedSceneLinks(c.get("world"), c.get("user"));
+}
+
+/** Last readable scene for Live mode when not already on a scene/artefact page. */
+export function liveSceneIdForUser(
+  user: UserRecord | undefined,
+  world: WorldStore,
+): number | undefined {
+  if (user?.lastSceneId === undefined) return undefined;
+  const last = world.getScene(user.lastSceneId);
+  if (last && canRead(user, last, world)) return last.id;
+  return undefined;
+}
+
+/** Crumb back to the Live-bound scene, or history.back when none is readable. */
+export function sceneBackLink(user: UserRecord, world: WorldStore): PageBackLink {
+  const id = liveSceneIdForUser(user, world);
+  if (id !== undefined) {
+    return { href: `s/${id}`, label: `← Scene ${id}` };
+  }
+  return { href: "./", label: "← Back", history: true };
 }
 
 export function apiError(

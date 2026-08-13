@@ -4,7 +4,7 @@ import type { Context } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import { canRead, isManager, isModerator } from "../access/permissions.js";
-import { apiError, ownedSceneLinks, wantsJson } from "../http.js";
+import { apiError, liveSceneIdForUser, ownedSceneLinks, sceneBackLink, wantsJson } from "../http.js";
 import type { LiveEvent } from "../live/types.js";
 import { HEARTBEAT_INTERVAL_MS } from "../live/types.js";
 import { negotiateFormat } from "../render/format.js";
@@ -13,6 +13,8 @@ import {
   escapeHtml,
   renderHtmlPage,
   renderMessageBodyHtml,
+  renderPageBackCrumb,
+  type PageBackLink,
 } from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
 
@@ -265,7 +267,8 @@ liveRoutes.get("/admin", (c) => {
   }
 
   const format = negotiateFormat(c);
-  const bodyHtml = renderLiveAdminHtml(recentUsers, buffers);
+  const back = sceneBackLink(user!, world);
+  const bodyHtml = renderLiveAdminHtml(recentUsers, buffers, back);
   const textBody = renderLiveAdminText(recentUsers, buffers);
   if (format === "text") return c.text(textBody);
   return c.html(
@@ -277,6 +280,7 @@ liveRoutes.get("/admin", (c) => {
       ownedScenes: ownedSceneLinks(world, user),
       isManager: isManager(user, world),
       isModerator: true,
+      liveSceneId: liveSceneIdForUser(user, world),
       ...editModeHrefs(c.req.url, c.get("assetBase")),
     }),
   );
@@ -309,6 +313,7 @@ function renderLiveAdminHtml(
     oldestAt?: string;
     newestAt?: string;
   }>,
+  back?: PageBackLink,
 ): string {
   const userRows = users
     .map((u) => {
@@ -338,7 +343,7 @@ function renderLiveAdminHtml(
       </tr>`;
     })
     .join("\n");
-  return `<h1>Live admin</h1>
+  return `${renderPageBackCrumb(back)}<h1>Live admin</h1>
     <p class="muted">Recently seen users and in-memory chat buffer stats (no message text).</p>
     <h2>Users</h2>
     <table class="live-admin-table">
