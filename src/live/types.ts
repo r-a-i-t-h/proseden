@@ -60,3 +60,8 @@ export const SCENE_BUFFER_TTL_MS = 30 * 60 * 1000;
 export const SHOUT_BUFFER_MAX = 50;
 export const PRESENCE_IDLE_MS = 3 * 60 * 1000;
 export const HEARTBEAT_INTERVAL_MS = 20_000;
+
+/** Interleave scene chat and the global shout ring by time (stable for equal `ts`). */
+export function mergeChatTimeline(messages: ChatMessage[], shouts: ChatMessage[]): ChatMessage[] {
+  return [...messages, ...shouts].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+}

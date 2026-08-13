@@ -1,3 +1,4 @@
+import { mergeChatTimeline } from "../src/live/types.js";
 import type { EditBootstrap } from "./edit.js";
 
 interface PresencePerson {
@@ -221,8 +222,9 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
     if (event.kind === "presence.snapshot") {
       seenIds = new Set();
       log.replaceChildren();
-      for (const m of event.messages ?? []) appendMessage(m);
-      for (const m of event.shouts ?? []) appendMessage(m);
+      for (const m of mergeChatTimeline(event.messages ?? [], event.shouts ?? [])) {
+        appendMessage(m);
+      }
       renderHere(event.here ?? []);
       void refreshOnline();
       status.textContent = "Connected";

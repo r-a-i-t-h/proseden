@@ -1,12 +1,13 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { hashPassword } from "../src/auth/password.js";
 import { SessionStore } from "../src/auth/sessions.js";
 import { SceneHub } from "../src/live/hub.js";
 import { PresenceStore } from "../src/live/presence.js";
+import { mergeChatTimeline } from "../src/live/types.js";
 import { WorldStore } from "../src/store/world.js";
 
 type App = ReturnType<typeof createApp>;
@@ -73,6 +74,7 @@ describe("live presence and chat", () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     presence.destroy();
     await rm(dataDir, { recursive: true, force: true });
   });
@@ -91,6 +93,35 @@ describe("live presence and chat", () => {
     });
     const snap = hub.snapshot(sceneIds.public);
     expect(snap.messages.some((m) => m.text === "Hello linger")).toBe(true);
+  });
+
+  it("merges shouts into scene chat by time for snapshot replay", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-13T12:00:00.000Z"));
+    hub.say({
+      sceneId: sceneIds.public,
+      fromKey: "u:alice",
+      fromName: "alice",
+      text: "first say",
+    });
+    vi.setSystemTime(new Date("2026-08-13T12:00:01.000Z"));
+    hub.shout({
+      fromKey: "u:bob",
+      fromName: "bob",
+      text: "middle shout",
+      sceneId: sceneIds.entrance,
+      sceneTitle: "Entrance",
+    });
+    vi.setSystemTime(new Date("2026-08-13T12:00:02.000Z"));
+    hub.say({
+      sceneId: sceneIds.public,
+      fromKey: "u:alice",
+      fromName: "alice",
+      text: "last say",
+    });
+    const snap = hub.snapshot(sceneIds.public);
+    const texts = mergeChatTimeline(snap.messages, snap.shouts).map((m) => m.text);
+    expect(texts).toEqual(["first say", "middle shout", "last say"]);
   });
 
   it("FIFO drops oldest beyond 100", () => {
