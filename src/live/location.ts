@@ -4,9 +4,12 @@ const DEBOUNCE_MS = 30_000;
 
 /**
  * Debounced lastSceneId / lastSeenAt writes to users/*.json.
+ * Disk persistence is best-effort: failures are logged, never thrown to callers.
  */
 export class LocationTracker {
   private pending = new Map<string, { sceneId: number; timers: ReturnType<typeof setTimeout> }>();
+  /** Coalesce overlapping saves per user (disconnect flush vs debounce timer). */
+  private inflight = new Map<string, Promise<void>>();
 
   constructor(private world: WorldStore) {}
 
@@ -29,11 +32,12 @@ export class LocationTracker {
     if (!user?.lastSceneId && !entry) return;
     const sceneId = entry?.sceneId ?? user?.lastSceneId;
     if (sceneId === undefined || !user) return;
-    await this.world.saveUser({
-      ...user,
+    Object.assign(user, {
       lastSceneId: sceneId,
       lastSeenAt: new Date().toISOString(),
     });
+    this.world.users.set(username, user);
+    await this.persist(username);
   }
 
   async flushAll(): Promise<void> {
@@ -56,15 +60,26 @@ export class LocationTracker {
     if (existing) clearTimeout(existing.timers);
     const timers = setTimeout(() => {
       this.pending.delete(username);
-      const latest = this.world.getUser(username);
-      if (!latest) return;
-      void this.world.saveUser({
-        ...latest,
-        lastSceneId: sceneId,
-        lastSeenAt: new Date().toISOString(),
-      });
+      void this.persist(username);
     }, DEBOUNCE_MS);
     timers.unref?.();
     this.pending.set(username, { sceneId, timers });
+  }
+
+  private async persist(username: string): Promise<void> {
+    const previous = this.inflight.get(username) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(async () => {
+      const latest = this.world.getUser(username);
+      if (!latest) return;
+      await this.world.saveUser(latest);
+    });
+    this.inflight.set(username, next);
+    try {
+      await next;
+    } catch (err) {
+      console.error(`[location] failed to save ${username}:`, err);
+    } finally {
+      if (this.inflight.get(username) === next) this.inflight.delete(username);
+    }
   }
 }
