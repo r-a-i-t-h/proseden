@@ -737,6 +737,12 @@ button.linkish {
   margin: 0.2rem 0;
 }
 
+.live-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.15rem;
+}
+
 .live-system {
   color: var(--muted);
   font-style: italic;

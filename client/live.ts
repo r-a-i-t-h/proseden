@@ -150,6 +150,7 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
     if (seenIds.has(msg.id)) return;
     seenIds.add(msg.id);
     const line = el("div", { class: `live-line live-${msg.kind.replace(".", "-")}` });
+    line.append(el("span", { class: "live-time" }, formatTime(msg.ts)), document.createTextNode(" "));
     if (msg.kind === "chat.system") {
       line.append(el("span", { class: "live-system" }, msg.text));
     } else if (msg.kind === "chat.shout") {
@@ -315,4 +316,14 @@ async function postJson(action: string, body: unknown): Promise<void> {
   });
   const data = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new Error(data.error ?? res.statusText);
+}
+
+/** Local wall-clock HH:MM:SS from an ISO timestamp. */
+function formatTime(ts: string): string {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "--:--:--";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
 }
