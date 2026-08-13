@@ -60,15 +60,9 @@ function bootPanel(): void {
   const canLive = boot.liveSceneId !== undefined && !!(boot.user || boot.allowGuestLive);
   const canEdit = !!boot.user;
 
-  const tabs = el("div", { class: "panel-tabs", role: "tablist", "aria-label": "Side panel" });
-  const liveTab = el("button", { type: "button", class: "panel-tab", "data-mode": "live" }, "Live");
-  const editTab = el("button", { type: "button", class: "panel-tab", "data-mode": "edit" }, "Edit");
-  if (canLive) tabs.append(liveTab);
-  if (canEdit) tabs.append(editTab);
-
   const livePane = el("div", { class: "panel-pane", id: "live-pane", hidden: true });
   const editPane = el("div", { class: "panel-pane", id: "edit-pane", hidden: true });
-  root.replaceChildren(tabs, livePane, editPane);
+  root.replaceChildren(livePane, editPane);
 
   let live: LiveController | null = null;
   let editMounted = false;
@@ -131,13 +125,9 @@ function bootPanel(): void {
     editPane.hidden = next !== "edit";
     if (editToolbar) editToolbar.hidden = !(next === "live" || next === "edit");
 
-    liveTab.classList.toggle("is-active", next === "live");
-    editTab.classList.toggle("is-active", next === "edit");
     setHeaderMode(next);
   }
 
-  liveTab.addEventListener("click", () => applyMode("live"));
-  editTab.addEventListener("click", () => applyMode("edit"));
   headerLive?.addEventListener("click", () => {
     if (headerLive instanceof HTMLButtonElement && headerLive.disabled) return;
     applyMode("live");

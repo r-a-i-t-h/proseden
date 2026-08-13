@@ -22,6 +22,10 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow-y: scroll;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -39,13 +43,9 @@ a:hover {
 }
 
 .app {
-  width: min(1100px, calc(100% - 2rem));
+  width: min(1280px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 1.25rem 0 1.5rem;
-}
-
-body.is-editing .app {
-  width: min(1280px, calc(100% - 2rem));
 }
 
 .top {
@@ -170,18 +170,32 @@ button:hover {
 }
 
 .layout {
+  --sidebar-track: 480px;
+  --layout-gap: 1.25rem;
   display: grid;
   gap: 2rem;
 }
 
 .layout.with-manage {
-  grid-template-columns: minmax(0, 1fr) minmax(400px, 480px);
-  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr) minmax(400px, var(--sidebar-track));
+  gap: var(--layout-gap);
+}
+
+/* View: same prose column width as live/edit, centered in the full panel. */
+.layout:not(.with-manage) .prose {
+  width: 100%;
+  max-width: calc(100% - var(--sidebar-track) - var(--layout-gap));
+  margin-inline: auto;
 }
 
 @media (max-width: 860px) {
   .layout.with-manage {
     grid-template-columns: 1fr;
+  }
+
+  .layout:not(.with-manage) .prose {
+    max-width: none;
+    margin-inline: 0;
   }
 }
 
@@ -692,28 +706,6 @@ button.linkish {
 .mode-switch-btn.is-current {
   font-weight: 600;
   color: var(--ink);
-}
-
-.panel-tabs {
-  display: flex;
-  gap: 0.35rem;
-  margin-bottom: 0.75rem;
-}
-
-.panel-tab {
-  flex: 1;
-  font: inherit;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.panel-tab.is-active {
-  background: var(--sidebar);
-  color: var(--moss);
-  border-color: var(--moss);
 }
 
 .live-heading {
