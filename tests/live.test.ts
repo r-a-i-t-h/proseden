@@ -7,7 +7,7 @@ import { hashPassword } from "../src/auth/password.js";
 import { SessionStore } from "../src/auth/sessions.js";
 import { SceneHub } from "../src/live/hub.js";
 import { PresenceStore } from "../src/live/presence.js";
-import { mergeChatTimeline } from "../src/live/types.js";
+import { mergeChatTimeline, PRESENCE_RECONNECT_GRACE_MS } from "../src/live/types.js";
 import { WorldStore } from "../src/store/world.js";
 
 type App = ReturnType<typeof createApp>;
@@ -140,6 +140,7 @@ describe("live presence and chat", () => {
   });
 
   it("coalesces leave until last connection drops", () => {
+    vi.useFakeTimers();
     const leaves: string[] = [];
     presence.onEvent((e) => {
       if (e.kind === "presence.leave" && e.person) leaves.push(e.person.userKey);
@@ -157,7 +158,56 @@ describe("live presence and chat", () => {
     presence.disconnect(a.connectionId);
     expect(leaves).toEqual([]);
     presence.disconnect(b.connectionId);
+    expect(leaves).toEqual([]);
+    expect(presence.here(sceneIds.public).some((p) => p.userKey === "u:alice")).toBe(true);
+    vi.advanceTimersByTime(PRESENCE_RECONNECT_GRACE_MS);
     expect(leaves).toEqual(["u:alice"]);
+  });
+
+  it("same-scene reconnect within grace is silent", () => {
+    vi.useFakeTimers();
+    const kinds: string[] = [];
+    presence.onEvent((e) => kinds.push(e.kind));
+    const a = presence.connect({
+      userKey: "u:alice",
+      displayName: "alice",
+      sceneId: sceneIds.public,
+    });
+    expect(kinds).toEqual(["presence.join"]);
+    presence.disconnect(a.connectionId);
+    presence.connect({
+      userKey: "u:alice",
+      displayName: "alice",
+      sceneId: sceneIds.public,
+    });
+    vi.advanceTimersByTime(PRESENCE_RECONNECT_GRACE_MS);
+    expect(kinds).toEqual(["presence.join"]);
+    expect(presence.here(sceneIds.public).map((p) => p.userKey)).toEqual(["u:alice"]);
+  });
+
+  it("reconnect to a different scene within grace emits move", () => {
+    vi.useFakeTimers();
+    const kinds: string[] = [];
+    presence.onEvent((e) => {
+      if (e.kind === "presence.join" || e.kind === "presence.leave" || e.kind === "presence.move") {
+        kinds.push(e.kind);
+      }
+    });
+    const a = presence.connect({
+      userKey: "u:alice",
+      displayName: "alice",
+      sceneId: sceneIds.public,
+    });
+    presence.disconnect(a.connectionId);
+    presence.connect({
+      userKey: "u:alice",
+      displayName: "alice",
+      sceneId: sceneIds.entrance,
+    });
+    vi.advanceTimersByTime(PRESENCE_RECONNECT_GRACE_MS);
+    expect(kinds).toEqual(["presence.join", "presence.move"]);
+    expect(presence.here(sceneIds.public)).toEqual([]);
+    expect(presence.here(sceneIds.entrance).map((p) => p.userKey)).toEqual(["u:alice"]);
   });
 
   it("POST /live/say requires presence", async () => {
@@ -324,6 +374,20 @@ describe("live presence and chat", () => {
     });
     const html = await res.text();
     expect(html).toContain("assets/panel.js");
+    expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
+  });
+
+  it("artefact HTML keeps liveSceneId at the home scene", async () => {
+    const art = await world.createArtefact({
+      owner: "alice",
+      homeSceneId: sceneIds.public,
+      title: "Lamp",
+      body: "Glows.",
+    });
+    const res = await app.request(`/a/${art.id}`, {
+      headers: { Accept: "text/html" },
+    });
+    const html = await res.text();
     expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
   });
 });

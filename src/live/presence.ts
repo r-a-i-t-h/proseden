@@ -1,15 +1,23 @@
 import { randomBytes } from "node:crypto";
 import type { LiveEvent, PresenceConnection, PresencePerson } from "./types.js";
-import { PRESENCE_IDLE_MS } from "./types.js";
+import { PRESENCE_IDLE_MS, PRESENCE_RECONNECT_GRACE_MS } from "./types.js";
 
 export type PresenceListener = (event: LiveEvent) => void;
 
+interface PendingLeave {
+  person: PresencePerson;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 /**
  * In-memory live presence. Coalesce who's-here / online by userKey.
- * Leave is emitted only when the last connection for a userKey drops.
+ * Leave is emitted only when the last connection for a userKey drops —
+ * and then only after a short reconnect grace so same-scene page loads
+ * (detail / artefact) do not flicker leave/arrive.
  */
 export class PresenceStore {
   private connections = new Map<string, PresenceConnection>();
+  private pendingLeaves = new Map<string, PendingLeave>();
   private listeners = new Set<PresenceListener>();
   private idleTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -31,8 +39,9 @@ export class PresenceStore {
   }): PresenceConnection {
     const now = new Date().toISOString();
     const connectionId = randomBytes(16).toString("hex");
+    const pending = this.takePendingLeave(opts.userKey);
     const prior = this.primaryForUser(opts.userKey);
-    const priorSceneId = prior?.sceneId;
+    const priorSceneId = prior?.sceneId ?? pending?.person.sceneId;
     const conn: PresenceConnection = {
       connectionId,
       userKey: opts.userKey,
@@ -44,7 +53,7 @@ export class PresenceStore {
     };
     this.connections.set(connectionId, conn);
 
-    if (!prior) {
+    if (!prior && !pending) {
       this.emit({
         kind: "presence.join",
         ts: now,
@@ -61,6 +70,7 @@ export class PresenceStore {
       }
       this.emitMove(opts.userKey, opts.displayName, priorSceneId, opts.sceneId);
     }
+    // Same-scene reconnect (including within grace): silent — still present.
 
     return conn;
   }
@@ -114,12 +124,7 @@ export class PresenceStore {
     this.connections.delete(connectionId);
     const remaining = this.connectionsForUser(conn.userKey);
     if (remaining.length === 0) {
-      this.emit({
-        kind: "presence.leave",
-        ts: new Date().toISOString(),
-        sceneId: conn.sceneId,
-        person: this.toPerson(conn),
-      });
+      this.scheduleLeave(this.toPerson(conn));
     }
   }
 
@@ -132,6 +137,12 @@ export class PresenceStore {
         byKey.set(conn.userKey, this.toPerson(conn));
       }
     }
+    for (const pending of this.pendingLeaves.values()) {
+      if (pending.person.sceneId !== sceneId) continue;
+      if (!byKey.has(pending.person.userKey)) {
+        byKey.set(pending.person.userKey, pending.person);
+      }
+    }
     return [...byKey.values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
@@ -141,6 +152,11 @@ export class PresenceStore {
       const existing = byKey.get(conn.userKey);
       if (!existing || conn.lastSeenAt > existing.lastSeenAt) {
         byKey.set(conn.userKey, this.toPerson(conn));
+      }
+    }
+    for (const pending of this.pendingLeaves.values()) {
+      if (!byKey.has(pending.person.userKey)) {
+        byKey.set(pending.person.userKey, pending.person);
       }
     }
     return [...byKey.values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
@@ -170,8 +186,36 @@ export class PresenceStore {
 
   destroy(): void {
     if (this.idleTimer) clearInterval(this.idleTimer);
+    for (const pending of this.pendingLeaves.values()) clearTimeout(pending.timer);
+    this.pendingLeaves.clear();
     this.connections.clear();
     this.listeners.clear();
+  }
+
+  private scheduleLeave(person: PresencePerson): void {
+    const existing = this.pendingLeaves.get(person.userKey);
+    if (existing) clearTimeout(existing.timer);
+    const timer = setTimeout(() => {
+      const pending = this.pendingLeaves.get(person.userKey);
+      if (!pending) return;
+      this.pendingLeaves.delete(person.userKey);
+      this.emit({
+        kind: "presence.leave",
+        ts: new Date().toISOString(),
+        sceneId: pending.person.sceneId,
+        person: pending.person,
+      });
+    }, PRESENCE_RECONNECT_GRACE_MS);
+    timer.unref?.();
+    this.pendingLeaves.set(person.userKey, { person, timer });
+  }
+
+  private takePendingLeave(userKey: string): PendingLeave | undefined {
+    const pending = this.pendingLeaves.get(userKey);
+    if (!pending) return undefined;
+    clearTimeout(pending.timer);
+    this.pendingLeaves.delete(userKey);
+    return pending;
   }
 
   private connectionsForUser(userKey: string): PresenceConnection[] {
@@ -185,7 +229,7 @@ export class PresenceStore {
   }
 
   private coalescedScene(userKey: string): number | undefined {
-    return this.primaryForUser(userKey)?.sceneId;
+    return this.primaryForUser(userKey)?.sceneId ?? this.pendingLeaves.get(userKey)?.person.sceneId;
   }
 
   private toPerson(conn: PresenceConnection): PresencePerson {

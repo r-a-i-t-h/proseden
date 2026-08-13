@@ -215,6 +215,9 @@ worldRoutes.get("/a/:id", (c) => {
   const assetBase = c.get("assetBase");
   const collected = !!user?.inventory.some((i) => i.artefactId === id);
 
+  // Stay present in the artefact's home scene while examining it.
+  if (user) c.get("locations").noteVisit(user.username, artefact.homeSceneId);
+
   return page(
     c,
     200,
@@ -1411,8 +1414,13 @@ function page(
   const user = c.get("user");
   const world = c.get("world");
   const hrefs = editModeHrefs(c.req.url, c.get("assetBase"));
-  const sceneId =
-    manage?.kind === "scene" && manage.scene ? manage.scene.id : undefined;
+  // Detail views stay on the scene; artefact pages count as present at home.
+  const liveSceneId =
+    manage?.kind === "scene" && manage.scene
+      ? manage.scene.id
+      : manage?.kind === "artefact" && manage.artefact
+        ? manage.artefact.homeSceneId
+        : undefined;
   return c.html(
     renderHtmlPage({
       title,
@@ -1423,7 +1431,7 @@ function page(
       ownedScenes: ownedSceneLinks(world, user),
       isManager: isManager(user, world),
       isModerator: isModerator(user, world),
-      liveSceneId: sceneId,
+      liveSceneId,
       ...hrefs,
     }),
     status as 200,
