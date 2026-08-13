@@ -31,7 +31,11 @@ function readMode(boot: EditBootstrap): PanelMode {
   const stored = localStorage.getItem(PANEL_KEY);
   if (stored === "live" || stored === "edit") {
     if (stored === "edit" && !boot.user) return "view";
-    if (stored === "live" && boot.liveSceneId === undefined) return "view";
+    // Live needs a scene page; keep the sticky preference (applyMode persist=false)
+    // and fall back to edit so the panel stays open like edit→inventory.
+    if (stored === "live" && boot.liveSceneId === undefined) {
+      return boot.user ? "edit" : "view";
+    }
     return stored;
   }
   // Migrate old edit sticky flag.
@@ -147,6 +151,13 @@ function bootPanel(): void {
   });
 
   applyMode(readMode(boot), false);
+
+  document.querySelector<HTMLAnchorElement>('a[data-nav="back"]')?.addEventListener("click", (e) => {
+    if (window.history.length > 1) {
+      e.preventDefault();
+      window.history.back();
+    }
+  });
 }
 
 bootPanel();

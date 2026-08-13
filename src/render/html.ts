@@ -321,17 +321,23 @@ const DENIES_EXAMPLE = `[
   { "who": "carol" }
 ]`;
 
+export type PageBackLink = { href: string; label: string; history?: boolean };
+
 export function renderProfileBodyHtml(opts: {
   username: string;
   message?: string;
   grants?: Grant[];
   denies?: Deny[];
+  back?: PageBackLink;
 }): string {
+  const crumb = opts.back
+    ? `<p class="crumb"><a href="${escapeAttr(opts.back.href)}"${opts.back.history ? ' data-nav="back"' : ""}>${escapeHtml(opts.back.label)}</a></p>`
+    : "";
   const notice = opts.message
     ? `<p class="notice" role="status">${escapeHtml(opts.message)}</p>`
     : "";
   const accessAction = `u/${encodeURIComponent(opts.username)}/access`;
-  return `<h1>Profile</h1>
+  return `${crumb}<h1>Profile</h1>
     ${bylineHtml(opts.username)}
     ${notice}
     <h2>Change password</h2>
@@ -428,9 +434,15 @@ export function renderGroupBodyHtml(opts: {
     ${transfer}`;
 }
 
-export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""): string {
+export function renderInventoryBodyHtml(
+  items: ArtefactRecord[],
+  back?: PageBackLink,
+): string {
+  const crumb = back
+    ? `<p class="crumb"><a href="${escapeAttr(back.href)}"${back.history ? ' data-nav="back"' : ""}>${escapeHtml(back.label)}</a></p>`
+    : "";
   if (!items.length) {
-    return `<h1>Inventory</h1><p class="muted">Empty — collect artefacts you love.</p>`;
+    return `${crumb}<h1>Inventory</h1><p class="muted">Empty — collect artefacts you love.</p>`;
   }
   const list = items
     .map((artefact) => {
@@ -441,7 +453,7 @@ export function renderInventoryBodyHtml(items: ArtefactRecord[], _assetBase = ""
       return `<li><a href="a/${artefact.id}">${escapeHtml(label)}</a>${tags}</li>`;
     })
     .join("");
-  return `<h1>Inventory</h1><ul class="link-list">${list}</ul>`;
+  return `${crumb}<h1>Inventory</h1><ul class="link-list">${list}</ul>`;
 }
 
 export function renderMessageBodyHtml(title: string, message: string): string {

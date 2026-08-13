@@ -115,6 +115,7 @@ input,
 textarea,
 button {
   font: inherit;
+  line-height: 1.25;
 }
 
 input,
@@ -122,7 +123,7 @@ textarea {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.7);
   color: var(--ink);
-  padding: 0.35rem 0.5rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 2px;
   min-width: 0;
 }
@@ -130,15 +131,21 @@ textarea {
 textarea {
   width: 100%;
   resize: vertical;
+  line-height: 1.45;
 }
 
 button {
   border: 1px solid var(--moss);
   background: var(--moss);
   color: #f4f8f4;
-  padding: 0.4rem 0.75rem;
+  padding: 0.2rem 0.65rem;
   border-radius: 2px;
   cursor: pointer;
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+button:not(.mode-switch-btn):not(.linkish):not(.edit-tool-tab) {
+  min-height: 1.85rem;
 }
 
 button:hover {
@@ -715,6 +722,10 @@ button.linkish {
   color: var(--moss);
 }
 
+.live-heading:first-child {
+  margin-top: 0;
+}
+
 .live-log {
   max-height: 14rem;
   overflow: auto;
@@ -748,6 +759,7 @@ button.linkish {
 
 .live-compose {
   display: flex;
+  align-items: stretch;
   gap: 0.35rem;
   margin: 0.35rem 0;
 }
@@ -755,6 +767,10 @@ button.linkish {
 .live-compose input {
   flex: 1;
   min-width: 0;
+}
+
+.live-compose button {
+  flex: 0 0 auto;
 }
 
 .live-here,

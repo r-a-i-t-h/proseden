@@ -117,9 +117,14 @@ export function renderProfileText(opts: {
   basePath?: string;
   grants?: Grant[];
   denies?: Deny[];
+  back?: { href: string; label: string };
 }): string {
   const base = opts.basePath ?? "";
-  const lines = ["[Profile]", "", `Signed in as ${opts.username}`, ""];
+  const lines = ["[Profile]", ""];
+  if (opts.back) {
+    lines.push(`${opts.back.label}  ${base}/${opts.back.href.replace(/^\.\//, "")}`, "");
+  }
+  lines.push(`Signed in as ${opts.username}`, "");
   if (opts.message) {
     lines.push(opts.message, "");
   }
@@ -158,8 +163,13 @@ export function renderGroupsIndexText(
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-export function renderInventoryText(items: ArtefactRecord[], basePath = ""): string {
+export function renderInventoryText(
+  items: ArtefactRecord[],
+  basePath = "",
+  back?: { href: string; label: string },
+): string {
   const lines = ["[Inventory]", ""];
+  if (back) lines.push(`${back.label}  ${basePath}/${back.href.replace(/^\.\//, "")}`, "");
   if (!items.length) {
     lines.push("(empty)");
   } else {

@@ -261,6 +261,8 @@ worldRoutes.get("/profile", (c) => {
     : c.req.query("shared")
       ? "Share-all saved."
       : undefined;
+  const world = c.get("world");
+  const back = sceneBackLink(user, world);
   return page(
     c,
     200,
@@ -270,6 +272,7 @@ worldRoutes.get("/profile", (c) => {
       message,
       grants: user.grants,
       denies: user.denies,
+      back,
     }),
     renderProfileText({
       username: user.username,
@@ -277,6 +280,7 @@ worldRoutes.get("/profile", (c) => {
       basePath: c.get("assetBase"),
       grants: user.grants,
       denies: user.denies,
+      back,
     }),
   );
 });
@@ -299,12 +303,13 @@ worldRoutes.get("/inv", (c) => {
     .filter((a): a is NonNullable<typeof a> => !!a);
 
   const assetBase = c.get("assetBase");
+  const back = sceneBackLink(user, world);
   return page(
     c,
     200,
     "Inventory",
-    renderInventoryBodyHtml(items, assetBase),
-    renderInventoryText(items, assetBase),
+    renderInventoryBodyHtml(items, back),
+    renderInventoryText(items, assetBase, back),
     {
       kind: "inventory",
       isManager: isManager(user, world),
@@ -1415,12 +1420,17 @@ function page(
   const world = c.get("world");
   const hrefs = editModeHrefs(c.req.url, c.get("assetBase"));
   // Detail views stay on the scene; artefact pages count as present at home.
-  const liveSceneId =
+  // Elsewhere (inventory, profile, …) keep Live at the user's last readable scene.
+  let liveSceneId =
     manage?.kind === "scene" && manage.scene
       ? manage.scene.id
       : manage?.kind === "artefact" && manage.artefact
         ? manage.artefact.homeSceneId
         : undefined;
+  if (liveSceneId === undefined && user?.lastSceneId !== undefined) {
+    const last = world.getScene(user.lastSceneId);
+    if (last && canRead(user, last, world)) liveSceneId = last.id;
+  }
   return c.html(
     renderHtmlPage({
       title,
@@ -1468,6 +1478,18 @@ function sceneGroupSummary(
   if (!groupId) return undefined;
   const group = world.getGroup(groupId);
   return group ? { id: group.id, title: group.title } : { id: groupId, title: `Group ${groupId}` };
+}
+
+function sceneBackLink(
+  user: import("../model/types.js").UserRecord,
+  world: import("../store/world.js").WorldStore,
+): { href: string; label: string; history?: true } {
+  const last =
+    user.lastSceneId !== undefined ? world.getScene(user.lastSceneId) : undefined;
+  if (last && canRead(user, last, world)) {
+    return { href: `s/${last.id}`, label: `← Scene ${last.id}` };
+  }
+  return { href: "./", label: "← Back", history: true };
 }
 
 /** Omitted keepAccess defaults on; form uses hidden 0 + checkbox 1. */

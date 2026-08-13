@@ -390,4 +390,50 @@ describe("live presence and chat", () => {
     const html = await res.text();
     expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
   });
+
+  it("inventory keeps Live at lastSceneId and links back", async () => {
+    const visit = await app.request(`/s/${sceneIds.public}`, {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    expect(visit.status).toBe(200);
+    expect(world.getUser("alice")?.lastSceneId).toBe(sceneIds.public);
+
+    const res = await app.request("/inv", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
+    expect(html).toContain(`href="s/${sceneIds.public}"`);
+    expect(html).toContain(`← Scene ${sceneIds.public}`);
+    expect(html).not.toContain('data-nav="back"');
+  });
+
+  it("inventory without lastSceneId offers a history back crumb", async () => {
+    const res = await app.request("/inv", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.bob}` },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).not.toContain('"liveSceneId"');
+    expect(html).toContain('data-nav="back"');
+    expect(html).toContain("← Back");
+  });
+
+  it("profile keeps Live at lastSceneId and links back", async () => {
+    const visit = await app.request(`/s/${sceneIds.public}`, {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    expect(visit.status).toBe(200);
+
+    const res = await app.request("/profile", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
+    expect(html).toContain(`href="s/${sceneIds.public}"`);
+    expect(html).toContain(`← Scene ${sceneIds.public}`);
+    expect(html).not.toContain('data-nav="back"');
+  });
 });

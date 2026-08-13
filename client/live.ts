@@ -125,12 +125,7 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
     });
   }
 
-  const adminLink = boot.isModerator
-    ? el("a", { class: "edit-tool-link", href: "live/admin" }, "Live admin")
-    : null;
-
   pane.replaceChildren(
-    el("p", { class: "edit-kicker" }, "Live"),
     el("h3", { class: "live-heading" }, "Who's here"),
     hereList,
     el("details", { class: "live-online-wrap" }, el("summary", {}, "Online"), onlineList),
@@ -140,7 +135,6 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
     shoutForm,
     status,
     ...(purgeBtn ? [purgeBtn] : []),
-    ...(adminLink ? [adminLink] : []),
   );
 
   let source: EventSource | null = null;
