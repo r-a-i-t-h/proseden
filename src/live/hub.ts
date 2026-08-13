@@ -78,12 +78,20 @@ export class SceneHub {
     return message;
   }
 
-  shout(opts: { fromKey: string; fromName: string; text: string }): ChatMessage {
+  shout(opts: {
+    fromKey: string;
+    fromName: string;
+    text: string;
+    sceneId: number;
+    sceneTitle?: string;
+  }): ChatMessage {
     const message = this.makeMessage({
       kind: "chat.shout",
       fromKey: opts.fromKey,
       fromName: opts.fromName,
       text: opts.text,
+      sceneId: opts.sceneId,
+      sceneTitle: opts.sceneTitle,
     });
     this.pushShout(message);
     const event: LiveEvent = {
@@ -158,6 +166,7 @@ export class SceneHub {
     kind: ChatMessage["kind"];
     text: string;
     sceneId?: number;
+    sceneTitle?: string;
     fromKey?: string;
     fromName?: string;
   }): ChatMessage {
@@ -166,6 +175,7 @@ export class SceneHub {
       kind: opts.kind,
       ts: new Date().toISOString(),
       sceneId: opts.sceneId,
+      sceneTitle: opts.sceneTitle,
       fromKey: opts.fromKey,
       fromName: opts.fromName,
       text: opts.text.slice(0, 2000),

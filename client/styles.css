@@ -85,6 +85,13 @@ body.is-editing .app {
   align-items: end;
 }
 
+.login form input[name="username"],
+.login form input[name="password"],
+.register form input[name="username"],
+.register form input[name="password"] {
+  width: 8rem;
+}
+
 .travel-form {
   display: flex;
   flex-wrap: wrap;
@@ -637,6 +644,54 @@ button.linkish {
   font: inherit;
   text-decoration: underline;
   text-underline-offset: 0.12em;
+}
+
+.mode-switch {
+  display: inline-flex;
+  align-items: stretch;
+  height: calc(1em + 0.8rem + 2px);
+  border: 1px solid var(--moss);
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.55);
+  vertical-align: middle;
+}
+
+.mode-switch-btn {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--moss);
+  padding: 0 0.65rem;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.mode-switch-btn:last-child {
+  border-right: none;
+}
+
+.mode-switch-btn:hover:not(:disabled) {
+  background: rgba(61, 107, 79, 0.12);
+  color: var(--moss);
+}
+
+.mode-switch-btn.is-current,
+.mode-switch-btn:disabled {
+  background: rgba(61, 107, 79, 0.1);
+  color: var(--muted);
+  cursor: default;
+  opacity: 1;
+}
+
+.mode-switch-btn.is-current {
+  font-weight: 600;
+  color: var(--ink);
 }
 
 .panel-tabs {

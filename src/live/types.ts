@@ -20,6 +20,8 @@ export interface ChatMessage {
   kind: "chat.say" | "chat.shout" | "chat.system";
   ts: string;
   sceneId?: number;
+  /** Display title for shouts (where the shouter stood). */
+  sceneTitle?: string;
   fromKey?: string;
   fromName?: string;
   text: string;

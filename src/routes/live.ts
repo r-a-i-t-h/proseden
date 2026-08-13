@@ -131,10 +131,14 @@ liveRoutes.post("/shout", async (c) => {
   const online = presence.findByUserKey(identity.userKey);
   if (!online) return c.json({ error: "Not present — open Live mode first." }, 400);
 
+  const world = c.get("world");
+  const scene = world.getScene(online.sceneId);
   const message = hub.shout({
     fromKey: identity.userKey,
     fromName: identity.displayName,
     text,
+    sceneId: online.sceneId,
+    sceneTitle: scene?.title ?? `Scene ${online.sceneId}`,
   });
   return c.json({ ok: true, message });
 });

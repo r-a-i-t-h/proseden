@@ -153,27 +153,18 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
 </html>`;
 }
 
-function authLoggedIn(user: UserRecord, editHref: string, showLive: boolean): string {
-  const liveBtn = showLive
-    ? `<button type="button" class="linkish" id="panel-live" hidden>Live</button>`
-    : "";
+function authLoggedIn(user: UserRecord, _editHref: string, canLive: boolean): string {
   return `<span class="who"><strong>${escapeHtml(user.username)}</strong></span>
     <a href="profile">Profile</a>
     <a href="inv">Inventory</a>
-    ${liveBtn}
-    <a href="${escapeAttr(editHref)}" id="edit-enter">Edit</a>
-    <button type="button" class="linkish" id="panel-view" hidden>View</button>
+    ${modeSwitchHtml({ canLive, canEdit: true })}
     <form method="post" action="auth/logout" class="inline">
       <button type="submit">Log out</button>
     </form>`;
 }
 
-function authLoggedOut(showLive: boolean): string {
-  const liveBtn = showLive
-    ? `<button type="button" class="linkish" id="panel-live">Live</button>
-    <button type="button" class="linkish" id="panel-view" hidden>View</button>`
-    : "";
-  return `${liveBtn}
+function authLoggedOut(canLive: boolean): string {
+  return `${modeSwitchHtml({ canLive, canEdit: false })}
   <details class="login">
       <summary>Log in</summary>
       <form method="post" action="auth/login" class="login-form">
@@ -181,15 +172,25 @@ function authLoggedOut(showLive: boolean): string {
         <label>Pass <input name="password" type="password" autocomplete="current-password" required /></label>
         <button type="submit">Log in</button>
       </form>
-      <details class="register">
-        <summary>Register</summary>
-        <form method="post" action="auth/register" class="login-form">
-          <label>User <input name="username" autocomplete="username" required /></label>
-          <label>Pass <input name="password" type="password" autocomplete="new-password" required minlength="6" /></label>
-          <button type="submit">Create account</button>
-        </form>
-      </details>
+    </details>
+    <details class="register">
+      <summary>Register</summary>
+      <form method="post" action="auth/register" class="login-form">
+        <label>User <input name="username" autocomplete="username" required /></label>
+        <label>Pass <input name="password" type="password" autocomplete="new-password" required minlength="6" /></label>
+        <button type="submit">Create account</button>
+      </form>
     </details>`;
+}
+
+function modeSwitchHtml(opts: { canLive: boolean; canEdit: boolean }): string {
+  const liveDis = opts.canLive ? "" : " disabled";
+  const editDis = opts.canEdit ? "" : " disabled";
+  return `<div class="mode-switch" role="group" aria-label="Panel mode">
+      <button type="button" class="mode-switch-btn" id="panel-live"${liveDis} title="${opts.canLive ? "Live" : "Live is available on scene pages"}">Live</button>
+      <button type="button" class="mode-switch-btn" id="panel-edit"${editDis} title="${opts.canEdit ? "Edit" : "Log in to edit"}">Edit</button>
+      <button type="button" class="mode-switch-btn" id="panel-view">View</button>
+    </div>`;
 }
 
 export function renderSceneBodyHtml(opts: {

@@ -57,7 +57,7 @@ function bootPanel(): void {
   if (!rootEl) return;
   const root: HTMLElement = rootEl;
 
-  const canLive = boot.liveSceneId !== undefined && (boot.user || boot.allowGuestLive);
+  const canLive = boot.liveSceneId !== undefined && !!(boot.user || boot.allowGuestLive);
   const canEdit = !!boot.user;
 
   const tabs = el("div", { class: "panel-tabs", role: "tablist", "aria-label": "Side panel" });
@@ -76,8 +76,8 @@ function bootPanel(): void {
   let mode: PanelMode = "view";
 
   const headerLive = document.getElementById("panel-live");
+  const headerEdit = document.getElementById("panel-edit");
   const headerView = document.getElementById("panel-view");
-  const headerEdit = document.getElementById("edit-enter");
 
   function ensureLive(): void {
     if (!canLive || live) return;
@@ -90,6 +90,21 @@ function bootPanel(): void {
     editToolbar = result.toolbar;
     editToolbar.hidden = true;
     editMounted = true;
+  }
+
+  function setHeaderMode(next: PanelMode): void {
+    const buttons: Array<{ el: HTMLElement | null; mode: PanelMode; allowed: boolean }> = [
+      { el: headerLive, mode: "live", allowed: canLive },
+      { el: headerEdit, mode: "edit", allowed: canEdit },
+      { el: headerView, mode: "view", allowed: true },
+    ];
+    for (const { el, mode: m, allowed } of buttons) {
+      if (!(el instanceof HTMLButtonElement)) continue;
+      const current = next === m;
+      el.disabled = !allowed || current;
+      el.setAttribute("aria-pressed", current ? "true" : "false");
+      el.classList.toggle("is-current", current);
+    }
   }
 
   function applyMode(next: PanelMode, persist = true): void {
@@ -106,48 +121,40 @@ function bootPanel(): void {
 
     if (next === "live" || next === "edit") {
       ensureLive();
+      if (canEdit) ensureEdit();
       live?.connect();
     } else {
       live?.disconnect();
     }
 
-    if (next === "edit") ensureEdit();
-
     livePane.hidden = next !== "live";
     editPane.hidden = next !== "edit";
-    if (editToolbar) editToolbar.hidden = next !== "edit";
+    if (editToolbar) editToolbar.hidden = !(next === "live" || next === "edit");
 
     liveTab.classList.toggle("is-active", next === "live");
     editTab.classList.toggle("is-active", next === "edit");
-
-    if (headerLive instanceof HTMLElement) {
-      headerLive.hidden = !canLive || next === "live";
-    }
-    if (headerView instanceof HTMLElement) {
-      headerView.hidden = next === "view";
-    }
-    if (headerEdit instanceof HTMLAnchorElement) {
-      headerEdit.hidden = next === "edit";
-      headerEdit.textContent = "Edit";
-    }
+    setHeaderMode(next);
   }
 
   liveTab.addEventListener("click", () => applyMode("live"));
   editTab.addEventListener("click", () => applyMode("edit"));
-  headerLive?.addEventListener("click", () => applyMode("live"));
-  headerView?.addEventListener("click", () => applyMode("view"));
-  if (headerEdit instanceof HTMLAnchorElement) {
-    headerEdit.addEventListener("click", (event) => {
-      if (!canEdit) return;
-      event.preventDefault();
-      applyMode("edit");
-      const url = new URL(window.location.href);
-      if (!url.searchParams.has("edit")) {
-        url.searchParams.set("edit", "");
-        history.replaceState(null, "", url.pathname + url.search.replace(/=(?=&|$)/g, "") + url.hash);
-      }
-    });
-  }
+  headerLive?.addEventListener("click", () => {
+    if (headerLive instanceof HTMLButtonElement && headerLive.disabled) return;
+    applyMode("live");
+  });
+  headerView?.addEventListener("click", () => {
+    if (headerView instanceof HTMLButtonElement && headerView.disabled) return;
+    applyMode("view");
+  });
+  headerEdit?.addEventListener("click", () => {
+    if (!(headerEdit instanceof HTMLButtonElement) || headerEdit.disabled) return;
+    applyMode("edit");
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("edit")) {
+      url.searchParams.set("edit", "");
+      history.replaceState(null, "", url.pathname + url.search.replace(/=(?=&|$)/g, "") + url.hash);
+    }
+  });
 
   applyMode(readMode(boot), false);
 }

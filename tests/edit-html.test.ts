@@ -55,10 +55,15 @@ describe("read-only HTML vs edit bootstrap", () => {
     expect(html).not.toContain("data-method");
     expect(html).not.toContain("Create scene");
     expect(html).not.toContain("Save scene");
-    expect(html).not.toContain('id="edit-enter"');
+    expect(html).toContain('id="panel-edit"');
+    expect(html).toMatch(/id="panel-edit"[^>]*\sdisabled/);
+    expect(html).toContain('class="mode-switch"');
     expect(html).toContain('action="auth/login"');
     expect(html).toContain("<summary>Log in</summary>");
     expect(html).toContain("<summary>Register</summary>");
+    expect(html).toContain('action="auth/register"');
+    // Register is a sibling of Log in, not nested inside it.
+    expect(html.indexOf("</details>")).toBeLessThan(html.indexOf('<details class="register">'));
     const version = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")).version;
     expect(html).toContain(`<footer class="site-footer">`);
     expect(html).toContain("proseden");
@@ -96,12 +101,14 @@ describe("read-only HTML vs edit bootstrap", () => {
       headers: { Accept: "text/html", Authorization: `Bearer ${token}` },
     });
     const html = await res.text();
-    expect(html).toContain('id="edit-enter"');
+    expect(html).toContain('id="panel-edit"');
+    expect(html).not.toMatch(/id="panel-edit"[^>]*\sdisabled/);
+    expect(html).toContain('class="mode-switch"');
     expect(html).toContain("s/1?edit");
     expect(html).toContain('href="profile"');
     expect(html).toContain('href="inv"');
     expect(html.indexOf('href="profile"')).toBeLessThan(html.indexOf('href="inv"'));
-    expect(html.indexOf('href="inv"')).toBeLessThan(html.indexOf('id="edit-enter"'));
+    expect(html.indexOf('href="inv"')).toBeLessThan(html.indexOf('id="panel-edit"'));
     expect(html).not.toContain("data-method");
     expect(html).not.toContain("Create scene");
     expect(html).toContain('"username":"gardener"');

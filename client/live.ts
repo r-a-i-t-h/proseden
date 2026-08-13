@@ -12,6 +12,8 @@ interface ChatMessage {
   kind: string;
   ts: string;
   fromName?: string;
+  sceneTitle?: string;
+  sceneId?: number;
   text: string;
 }
 
@@ -150,8 +152,14 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
     if (msg.kind === "chat.system") {
       line.append(el("span", { class: "live-system" }, msg.text));
     } else if (msg.kind === "chat.shout") {
+      const fromWhere = msg.sceneTitle
+        ? `Shout from ${msg.sceneTitle}`
+        : msg.sceneId !== undefined
+          ? `Shout from Scene ${msg.sceneId}`
+          : "Shout";
       line.append(
-        el("span", { class: "live-shout-label" }, "Shout "),
+        el("span", { class: "live-shout-label" }, fromWhere),
+        document.createTextNode(" "),
         el("strong", {}, msg.fromName ?? "?"),
         document.createTextNode(`: ${msg.text}`),
       );
