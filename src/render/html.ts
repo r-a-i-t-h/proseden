@@ -208,7 +208,7 @@ export function renderSceneBodyHtml(opts: {
   if (detail) {
     const text = scene.details[detail];
     return `<p class="crumb"><a href="s/${scene.id}">← Scene ${scene.id}</a></p>
-      <h1>${escapeHtml(scene.title ?? `Scene ${scene.id}`)} <span class="sub">detail:${escapeHtml(detail)}</span></h1>
+      <h1>${escapeHtml(scene.title ?? `Scene ${scene.id}`)} <span class="detail-sub">detail: ${escapeHtml(detail)}</span></h1>
       ${bylineHtml(scene.owner)}
       <div class="desc">${formatProse(text ?? `No detail named “${detail}”.`)}</div>`;
   }
@@ -283,7 +283,7 @@ export function renderArtefactBodyHtml(opts: {
   if (detail) {
     const text = artefact.details[detail];
     return `<p class="crumb"><a href="a/${artefact.id}">← Artefact ${artefact.id}</a></p>
-      <h1>${escapeHtml(artefact.title ?? `Artefact ${artefact.id}`)} <span class="sub">detail:${escapeHtml(detail)}</span></h1>
+      <h1>${escapeHtml(artefact.title ?? `Artefact ${artefact.id}`)} <span class="detail-sub">detail: ${escapeHtml(detail)}</span></h1>
       ${bylineHtml(artefact.owner)}
       <div class="desc">${formatProse(text ?? `No detail named “${detail}”.`)}</div>`;
   }
@@ -295,11 +295,10 @@ export function renderArtefactBodyHtml(opts: {
     )
     .join("");
 
-  return `<h1>${escapeHtml(artefact.title ?? `Artefact ${artefact.id}`)} <span class="sub">#${artefact.id}</span></h1>
+  return `<p class="crumb"><a href="s/${artefact.homeSceneId}?from=${artefact.homeSceneId}">← Scene ${artefact.homeSceneId}</a></p>
+    <h1>${escapeHtml(artefact.title ?? `Artefact ${artefact.id}`)} <span class="sub">#${artefact.id}</span></h1>
     ${bylineHtml(artefact.owner)}
-    <p class="meta">Homed at <a href="s/${artefact.homeSceneId}?from=${artefact.homeSceneId}">scene ${artefact.homeSceneId}</a>${
-      artefact.tags.length ? ` · ${escapeHtml(artefact.tags.join(", "))}` : ""
-    }</p>
+    ${artefact.tags.length ? `<p class="meta">${escapeHtml(artefact.tags.join(", "))}</p>` : ""}
     <div class="desc">${formatProse(artefact.body)}</div>
     ${detailLinks ? `<section><h2>Details</h2><ul class="link-list">${detailLinks}</ul></section>` : ""}
     ${

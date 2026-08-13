@@ -126,7 +126,7 @@ describe("read-only HTML vs edit bootstrap", () => {
   it("still opens a named detail when combined with ?edit", async () => {
     const res = await app().request("/s/1?card&edit", { headers: { Accept: "text/html" } });
     const html = await res.text();
-    expect(html).toContain("detail:card");
+    expect(html).toContain("detail: card");
     expect(html).toContain("deckle-edged");
   });
 
