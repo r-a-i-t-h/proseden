@@ -22,6 +22,10 @@ export interface HtmlShellOptions {
   ownedScenes?: OwnedSceneLink[];
   /** Staff manager — shows /admin and /staff links in the sidebar. */
   isManager?: boolean;
+  /** Moderator or manager — live admin / purge. */
+  isModerator?: boolean;
+  /** Scene id for live SSE when viewing a scene page. */
+  liveSceneId?: number;
   /** Relative href that adds `?edit` (signed-in Edit control). */
   editHref?: string;
   /** Relative href with `?edit` removed (View). */
@@ -52,8 +56,13 @@ export interface EditBootstrap {
   manage?: ManageContext;
   ownedScenes: OwnedSceneLink[];
   isManager: boolean;
+  isModerator: boolean;
   editHref: string;
   readHref: string;
+  /** Present on scene pages — enables Live panel + SSE. */
+  liveSceneId?: number;
+  /** Guests may open Live on public scenes. */
+  allowGuestLive: boolean;
 }
 
 /** Relative hrefs for entering / leaving edit mode on the current request. */
@@ -91,13 +100,17 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
   const user = opts.user;
   const editHref = opts.editHref ?? "?edit";
   const readHref = opts.readHref ?? "./";
+  const liveSceneId = opts.liveSceneId;
   const bootstrap: EditBootstrap = {
     user: user ? { username: user.username } : undefined,
     manage: opts.manage,
     ownedScenes: opts.ownedScenes ?? [],
     isManager: opts.isManager ?? opts.manage?.isManager ?? false,
+    isModerator: opts.isModerator ?? false,
     editHref,
     readHref,
+    liveSceneId,
+    allowGuestLive: liveSceneId !== undefined,
   };
   return `<!DOCTYPE html>
 <html lang="en">
@@ -113,7 +126,7 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
     <header class="top">
       <a class="brand" href="./">Proseden</a>
       <div class="auth" id="auth-panel">
-        ${user ? authLoggedIn(user, editHref) : authLoggedOut()}
+        ${user ? authLoggedIn(user, editHref, liveSceneId !== undefined) : authLoggedOut(liveSceneId !== undefined)}
       </div>
     </header>
     <div class="layout">
@@ -135,37 +148,47 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
     </p>
   </footer>
   <script type="application/json" id="edit-bootstrap">${jsonScript(bootstrap)}</script>
-  <script type="module" src="assets/edit.js"></script>
+  <script type="module" src="assets/panel.js"></script>
 </body>
 </html>`;
 }
 
-function authLoggedIn(user: UserRecord, editHref: string): string {
+function authLoggedIn(user: UserRecord, editHref: string, showLive: boolean): string {
+  const liveBtn = showLive
+    ? `<button type="button" class="linkish" id="panel-live" hidden>Live</button>`
+    : "";
   return `<span class="who"><strong>${escapeHtml(user.username)}</strong></span>
     <a href="profile">Profile</a>
     <a href="inv">Inventory</a>
+    ${liveBtn}
     <a href="${escapeAttr(editHref)}" id="edit-enter">Edit</a>
+    <button type="button" class="linkish" id="panel-view" hidden>View</button>
     <form method="post" action="auth/logout" class="inline">
       <button type="submit">Log out</button>
     </form>`;
 }
 
-function authLoggedOut(): string {
-  return `<details class="login">
+function authLoggedOut(showLive: boolean): string {
+  const liveBtn = showLive
+    ? `<button type="button" class="linkish" id="panel-live">Live</button>
+    <button type="button" class="linkish" id="panel-view" hidden>View</button>`
+    : "";
+  return `${liveBtn}
+  <details class="login">
       <summary>Log in</summary>
       <form method="post" action="auth/login" class="login-form">
         <label>User <input name="username" autocomplete="username" required /></label>
         <label>Pass <input name="password" type="password" autocomplete="current-password" required /></label>
         <button type="submit">Log in</button>
       </form>
-    </details>
-    <details class="register">
-      <summary>Register</summary>
-      <form method="post" action="auth/register">
-        <label>User <input name="username" autocomplete="username" required /></label>
-        <label>Pass <input name="password" type="password" autocomplete="new-password" required /></label>
-        <button type="submit">Create account</button>
-      </form>
+      <details class="register">
+        <summary>Register</summary>
+        <form method="post" action="auth/register" class="login-form">
+          <label>User <input name="username" autocomplete="username" required /></label>
+          <label>Pass <input name="password" type="password" autocomplete="new-password" required minlength="6" /></label>
+          <button type="submit">Create account</button>
+        </form>
+      </details>
     </details>`;
 }
 

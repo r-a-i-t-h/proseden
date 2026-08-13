@@ -1,4 +1,7 @@
 import type { SessionStore } from "./auth/sessions.js";
+import type { SceneHub } from "./live/hub.js";
+import type { LocationTracker } from "./live/location.js";
+import type { PresenceStore } from "./live/presence.js";
 import type { WorldStore } from "./store/world.js";
 import type { UserRecord } from "./model/types.js";
 
@@ -12,6 +15,9 @@ export type AppVariables = {
   sessionCookieName: string;
   /** Timestamped data archives; sibling of data/ by default */
   backupDir: string;
+  presence: PresenceStore;
+  hub: SceneHub;
+  locations: LocationTracker;
 };
 
 declare module "hono" {

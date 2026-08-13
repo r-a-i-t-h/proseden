@@ -627,3 +627,113 @@ details.register summary {
 .who strong {
   color: var(--moss);
 }
+
+button.linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--moss);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+.panel-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.panel-tab {
+  flex: 1;
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.panel-tab.is-active {
+  background: var(--sidebar);
+  color: var(--moss);
+  border-color: var(--moss);
+}
+
+.live-heading {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1rem;
+  margin: 0.85rem 0 0.35rem;
+  color: var(--moss);
+}
+
+.live-log {
+  max-height: 14rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.03);
+  padding: 0.5rem 0.65rem;
+  margin: 0.35rem 0 0.65rem;
+  font-size: 0.92rem;
+}
+
+.live-line {
+  margin: 0.2rem 0;
+}
+
+.live-system {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.live-shout-label {
+  color: var(--moss);
+  font-weight: 600;
+  margin-right: 0.25rem;
+}
+
+.live-compose {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0.35rem 0;
+}
+
+.live-compose input {
+  flex: 1;
+  min-width: 0;
+}
+
+.live-here,
+.live-online {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+}
+
+.live-here li,
+.live-online li {
+  margin: 0.25rem 0;
+}
+
+.live-admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0 1.25rem;
+  font-size: 0.95rem;
+}
+
+.live-admin-table th,
+.live-admin-table td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.live-purge {
+  margin-top: 0.75rem;
+}
+
+.edit-toolbar[hidden] {
+  display: none !important;
+}

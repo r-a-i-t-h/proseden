@@ -315,6 +315,9 @@ The Proseden site is not enabled, or another `default_server` wins. Check `ls /e
 **Styles missing / 404 on `/assets/`**  
 The process is running from a tree that was not packed with `public/assets`. Re-install from an official Release tarball, not a git clone.
 
+**Live chat / SSE stalls or never connects**  
+`/live/events` needs `proxy_buffering off` and a long `proxy_read_timeout` (bundled nginx templates include a dedicated `location`). Re-run install/update so site configs refresh, or add those directives manually. See [LIVE.md](LIVE.md).
+
 **Update left the world empty**  
 Updates never copy `seed/` over existing `data/`. If `data/meta.json` was deleted, the next start *will* re-seed. Restore `data/` from backup if you still have one.
 

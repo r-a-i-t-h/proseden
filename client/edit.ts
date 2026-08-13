@@ -45,12 +45,15 @@ interface EditBootstrap {
   manage?: ManageContext;
   ownedScenes: OwnedSceneLink[];
   isManager: boolean;
+  isModerator?: boolean;
   editHref: string;
   readHref: string;
+  liveSceneId?: number;
+  allowGuestLive?: boolean;
 }
 
-const MODE_KEY = "proseden-edit";
 const FLASH_KEY = "proseden-edit-flash";
+const OLD_MODE_KEY = "proseden-edit";
 
 const DETAILS_EXAMPLE = `{
   "card": "Closer look at the mantel card.
@@ -87,19 +90,8 @@ function readBootstrap(): EditBootstrap | null {
   }
 }
 
-function wantEditMode(): boolean {
-  const params = new URLSearchParams(window.location.search);
-  if (params.has("edit")) {
-    sessionStorage.setItem(MODE_KEY, "1");
-    return true;
-  }
-  return sessionStorage.getItem(MODE_KEY) === "1";
-}
-
-function leaveEditMode(readHref: string): void {
-  sessionStorage.removeItem(MODE_KEY);
-  window.location.href = readHref;
-}
+export { readBootstrap, FLASH_KEY, OLD_MODE_KEY };
+export type { EditBootstrap, ManageContext, OwnedSceneLink };
 
 async function apiJson(
   method: string,
@@ -181,26 +173,13 @@ function checked(root: ParentNode, name: string): boolean {
   return !!root.querySelector<HTMLInputElement>(`input[name="${name}"][type="checkbox"]`)?.checked;
 }
 
-function mount(boot: EditBootstrap): void {
-  const root = document.getElementById("edit-root");
-  if (!root) return;
+/** Mount edit tools once into `pane`. Toolbar is placed after the site header. */
+export function mountEdit(boot: EditBootstrap, pane: HTMLElement): { toolbar: HTMLElement } {
   const manage = boot.manage;
   const user = boot.user;
-  if (!user) return;
-
-  document.body.classList.add("is-editing");
-  document.querySelector(".layout")?.classList.add("with-manage");
-  root.hidden = false;
-
-  const enter = document.getElementById("edit-enter");
-  if (enter instanceof HTMLAnchorElement) {
-    enter.textContent = "View";
-    enter.href = boot.readHref;
-    enter.id = "edit-leave";
-    enter.addEventListener("click", (event) => {
-      event.preventDefault();
-      leaveEditMode(boot.readHref);
-    });
+  if (!user) {
+    pane.replaceChildren(el("p", { class: "muted" }, "Sign in to edit."));
+    return { toolbar: el("div") };
   }
 
   const tools = availableTools(manage);
@@ -218,6 +197,9 @@ function mount(boot: EditBootstrap): void {
       el("a", { class: "edit-tool-link", href: "admin" }, "Admin"),
       el("a", { class: "edit-tool-link", href: "staff" }, "Staff"),
     );
+  }
+  if (boot.isModerator) {
+    links.append(el("a", { class: "edit-tool-link", href: "live/admin" }, "Live admin"));
   }
 
   const sceneTools = el("div", { class: "edit-toolbar-scenes" });
@@ -258,11 +240,12 @@ function mount(boot: EditBootstrap): void {
   }
 
   inspector.append(nav, panel);
-  root.replaceChildren(inspector);
+  pane.replaceChildren(inspector);
   const app = document.querySelector(".app");
   const header = document.querySelector(".top");
   if (app && header) header.insertAdjacentElement("afterend", toolbar);
   renderPanel();
+  return { toolbar };
 }
 
 function toolLabel(id: ToolId, manage?: ManageContext): string {
@@ -830,9 +813,4 @@ function dangerTool(manage: ManageContext | undefined, inspector: HTMLElement): 
     return el("div", { class: "stack" }, el("p", { class: "edit-kicker" }, "Delete artefact"), btn);
   }
   return el("p", { class: "muted" }, "Nothing to delete here.");
-}
-
-const boot = readBootstrap();
-if (boot?.user && wantEditMode()) {
-  mount(boot);
 }

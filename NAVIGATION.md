@@ -46,12 +46,19 @@ Each member scene stores `entranceGroupId`.
 `WorldStore.resolveTeleportTarget(requestedSceneId, fromSceneId, opts?)`:
 
 1. If the destination has no entrance group → land on the requested scene.
-2. If `opts.asOwnerUsername` matches the destination owner → land on the requested scene (owners skip entrance groups for CMS / “My scenes” navigation).
-3. If `fromSceneId` is in the **same** entrance group → land on the requested scene (intra-group teleport / go).
-4. If the request is already for the entrance scene → land there.
-5. Otherwise → redirect to `entranceSceneId`.
+2. If `opts.asJoin` → land on the requested scene (live **Join** / future follow only — see below).
+3. If `opts.asOwnerUsername` matches the destination owner → land on the requested scene (owners skip entrance groups for CMS / “My scenes” navigation).
+4. If `fromSceneId` is in the **same** entrance group → land on the requested scene (intra-group teleport / go).
+5. If the request is already for the entrance scene → land there.
+6. Otherwise → redirect to `entranceSceneId`.
 
 Both teleport and go call this helper before access checks on the **resolved** destination. Teleport passes the signed-in username as `asOwnerUsername`; go does not (exit navigation always respects entrance groups).
+
+### Join (live)
+
+`GET /live/join/:userKey` resolves a **currently live** user’s scene, requires `canRead` on that scene, then lands with `asJoin: true` (entrance groups are not applied). The redirect is `/s/<sceneId>?from=<sceneId>` so later intra-group teleports keep context.
+
+Ordinary Travel / `GET /s/:id` do **not** use `asJoin`. Skipping the entrance when joining someone inside a public-readable inner room is intentional — see [LIVE.md](LIVE.md).
 
 ### Teleport HTTP flow
 

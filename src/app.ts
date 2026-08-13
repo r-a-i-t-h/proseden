@@ -2,8 +2,12 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { SessionStore } from "./auth/sessions.js";
 import { loadUser, sessionCookieNameForBase } from "./middleware/auth.js";
+import { SceneHub } from "./live/hub.js";
+import { LocationTracker } from "./live/location.js";
+import { PresenceStore } from "./live/presence.js";
 import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
+import { liveRoutes } from "./routes/live.js";
 import { worldRoutes } from "./routes/world.js";
 import { defaultBackupDir } from "./store/backup.js";
 import type { WorldStore } from "./store/world.js";
@@ -17,6 +21,9 @@ export function createApp(opts: {
   staticRoot?: string;
   /** Data archives directory (default: sibling `backup` of the world data dir). */
   backupDir?: string;
+  presence?: PresenceStore;
+  hub?: SceneHub;
+  locations?: LocationTracker;
 }) {
   const assetBase = normalizeBase(opts.assetBase ?? "");
   // strict:false so /proseden and /proseden/ both hit the app root under a base path
@@ -25,6 +32,9 @@ export function createApp(opts: {
     : new Hono({ strict: false });
   const sessionCookieName = sessionCookieNameForBase(assetBase);
   const backupDir = opts.backupDir ?? defaultBackupDir(opts.world.dataDir);
+  const presence = opts.presence ?? new PresenceStore();
+  const hub = opts.hub ?? new SceneHub(presence);
+  const locations = opts.locations ?? new LocationTracker(opts.world);
 
   app.use("*", async (c, next) => {
     c.set("world", opts.world);
@@ -32,6 +42,9 @@ export function createApp(opts: {
     c.set("assetBase", assetBase);
     c.set("sessionCookieName", sessionCookieName);
     c.set("backupDir", backupDir);
+    c.set("presence", presence);
+    c.set("hub", hub);
+    c.set("locations", locations);
     await next();
   });
 
@@ -41,6 +54,7 @@ export function createApp(opts: {
 
   app.route("/auth", authRoutes);
   app.route("/admin", adminRoutes);
+  app.route("/live", liveRoutes);
   app.route("/", worldRoutes);
 
   if (opts.staticRoot) {

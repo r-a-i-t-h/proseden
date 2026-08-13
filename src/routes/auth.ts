@@ -1,11 +1,14 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { canRead } from "../access/permissions.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { ownedSceneLinksFor, wantsJson } from "../http.js";
 import { negotiateFormat } from "../render/format.js";
 import { editModeHrefs, renderHtmlPage, renderMessageBodyHtml } from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
+import type { UserRecord } from "../model/types.js";
+import type { WorldStore } from "../store/world.js";
 
 export const authRoutes = new Hono();
 
@@ -44,9 +47,17 @@ authRoutes.post("/register", async (c) => {
   });
 
   if (body.json) {
-    return c.json({ ok: true, username: user.username, token: session.token }, 201);
+    return c.json(
+      {
+        ok: true,
+        username: user.username,
+        token: session.token,
+        lastSceneId: resumeSceneId(world, user) ?? null,
+      },
+      201,
+    );
   }
-  return c.redirect(`${c.get("assetBase")}/`);
+  return c.redirect(resumeRedirect(c, user));
 });
 
 authRoutes.post("/login", async (c) => {
@@ -70,9 +81,14 @@ authRoutes.post("/login", async (c) => {
     secure: cookieSecure(),
   });
   if (body.json) {
-    return c.json({ ok: true, username: user.username, token: session.token });
+    return c.json({
+      ok: true,
+      username: user.username,
+      token: session.token,
+      lastSceneId: resumeSceneId(world, user) ?? null,
+    });
   }
-  return c.redirect(`${c.get("assetBase")}/`);
+  return c.redirect(resumeRedirect(c, user));
 });
 
 authRoutes.post("/password", async (c) => {
@@ -114,6 +130,8 @@ authRoutes.post("/password", async (c) => {
 
 authRoutes.post("/logout", async (c) => {
   const sessions = c.get("sessions");
+  const user = c.get("user");
+  if (user) await c.get("locations").flush(user.username);
   const cookieName = c.get("sessionCookieName");
   const bearer = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
   const cookieHeader = c.req.header("cookie") ?? "";
@@ -124,6 +142,21 @@ authRoutes.post("/logout", async (c) => {
   if (wantsJson(c)) return c.json({ ok: true });
   return c.redirect(`${c.get("assetBase")}/`);
 });
+
+function resumeSceneId(world: WorldStore, user: UserRecord): number | undefined {
+  if (user.lastSceneId === undefined) return undefined;
+  const scene = world.getScene(user.lastSceneId);
+  if (!scene || !canRead(user, scene, world)) return undefined;
+  return scene.id;
+}
+
+function resumeRedirect(c: Context, user: UserRecord): string {
+  const world = c.get("world");
+  const id = resumeSceneId(world, user);
+  const base = c.get("assetBase");
+  if (id !== undefined) return `${base}/s/${id}`;
+  return `${base}/`;
+}
 
 function cookieSecure(): boolean {
   return process.env.NODE_ENV === "production" || process.env.PROSEDEN_SECURE_COOKIES === "1";

@@ -31,6 +31,10 @@ export interface UserRecord {
   grants?: Grant[];
   /** Persona-non-grata blocks on this user's content. */
   denies?: Deny[];
+  /** Last successfully rendered scene (resume-on-login). */
+  lastSceneId?: number;
+  /** ISO timestamp of last location note / presence flush. */
+  lastSeenAt?: string;
 }
 
 export interface SceneMeta {

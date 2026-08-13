@@ -48,7 +48,7 @@ describe("read-only HTML vs edit bootstrap", () => {
     const res = await app().request("/s/1", { headers: { Accept: "text/html" } });
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain('src="assets/edit.js"');
+    expect(html).toContain('src="assets/panel.js"');
     expect(html).toContain('id="edit-root"');
     expect(html).toContain('id="edit-bootstrap"');
     expect(html).toContain("Moss softens the stone step");

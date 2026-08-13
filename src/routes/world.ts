@@ -128,6 +128,8 @@ worldRoutes.get("/s/:id", (c) => {
     : undefined;
   const isEntrance = entranceGroup?.entranceSceneId === scene.id;
 
+  if (user) c.get("locations").noteVisit(user.username, scene.id);
+
   return page(
     c,
     200,
@@ -1409,6 +1411,8 @@ function page(
   const user = c.get("user");
   const world = c.get("world");
   const hrefs = editModeHrefs(c.req.url, c.get("assetBase"));
+  const sceneId =
+    manage?.kind === "scene" && manage.scene ? manage.scene.id : undefined;
   return c.html(
     renderHtmlPage({
       title,
@@ -1418,6 +1422,8 @@ function page(
       manage,
       ownedScenes: ownedSceneLinks(world, user),
       isManager: isManager(user, world),
+      isModerator: isModerator(user, world),
+      liveSceneId: sceneId,
       ...hrefs,
     }),
     status as 200,
