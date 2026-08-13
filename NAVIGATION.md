@@ -32,6 +32,8 @@ Entrance groups need a “from” scene to decide whether the traveller is alrea
 
 After a successful go, the redirect includes `?from=` so a subsequent teleport can keep intra-group context.
 
+Artefact home links use `?from=<homeSceneId>` so returning from `/a/:id` to a scene inside an entrance group does not re-enter via the group entrance (an artefact Referer alone is not a scene and would otherwise look like an outsider).
+
 ## Entrance groups
 
 An entrance group (`data/entrance-groups/<id>.json`) names:

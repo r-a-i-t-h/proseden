@@ -378,6 +378,33 @@ describe("HTTP teleport vs rights", () => {
     expect(res.status).toBe(302);
     expect(location(res)).toBe(`/s/${ids.entrance}`);
   });
+
+  it("returns from an artefact to its inner home without entrance redirect", async () => {
+    const { app, world, tokens, ids } = harness;
+    const art = await world.createArtefact({
+      owner: "alice",
+      homeSceneId: ids.inner,
+      title: "Chamber plaque",
+      body: "A plaque on the wall.",
+    });
+
+    const page = await app.request(`/a/${art.id}`, {
+      headers: auth(tokens.bob),
+    });
+    expect(page.status).toBe(200);
+    const text = await page.text();
+    const homeHref = `/s/${ids.inner}?from=${ids.inner}`;
+    expect(text).toContain(homeHref);
+
+    const home = await app.request(homeHref, {
+      headers: auth(tokens.bob, {
+        Referer: `http://example.test/a/${art.id}`,
+      }),
+      redirect: "manual",
+    });
+    expect(home.status).toBe(200);
+    expect(await home.text()).toContain("Inner Chamber");
+  });
 });
 
 describe("HTTP navigate (go) vs rights", () => {

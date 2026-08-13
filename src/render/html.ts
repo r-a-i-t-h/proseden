@@ -273,7 +273,7 @@ export function renderArtefactBodyHtml(opts: {
 
   return `<h1>${escapeHtml(artefact.title ?? `Artefact ${artefact.id}`)} <span class="sub">#${artefact.id}</span></h1>
     ${bylineHtml(artefact.owner)}
-    <p class="meta">Homed at <a href="s/${artefact.homeSceneId}">scene ${artefact.homeSceneId}</a>${
+    <p class="meta">Homed at <a href="s/${artefact.homeSceneId}?from=${artefact.homeSceneId}">scene ${artefact.homeSceneId}</a>${
       artefact.tags.length ? ` · ${escapeHtml(artefact.tags.join(", "))}` : ""
     }</p>
     <div class="desc">${formatProse(artefact.body)}</div>

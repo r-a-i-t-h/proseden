@@ -92,7 +92,7 @@ export function renderArtefactText(opts: {
   } else {
     lines.push(`[Artefact ${artefact.id}${artefact.title ? `: ${artefact.title}` : ""}]`);
     if (artefact.owner) lines.push(`by ${artefact.owner}`);
-    lines.push(`home: ${base}/s/${artefact.homeSceneId}`);
+    lines.push(`home: ${base}/s/${artefact.homeSceneId}?from=${artefact.homeSceneId}`);
     if (artefact.tags.length) lines.push(`tags: ${artefact.tags.join(", ")}`);
     lines.push("");
     lines.push(artefact.body);
