@@ -25,17 +25,17 @@ export class SceneHub {
   constructor(private presence: PresenceStore) {
     this.presence.onEvent((event) => {
       if (event.kind === "presence.join" && event.person && event.sceneId !== undefined) {
-        this.appendSystem(event.sceneId, `${event.person.displayName} arrives.`);
+        this.appendSystem(event.sceneId, event.person, "arrive");
       } else if (event.kind === "presence.leave" && event.person && event.sceneId !== undefined) {
-        this.appendSystem(event.sceneId, `${event.person.displayName} leaves.`);
+        this.appendSystem(event.sceneId, event.person, "leave");
       } else if (
         event.kind === "presence.move" &&
         event.person &&
         event.fromSceneId !== undefined &&
         event.toSceneId !== undefined
       ) {
-        this.appendSystem(event.fromSceneId, `${event.person.displayName} leaves.`);
-        this.appendSystem(event.toSceneId, `${event.person.displayName} arrives.`);
+        this.appendSystem(event.fromSceneId, event.person, "leave");
+        this.appendSystem(event.toSceneId, event.person, "arrive");
       }
     });
   }
@@ -153,13 +153,57 @@ export class SceneHub {
     return out.sort((a, b) => String(a.sceneId).localeCompare(String(b.sceneId)));
   }
 
-  private appendSystem(sceneId: number, text: string): void {
-    const message = this.makeMessage({ kind: "chat.system", sceneId, text });
+  private appendSystem(
+    sceneId: number,
+    person: PresencePerson,
+    systemKind: "arrive" | "leave",
+  ): void {
+    const text =
+      systemKind === "arrive"
+        ? `${person.displayName} arrives.`
+        : `${person.displayName} leaves.`;
+    const message = this.makeMessage({
+      kind: "chat.system",
+      sceneId,
+      fromKey: person.userKey,
+      fromName: person.displayName,
+      systemKind,
+      text,
+    });
+
+    // Consecutive arrive→leave for the same person: fanout leave, but drop both from linger.
+    if (systemKind === "leave" && this.tryCancelArrive(sceneId, person.userKey)) {
+      this.presence.fanout(
+        { kind: "chat.system", ts: message.ts, sceneId, message },
+        { sceneId },
+      );
+      return;
+    }
+
     this.pushScene(sceneId, message);
     this.presence.fanout(
       { kind: "chat.system", ts: message.ts, sceneId, message },
       { sceneId },
     );
+  }
+
+  /** If the last linger line is this person's arrive, pop it and return true. */
+  private tryCancelArrive(sceneId: number, userKey: string): boolean {
+    this.pruneScene(sceneId);
+    const buf = this.sceneBuffers.get(sceneId);
+    if (!buf?.length) return false;
+    const last = buf[buf.length - 1];
+    if (
+      last?.kind !== "chat.system" ||
+      last.systemKind !== "arrive" ||
+      last.fromKey !== userKey
+    ) {
+      return false;
+    }
+    buf.pop();
+    if (buf.length) this.sceneBuffers.set(sceneId, buf);
+    else this.sceneBuffers.delete(sceneId);
+    return true;
   }
 
   private makeMessage(opts: {
@@ -169,6 +213,7 @@ export class SceneHub {
     sceneTitle?: string;
     fromKey?: string;
     fromName?: string;
+    systemKind?: ChatMessage["systemKind"];
   }): ChatMessage {
     return {
       id: randomBytes(8).toString("hex"),
@@ -178,6 +223,7 @@ export class SceneHub {
       sceneTitle: opts.sceneTitle,
       fromKey: opts.fromKey,
       fromName: opts.fromName,
+      systemKind: opts.systemKind,
       text: opts.text.slice(0, 2000),
     };
   }

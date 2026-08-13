@@ -95,6 +95,55 @@ describe("live presence and chat", () => {
     expect(snap.messages.some((m) => m.text === "Hello linger")).toBe(true);
   });
 
+  it("cancels consecutive arrive→leave from the linger buffer but still fans out leave", () => {
+    vi.useFakeTimers();
+    const systemTexts: string[] = [];
+    const bob = presence.connect({
+      userKey: "u:bob",
+      displayName: "bob",
+      sceneId: sceneIds.public,
+    });
+    presence.setSend(bob.connectionId, (e) => {
+      if (e.kind === "chat.system" && e.message) systemTexts.push(e.message.text);
+    });
+
+    const alice = presence.connect({
+      userKey: "u:alice",
+      displayName: "alice",
+      sceneId: sceneIds.public,
+    });
+    expect(hub.snapshot(sceneIds.public).messages.map((m) => m.text)).toContain("alice arrives.");
+    expect(systemTexts).toEqual(["alice arrives."]);
+
+    presence.disconnect(alice.connectionId);
+    vi.advanceTimersByTime(PRESENCE_RECONNECT_GRACE_MS);
+
+    expect(systemTexts).toEqual(["alice arrives.", "alice leaves."]);
+    expect(hub.snapshot(sceneIds.public).messages.some((m) => m.fromKey === "u:alice")).toBe(
+      false,
+    );
+  });
+
+  it("does not cancel arrive→leave when another message sits between them", () => {
+    vi.useFakeTimers();
+    const alice = presence.connect({
+      userKey: "u:alice",
+      displayName: "alice",
+      sceneId: sceneIds.public,
+    });
+    hub.say({
+      sceneId: sceneIds.public,
+      fromKey: "u:bob",
+      fromName: "bob",
+      text: "hi",
+    });
+    presence.disconnect(alice.connectionId);
+    vi.advanceTimersByTime(PRESENCE_RECONNECT_GRACE_MS);
+
+    const texts = hub.snapshot(sceneIds.public).messages.map((m) => m.text);
+    expect(texts).toEqual(["alice arrives.", "hi", "alice leaves."]);
+  });
+
   it("merges shouts into scene chat by time for snapshot replay", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-13T12:00:00.000Z"));

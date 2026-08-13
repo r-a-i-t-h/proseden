@@ -24,6 +24,8 @@ export interface ChatMessage {
   sceneTitle?: string;
   fromKey?: string;
   fromName?: string;
+  /** Structured cue for arrive/leave system lines (match without parsing `text`). */
+  systemKind?: "arrive" | "leave";
   text: string;
 }
 
