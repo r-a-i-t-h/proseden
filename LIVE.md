@@ -2,6 +2,8 @@
 
 Proseden keeps curl-friendly full-page navigation. Live multi-user features are a **progressive enhancement** on scene pages: the shared side panel (`#edit-root`) switches between **Live** and **Edit** without a page load. **View** is antisocial (disconnects presence).
 
+Behavioral contract for “live”, arrives/leaves, grace, and idle: [PRESENCE.md](PRESENCE.md).
+
 Detail views (`/s/:id?card`) and artefact pages (`/a/:id`) keep you present in the **main scene** (the scene itself, or an artefact’s `homeSceneId`). Full-page navigations briefly drop the SSE socket; presence uses a 60s reconnect grace so same-scene loads do not emit leave/arrive.
 
 ## Modes
