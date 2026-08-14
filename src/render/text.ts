@@ -6,6 +6,7 @@ import type {
   EntityKind,
   ExitRecord,
   Grant,
+  InboxMessage,
   SceneRecord,
 } from "../model/types.js";
 
@@ -301,6 +302,32 @@ export function renderInventoryText(
       const label = artefact.title ?? `artefact ${artefact.id}`;
       const tags = artefact.tags.length ? ` [${artefact.tags.join(", ")}]` : "";
       lines.push(`  ${artefact.id}. ${label}${tags}  ${basePath}/a/${artefact.id}`);
+    }
+  }
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+export function renderInboxText(
+  messages: InboxMessage[],
+  basePath = "",
+  back?: { href: string; label: string },
+  flash?: string,
+): string {
+  const lines = ["[Inbox]", ""];
+  if (back) lines.push(`${back.label}  ${basePath}/${back.href.replace(/^\.\//, "")}`, "");
+  if (flash) lines.push(flash, "");
+  if (!messages.length) {
+    lines.push("(empty)");
+  } else {
+    for (const msg of messages) {
+      lines.push(`— ${msg.createdAt} from ${msg.fromUser}`);
+      lines.push(msg.subject);
+      lines.push(msg.body);
+      if (msg.type === "exit_request") {
+        lines.push(`  Confirm: POST ${basePath}/inbox/${msg.id}/confirm`);
+      }
+      lines.push(`  Delete: POST ${basePath}/inbox/${msg.id}/delete`);
+      lines.push("");
     }
   }
   return `${lines.join("\n").trimEnd()}\n`;

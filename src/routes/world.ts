@@ -27,6 +27,7 @@ import {
   renderEditHistoryBodyHtml,
   renderGroupBodyHtml,
   renderGroupsIndexHtml,
+  renderInboxBodyHtml,
   renderInventoryBodyHtml,
   renderMessageBodyHtml,
   renderProfileBodyHtml,
@@ -40,6 +41,7 @@ import {
   renderArtefactText,
   renderEditHistoryText,
   renderGroupsIndexText,
+  renderInboxText,
   renderInventoryText,
   renderMessageText,
   renderProfileText,
@@ -369,6 +371,117 @@ worldRoutes.get("/inv", (c) => {
     },
   );
 });
+
+const EXIT_REQUEST_NOTE_MAX = 500;
+
+worldRoutes.get("/inbox", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) {
+    return page(
+      c,
+      401,
+      "Inbox",
+      renderMessageBodyHtml("Inbox", "Log in to view your inbox."),
+      renderMessageText("Inbox", "Authentication required."),
+    );
+  }
+
+  const flash = c.req.query("confirmed")
+    ? "Exit confirmed."
+    : c.req.query("deleted")
+      ? "Message deleted."
+      : undefined;
+  const messages = world.listInboxFor(user.username);
+  const back = sceneBackLink(user, world);
+  if (wantsJson(c)) {
+    return c.json({ messages });
+  }
+  return page(
+    c,
+    200,
+    "Inbox",
+    renderInboxBodyHtml({ messages, message: flash, back }),
+    renderInboxText(messages, c.get("assetBase"), back, flash),
+  );
+});
+
+worldRoutes.post("/inbox/:id/confirm", async (c) => confirmInboxMessage(c));
+worldRoutes.post("/inbox/:id/delete", async (c) => deleteInboxMessage(c));
+worldRoutes.delete("/inbox/:id", async (c) => deleteInboxMessage(c));
+
+async function confirmInboxMessage(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const id = Number(c.req.param("id"));
+  const message = world.getInboxMessage(id);
+  if (!message || message.toUser !== user.username) {
+    return apiError(c, 404, "Inbox message not found");
+  }
+  if (message.type !== "exit_request") {
+    return apiError(c, 400, "Only exit requests can be confirmed");
+  }
+
+  const origin = world.getScene(message.fromSceneId);
+  if (!origin) return apiError(c, 404, "Origin scene not found");
+  if (!canAddExit(user, origin, world)) {
+    return apiError(c, 403, "Not allowed to add exits from this scene");
+  }
+
+  const dest = world.getScene(message.toSceneId);
+  if (!dest) return apiError(c, 404, "Destination scene not found");
+  if (!canRead(user, dest, world)) {
+    return apiError(c, 403, "Destination must be reachable");
+  }
+
+  try {
+    const exit = await world.addExit(message.fromSceneId, message.nickname, message.toSceneId);
+    await world.deleteInboxMessage(message.id);
+    const notice = await world.createInboxMessage({
+      type: "notice",
+      toUser: message.fromUser,
+      fromUser: user.username,
+      subject: `Exit confirmed: ${message.nickname}`,
+      body: [
+        `${user.username} confirmed your exit request.`,
+        `Exit "${message.nickname}" now leads from ${sceneLabel(origin)} to ${sceneLabel(dest)}.`,
+      ].join("\n\n"),
+    });
+    if (wantsJson(c)) {
+      return c.json({ exit, notice });
+    }
+    return c.redirect(`${c.get("assetBase")}/inbox?confirmed=1`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not confirm exit request");
+  }
+}
+
+async function deleteInboxMessage(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const id = Number(c.req.param("id"));
+  const message = world.getInboxMessage(id);
+  if (!message || message.toUser !== user.username) {
+    return apiError(c, 404, "Inbox message not found");
+  }
+
+  try {
+    await world.deleteInboxMessage(id);
+    if (wantsJson(c)) return c.json({ ok: true, id });
+    return c.redirect(`${c.get("assetBase")}/inbox?deleted=1`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not delete message");
+  }
+}
+
+function sceneLabel(scene: { id: number; title?: string }): string {
+  const title = scene.title?.trim();
+  return title ? `${title} (${scene.id})` : `Scene ${scene.id}`;
+}
 
 // --- mutations ---
 
@@ -939,6 +1052,71 @@ worldRoutes.post("/s/:id/exits", async (c) => {
     return c.redirect(`${c.get("assetBase")}/s/${id}`);
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Could not add exit");
+  }
+});
+
+worldRoutes.post("/s/:id/exit-requests", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const id = Number(c.req.param("id"));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canRead(user, scene, world)) {
+    return apiError(c, user ? 403 : 401, "Cannot request an exit from an unreachable scene");
+  }
+  if (canAddExit(user, scene, world)) {
+    return apiError(c, 400, "You can add exits here directly — no request needed");
+  }
+
+  const owner = world.getUser(scene.owner);
+  if (!owner) return apiError(c, 404, "Scene owner not found");
+  if (owner.username === user.username) {
+    return apiError(c, 400, "You own this scene — add the exit directly");
+  }
+
+  const body = await readBody(c);
+  const nickname = String(body.nickname ?? "").trim();
+  const toSceneId = Number(body.toSceneId);
+  const note = String(body.note ?? "").trim();
+  if (!nickname) return apiError(c, 400, "Nickname is required");
+  if (!Number.isFinite(toSceneId)) return apiError(c, 400, "toSceneId is required");
+  if (note.length > EXIT_REQUEST_NOTE_MAX) {
+    return apiError(c, 400, `Note must be at most ${EXIT_REQUEST_NOTE_MAX} characters`);
+  }
+
+  const dest = world.getScene(toSceneId);
+  if (!dest) return apiError(c, 404, "Destination scene not found");
+  if (dest.owner !== user.username) {
+    return apiError(c, 403, "Destination must be a scene you own");
+  }
+
+  if (world.findDuplicateExitRequest(owner.username, id, toSceneId, nickname)) {
+    return apiError(c, 400, "An identical exit request is already in their inbox");
+  }
+
+  const bodyLines = [
+    `${user.username} asks you to add an exit from your scene ${sceneLabel(scene)} to their scene ${sceneLabel(dest)}.`,
+    `Suggested nickname: ${nickname}`,
+  ];
+  if (note) bodyLines.push("", `Note: ${note}`);
+
+  try {
+    const message = await world.createInboxMessage({
+      type: "exit_request",
+      toUser: owner.username,
+      fromUser: user.username,
+      subject: `Exit request: ${nickname}`,
+      body: bodyLines.join("\n"),
+      fromSceneId: id,
+      toSceneId,
+      nickname,
+    });
+    if (wantsJson(c)) return c.json(message, 201);
+    return c.redirect(`${c.get("assetBase")}/s/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not create exit request");
   }
 });
 

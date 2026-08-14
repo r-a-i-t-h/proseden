@@ -9,6 +9,7 @@ import type {
   EntityKind,
   ExitRecord,
   Grant,
+  InboxMessage,
   SceneRecord,
   UserRecord,
 } from "../model/types.js";
@@ -40,6 +41,8 @@ export interface HtmlShellOptions {
   editHref?: string;
   /** Relative href with `?edit` removed (View). */
   readHref?: string;
+  /** Total inbox messages for the signed-in user (header badge). */
+  inboxCount?: number;
 }
 
 export interface ManageContext {
@@ -136,7 +139,7 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
     <header class="top">
       <a class="brand" href="./">Proseden</a>
       <div class="auth" id="auth-panel">
-        ${user ? authLoggedIn(user, editHref, liveSceneId !== undefined) : authLoggedOut(liveSceneId !== undefined)}
+        ${user ? authLoggedIn(user, liveSceneId !== undefined, opts.inboxCount ?? 0) : authLoggedOut(liveSceneId !== undefined)}
       </div>
     </header>
     <div class="layout">
@@ -163,9 +166,11 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
 </html>`;
 }
 
-function authLoggedIn(user: UserRecord, _editHref: string, canLive: boolean): string {
+function authLoggedIn(user: UserRecord, canLive: boolean, inboxCount: number): string {
+  const inboxLabel = inboxCount > 0 ? `Inbox (${inboxCount})` : "Inbox";
   return `<span class="who"><strong><a href="${userPath(user.username)}">${escapeHtml(user.username)}</a></strong></span>
     <a href="profile">Profile</a>
+    <a href="inbox">${escapeHtml(inboxLabel)}</a>
     <a href="inv">Inventory</a>
     ${modeSwitchHtml({ canLive, canEdit: true })}
     <form method="post" action="auth/logout" class="inline">
@@ -614,6 +619,37 @@ export function renderInventoryBodyHtml(
     })
     .join("");
   return `${crumb}<h1>Inventory</h1><ul class="link-list">${list}</ul>`;
+}
+
+export function renderInboxBodyHtml(opts: {
+  messages: InboxMessage[];
+  message?: string;
+  back?: PageBackLink;
+}): string {
+  const crumb = renderPageBackCrumb(opts.back);
+  const notice = opts.message ? `<p class="flash">${escapeHtml(opts.message)}</p>` : "";
+  if (!opts.messages.length) {
+    return `${crumb}<h1>Inbox</h1>${notice}<p class="muted">Empty. Deal with messages as they arrive — this is not a mail archive.</p>`;
+  }
+  const items = opts.messages
+    .map((msg) => {
+      const actions =
+        msg.type === "exit_request"
+          ? `<form method="post" action="inbox/${msg.id}/confirm" class="inline"><button type="submit">Confirm</button></form>
+        <form method="post" action="inbox/${msg.id}/delete" class="inline"><button type="submit" class="edit-danger">Delete</button></form>`
+          : `<form method="post" action="inbox/${msg.id}/delete" class="inline"><button type="submit" class="edit-danger">Delete</button></form>`;
+      return `<article class="inbox-item">
+      <header class="inbox-meta">
+        <time datetime="${escapeAttr(msg.createdAt)}">${escapeHtml(msg.createdAt)}</time>
+        <span>from <strong>${escapeHtml(msg.fromUser)}</strong></span>
+      </header>
+      <h2 class="inbox-subject">${escapeHtml(msg.subject)}</h2>
+      <div class="desc">${formatProse(msg.body)}</div>
+      <div class="inbox-actions">${actions}</div>
+    </article>`;
+    })
+    .join("");
+  return `${crumb}<h1>Inbox</h1>${notice}${items}`;
 }
 
 export function renderStaffBodyHtml(opts: {

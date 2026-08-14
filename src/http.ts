@@ -100,6 +100,7 @@ export function page(
       isManager: shell?.isManager ?? isManager(user, world),
       isModerator: shell?.isModerator ?? isModerator(user, world),
       liveSceneId,
+      inboxCount: user ? world.inboxCountFor(user.username) : 0,
       ...hrefs,
     }),
     status as 200,

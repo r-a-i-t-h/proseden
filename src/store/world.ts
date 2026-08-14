@@ -9,10 +9,13 @@ import type {
   EditLogEntry,
   EntranceGroupRecord,
   ExitRecord,
+  ExitRequestMessage,
   Grant,
   GroupRecord,
+  InboxMessage,
   InventoryItem,
   MetaFile,
+  NoticeMessage,
   SceneMeta,
   SceneRecord,
   StaffFile,
@@ -29,6 +32,7 @@ export class WorldStore implements AccessWorld {
     nextArtefactId: 1,
     nextGroupId: 1,
     nextEntranceGroupId: 1,
+    nextInboxId: 1,
     entranceSceneId: 1,
   };
   users = new Map<string, UserRecord>();
@@ -37,6 +41,7 @@ export class WorldStore implements AccessWorld {
   artefacts = new Map<number, ArtefactRecord>();
   groups = new Map<string, GroupRecord>();
   entranceGroups = new Map<string, EntranceGroupRecord>();
+  inbox = new Map<number, InboxMessage>();
   staff: StaffFile = { roles: {} };
 
   constructor(dataDir: string) {
@@ -50,6 +55,7 @@ export class WorldStore implements AccessWorld {
       nextArtefactId: 1,
       nextGroupId: 1,
       nextEntranceGroupId: 1,
+      nextInboxId: 1,
       entranceSceneId: 1,
     };
     this.staff = { roles: {} };
@@ -59,6 +65,7 @@ export class WorldStore implements AccessWorld {
     this.artefacts.clear();
     this.groups.clear();
     this.entranceGroups.clear();
+    this.inbox.clear();
     await this.load();
   }
 
@@ -77,6 +84,7 @@ export class WorldStore implements AccessWorld {
     await mkdir(join(this.dataDir, "artefacts"), { recursive: true });
     await mkdir(join(this.dataDir, "groups"), { recursive: true });
     await mkdir(join(this.dataDir, "entrance-groups"), { recursive: true });
+    await mkdir(join(this.dataDir, "inbox"), { recursive: true });
 
     if (await exists(metaPath)) {
       this.meta = normalizeMeta(await readJson<Record<string, unknown>>(metaPath));
@@ -142,6 +150,16 @@ export class WorldStore implements AccessWorld {
         await readJson<Record<string, unknown>>(join(this.dataDir, "entrance-groups", file)),
       );
       this.entranceGroups.set(eg.id, eg);
+    }
+
+    for (const file of await listFiles(join(this.dataDir, "inbox"), ".json")) {
+      const id = Number(file.replace(/\.json$/, ""));
+      if (!Number.isFinite(id)) continue;
+      const msg = normalizeInboxMessage(
+        await readJson<Record<string, unknown>>(join(this.dataDir, "inbox", file)),
+        id,
+      );
+      if (msg) this.inbox.set(msg.id, msg);
     }
   }
 
@@ -1026,6 +1044,96 @@ export class WorldStore implements AccessWorld {
     await this.saveUser(updated);
     return updated;
   }
+
+  getInboxMessage(id: number): InboxMessage | undefined {
+    return this.inbox.get(id);
+  }
+
+  listInboxFor(username: string): InboxMessage[] {
+    return [...this.inbox.values()]
+      .filter((m) => m.toUser === username)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : b.id - a.id));
+  }
+
+  inboxCountFor(username: string): number {
+    let n = 0;
+    for (const m of this.inbox.values()) {
+      if (m.toUser === username) n += 1;
+    }
+    return n;
+  }
+
+  findDuplicateExitRequest(
+    toUser: string,
+    fromSceneId: number,
+    toSceneId: number,
+    nickname: string,
+  ): InboxMessage | undefined {
+    const nick = nickname.toLowerCase();
+    for (const m of this.inbox.values()) {
+      if (
+        m.type === "exit_request" &&
+        m.toUser === toUser &&
+        m.fromSceneId === fromSceneId &&
+        m.toSceneId === toSceneId &&
+        m.nickname.toLowerCase() === nick
+      ) {
+        return m;
+      }
+    }
+    return undefined;
+  }
+
+  async createInboxMessage(
+    input:
+      | (Omit<ExitRequestMessage, "id" | "createdAt"> & { createdAt?: string })
+      | (Omit<NoticeMessage, "id" | "createdAt"> & { createdAt?: string }),
+  ): Promise<InboxMessage> {
+    const id = this.meta.nextInboxId ?? 1;
+    this.meta.nextInboxId = id + 1;
+    await this.saveMeta();
+    const createdAt = input.createdAt ?? nowIso();
+    let message: InboxMessage;
+    if (input.type === "exit_request") {
+      message = {
+        id,
+        type: "exit_request",
+        toUser: input.toUser,
+        fromUser: input.fromUser,
+        createdAt,
+        subject: input.subject,
+        body: input.body,
+        fromSceneId: input.fromSceneId,
+        toSceneId: input.toSceneId,
+        nickname: input.nickname,
+      };
+    } else {
+      message = {
+        id,
+        type: "notice",
+        toUser: input.toUser,
+        fromUser: input.fromUser,
+        createdAt,
+        subject: input.subject,
+        body: input.body,
+      };
+    }
+    await this.saveInboxMessage(message);
+    return message;
+  }
+
+  async saveInboxMessage(message: InboxMessage): Promise<void> {
+    this.inbox.set(message.id, message);
+    await writeJsonAtomic(join(this.dataDir, "inbox", `${message.id}.json`), message);
+  }
+
+  async deleteInboxMessage(id: number): Promise<InboxMessage> {
+    const existing = this.inbox.get(id);
+    if (!existing) throw new Error("Inbox message not found");
+    this.inbox.delete(id);
+    await unlink(join(this.dataDir, "inbox", `${id}.json`));
+    return existing;
+  }
 }
 
 function normalizeMeta(raw: Record<string, unknown>): MetaFile {
@@ -1033,6 +1141,7 @@ function normalizeMeta(raw: Record<string, unknown>): MetaFile {
   const nextArtefactId = Number(raw.nextArtefactId ?? 1);
   const nextGroupId = Number(raw.nextGroupId ?? 1);
   const nextEntranceGroupId = Number(raw.nextEntranceGroupId ?? 1);
+  const nextInboxId = Number(raw.nextInboxId ?? 1);
   const entranceSceneId = Number(raw.entranceSceneId ?? 1);
   const schemaVersion = Number(raw.schemaVersion);
   const meta: MetaFile = {
@@ -1040,6 +1149,7 @@ function normalizeMeta(raw: Record<string, unknown>): MetaFile {
     nextArtefactId: Number.isFinite(nextArtefactId) ? nextArtefactId : 1,
     nextGroupId: Number.isFinite(nextGroupId) ? nextGroupId : 1,
     nextEntranceGroupId: Number.isFinite(nextEntranceGroupId) ? nextEntranceGroupId : 1,
+    nextInboxId: Number.isFinite(nextInboxId) ? nextInboxId : 1,
     entranceSceneId:
       Number.isFinite(entranceSceneId) && entranceSceneId > 0 ? entranceSceneId : 1,
   };
@@ -1119,6 +1229,39 @@ function normalizeEntranceGroup(raw: Record<string, unknown>): EntranceGroupReco
     entranceSceneId: Number(raw.entranceSceneId),
     sceneIds: Array.isArray(raw.sceneIds) ? raw.sceneIds.map(Number).filter(Number.isFinite) : [],
   };
+}
+
+function normalizeInboxMessage(
+  raw: Record<string, unknown>,
+  fallbackId: number,
+): InboxMessage | undefined {
+  const id = Number(raw.id ?? fallbackId);
+  if (!Number.isFinite(id)) return undefined;
+  const type = String(raw.type ?? "");
+  const base = {
+    id,
+    toUser: String(raw.toUser ?? ""),
+    fromUser: String(raw.fromUser ?? ""),
+    createdAt: String(raw.createdAt ?? nowIso()),
+    subject: String(raw.subject ?? ""),
+    body: String(raw.body ?? ""),
+  };
+  if (type === "exit_request") {
+    const fromSceneId = Number(raw.fromSceneId);
+    const toSceneId = Number(raw.toSceneId);
+    if (!Number.isFinite(fromSceneId) || !Number.isFinite(toSceneId)) return undefined;
+    return {
+      ...base,
+      type: "exit_request",
+      fromSceneId,
+      toSceneId,
+      nickname: String(raw.nickname ?? ""),
+    };
+  }
+  if (type === "notice") {
+    return { ...base, type: "notice" };
+  }
+  return undefined;
 }
 
 function normalizeStaff(raw: Record<string, unknown>): StaffFile {

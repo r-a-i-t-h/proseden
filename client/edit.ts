@@ -182,7 +182,7 @@ export function mountEdit(boot: EditBootstrap, pane: HTMLElement): { toolbar: HT
     return { toolbar: el("div") };
   }
 
-  const tools = availableTools(manage);
+  const tools = availableTools(manage, user);
   let active: ToolId = tools.includes("page") ? "page" : "new";
 
   const toolbar = el("div", { class: "edit-toolbar", role: "toolbar", "aria-label": "Editor" });
@@ -258,12 +258,12 @@ function toolLabel(id: ToolId, manage?: ManageContext): string {
   }
 }
 
-function availableTools(manage?: ManageContext): ToolId[] {
+function availableTools(manage?: ManageContext, user?: { username: string }): ToolId[] {
   const tools: ToolId[] = ["new"];
   if (manage?.kind === "scene" && manage.scene && manage.canEdit) tools.unshift("page");
   if (manage?.kind === "artefact" && manage.artefact && manage.canEdit) tools.unshift("page");
   if (manage?.kind === "scene" && manage.canEdit) tools.push("artefact");
-  if (manage?.kind === "scene" && manage.canAddExit) tools.push("exits");
+  if (manage?.kind === "scene" && manage.scene && (manage.canAddExit || user)) tools.push("exits");
   if (manage?.kind === "scene" && manage.canManage) tools.push("access");
   if (manage?.kind === "scene" && (manage.canManage || manage.canOrganise)) tools.push("organise");
   if (manage?.canDelete) tools.push("danger");
@@ -299,7 +299,7 @@ function toolView(id: ToolId, boot: EditBootstrap, inspector: HTMLElement): HTML
     case "artefact":
       return newArtefactTool(manage, inspector);
     case "exits":
-      return exitsTool(manage, inspector);
+      return exitsTool(manage, inspector, boot.ownedScenes);
     case "access":
       return accessTool(manage, inspector);
     case "organise":
@@ -518,9 +518,69 @@ function newArtefactTool(manage: ManageContext | undefined, inspector: HTMLEleme
   return el("div", { class: "stack" }, el("p", { class: "edit-kicker" }, `Artefact in scene ${scene.id}`), form, create);
 }
 
-function exitsTool(manage: ManageContext | undefined, inspector: HTMLElement): HTMLElement {
+function exitsTool(
+  manage: ManageContext | undefined,
+  inspector: HTMLElement,
+  ownedScenes: OwnedSceneLink[],
+): HTMLElement {
   const scene = manage?.scene;
-  if (!scene || !manage?.canAddExit) return el("p", { class: "muted" }, "Cannot add exits here.");
+  if (!scene) return el("p", { class: "muted" }, "No scene selected.");
+
+  if (!manage?.canAddExit) {
+    const add = el("div", { class: "edit-fields" });
+    const dest = el("select", { name: "toSceneId", required: true });
+    dest.append(el("option", { value: "" }, "Choose your scene…"));
+    for (const owned of ownedScenes) {
+      const label = owned.title?.trim() ? owned.title : `Scene ${owned.id}`;
+      dest.append(el("option", { value: String(owned.id) }, `${owned.id} ${label}`));
+    }
+    add.append(
+      field("Nickname", el("input", { name: "nickname", required: true })),
+      field("To your scene", dest),
+      field("Note (optional)", el("textarea", { name: "note", rows: "3" })),
+    );
+    const requestBtn = el("button", { type: "button" }, "Request exit");
+    requestBtn.addEventListener("click", async () => {
+      const nickname = inputValue(add, "nickname").trim();
+      const toSceneId = Number(inputValue(add, "toSceneId"));
+      const note = inputValue(add, "note").trim();
+      if (!nickname || !Number.isFinite(toSceneId) || toSceneId < 1) {
+        setStatus(inspector, "Nickname and one of your scenes are required");
+        return;
+      }
+      try {
+        await apiJson("POST", `s/${scene.id}/exit-requests`, {
+          nickname,
+          toSceneId,
+          ...(note ? { note } : {}),
+        });
+        setStatus(inspector, "Exit request sent to the scene owner", "ok");
+      } catch (err) {
+        setStatus(inspector, err instanceof Error ? err.message : "Could not send request");
+      }
+    });
+    if (!ownedScenes.length) {
+      return el(
+        "div",
+        { class: "stack" },
+        el("p", { class: "edit-kicker" }, "Request exit"),
+        el("p", { class: "muted" }, "Create a scene you own first, then request a link from here."),
+      );
+    }
+    return el(
+      "div",
+      { class: "stack" },
+      el("p", { class: "edit-kicker" }, "Request exit"),
+      el(
+        "p",
+        { class: "muted" },
+        "You cannot add exits from this scene. Ask the owner to add one to a scene you own.",
+      ),
+      add,
+      requestBtn,
+    );
+  }
+
   const add = el("div", { class: "edit-fields" });
   add.append(
     field("Nickname", el("input", { name: "nickname", required: true })),

@@ -87,6 +87,14 @@ When **adding** exits (`POST /s/:id/exits`):
 
 Public junctions let other writers attach outbound edges *from* a shared hub without managing that hub’s prose or ACL. Linking *to* a public scene never required junction status.
 
+## Exit requests
+
+When you can read a scene but cannot add exits from it, Edit → Exits offers **Request exit** instead of Add. That posts `POST /s/:id/exit-requests` with a nickname, a destination scene you own, and an optional note.
+
+The request is delivered only to the **owner** of the origin scene (not manage grantees). Their header **Inbox** link shows the total message count. Inbox is a short queue — every message’s subject and body are listed in full, with no read/unread state. Delete clears a message; for an exit request, **Confirm** adds the exit (same rights checks as `POST /s/:id/exits`), removes the request, and places a confirmation notice in the requester’s inbox.
+
+This is a world-building aid, not personal messaging.
+
 ## Worked examples
 
 Assume entrance group “Wing”: entrance = scene `2` (private, Bob may read), inner = scene `3` (private, Bob may read), vault = scene `4` (private, Alice only). Scene `1` is a public hall outside the group.
@@ -107,7 +115,11 @@ Assume entrance group “Wing”: entrance = scene `2` (private, Bob may read), 
 | `GET` | `/s/:id` | Teleport / view scene |
 | `GET` | `/s/:id/go/:exit` | Navigate via exit |
 | `POST` | `/s/:id/exits` | Add exit |
+| `POST` | `/s/:id/exit-requests` | Request exit (owner inbox) |
+| `GET` | `/inbox` | Inbox |
+| `POST` | `/inbox/:id/confirm` | Confirm exit request |
+| `POST` | `/inbox/:id/delete` | Delete inbox message |
 | `POST` | `/eg` | Create entrance group |
 | `POST` | `/s/:id/entrance-group` | Assign/clear entrance group on a scene |
 
-Regression coverage lives in `tests/navigation.test.ts`.
+Regression coverage lives in `tests/navigation.test.ts` and `tests/inbox.test.ts`.

@@ -98,12 +98,16 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `GET` | `/s/:id/go/:exit` | Follow exit by id or nickname (access-checked) |
 | `GET` | `/a/:id` | Artefact |
 | `GET` | `/inv` | Inventory (auth) |
+| `GET` | `/inbox` | Inbox (auth); no read/unread — delete to clear |
+| `POST` | `/inbox/:id/confirm` | Confirm exit request (recipient) |
+| `POST`/`DELETE` | `/inbox/:id/delete` or `/inbox/:id` | Delete inbox message (recipient) |
 | `GET` | `/profile` | Profile, password, and share-all (auth) |
 | `POST` | `/auth/register` `/auth/login` `/auth/logout` | Session cookie + optional JSON token |
 | `POST` | `/auth/password` | Change password (auth); other sessions for that user are dropped |
 | `POST` | `/s` | Create scene (auth) |
 | `PUT`/`POST` | `/s/:id` | Update scene (owner) |
 | `POST` | `/s/:id/exits` | Add directed exit (manage origin, or any user from a public junction) |
+| `POST` | `/s/:id/exit-requests` | Ask origin owner to add an exit to a scene you own |
 | `DELETE`/`POST` | `/s/:id/exits/:exit/delete` | Remove one exit (manage/organise any; on a public junction, also exits to scenes you own) |
 | `POST` | `/s/:id/exits/delete` | Remove one or more exits (`exitId` / `exitIds`) |
 | `GET`/`PUT`/`POST` | `/s/:id/access` | Scene grants/denies (manage) |
@@ -147,6 +151,7 @@ data/
   users/<username>.json
   groups/<id>.json
   entrance-groups/<id>.json
+  inbox/<id>.json
   scenes/<id>.md
   scenes/<id>.exits.json
   artefacts/<id>.md

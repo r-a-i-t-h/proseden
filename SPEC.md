@@ -56,6 +56,11 @@ teleporting into the group from outside will always deliver the user to the
 Each edge leading from a scene also has an incremental-in-creation-order id, as
 well as a nickname. Navigation can use either the number or the name.
 
+When a writer can read a scene but cannot add exits from it, they may send an
+exit request to that scene's owner. The owner's inbox lists messages in full
+(no read/unread); Confirm installs the exit and notifies the requester. Delete
+discards a message. This is a world-building facility, not personal mail.
+
 Artefacts are placed in scenes and, like all else, are merely a text
 description which can have details examined.
 

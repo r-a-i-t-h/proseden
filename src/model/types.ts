@@ -112,11 +112,37 @@ export interface MetaFile {
   nextArtefactId: number;
   nextGroupId?: number;
   nextEntranceGroupId?: number;
+  nextInboxId?: number;
   /** Scene id served at `/` and `/s` (default 1). */
   entranceSceneId?: number;
   /** Written only by deploy/migrations. Missing means schema v0. */
   schemaVersion?: number;
 }
+
+/** Inbox is a short queue — no read/unread; delete to clear. */
+export interface InboxMessageBase {
+  id: number;
+  toUser: string;
+  fromUser: string;
+  createdAt: string;
+  subject: string;
+  body: string;
+}
+
+/** Ask the origin scene's owner to add an outbound exit. */
+export interface ExitRequestMessage extends InboxMessageBase {
+  type: "exit_request";
+  fromSceneId: number;
+  toSceneId: number;
+  nickname: string;
+}
+
+/** Plain notice (e.g. exit confirmed). */
+export interface NoticeMessage extends InboxMessageBase {
+  type: "notice";
+}
+
+export type InboxMessage = ExitRequestMessage | NoticeMessage;
 
 export interface SessionRecord {
   token: string;
