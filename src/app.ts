@@ -2,9 +2,12 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { SessionStore } from "./auth/sessions.js";
 import { loadUser, sessionCookieNameForBase } from "./middleware/auth.js";
+import { writeRateLimit } from "./middleware/rate-limit.js";
 import { SceneHub } from "./live/hub.js";
 import { LocationTracker } from "./live/location.js";
 import { PresenceStore } from "./live/presence.js";
+import { mergeRateLimits, type RateLimitConfig } from "./rate-limit/limits.js";
+import { RateLimiter } from "./rate-limit/limiter.js";
 import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { liveRoutes } from "./routes/live.js";
@@ -24,6 +27,8 @@ export function createApp(opts: {
   presence?: PresenceStore;
   hub?: SceneHub;
   locations?: LocationTracker;
+  rateLimiter?: RateLimiter;
+  rateLimits?: Partial<RateLimitConfig>;
 }) {
   const assetBase = normalizeBase(opts.assetBase ?? "");
   // strict:false so /proseden and /proseden/ both hit the app root under a base path
@@ -35,6 +40,8 @@ export function createApp(opts: {
   const presence = opts.presence ?? new PresenceStore();
   const hub = opts.hub ?? new SceneHub(presence);
   const locations = opts.locations ?? new LocationTracker(opts.world);
+  const rateLimiter = opts.rateLimiter ?? new RateLimiter();
+  const rateLimits = mergeRateLimits(opts.rateLimits);
 
   app.use("*", async (c, next) => {
     c.set("world", opts.world);
@@ -45,10 +52,13 @@ export function createApp(opts: {
     c.set("presence", presence);
     c.set("hub", hub);
     c.set("locations", locations);
+    c.set("rateLimiter", rateLimiter);
+    c.set("rateLimits", rateLimits);
     await next();
   });
 
   app.use("*", loadUser);
+  app.use("*", writeRateLimit);
 
   app.get("/health", (c) => c.json({ ok: true, name: "proseden" }));
 

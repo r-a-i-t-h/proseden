@@ -2,6 +2,8 @@ import type { SessionStore } from "./auth/sessions.js";
 import type { SceneHub } from "./live/hub.js";
 import type { LocationTracker } from "./live/location.js";
 import type { PresenceStore } from "./live/presence.js";
+import type { RateLimitConfig } from "./rate-limit/limits.js";
+import type { RateLimiter } from "./rate-limit/limiter.js";
 import type { WorldStore } from "./store/world.js";
 import type { UserRecord } from "./model/types.js";
 
@@ -18,6 +20,8 @@ export type AppVariables = {
   presence: PresenceStore;
   hub: SceneHub;
   locations: LocationTracker;
+  rateLimiter: RateLimiter;
+  rateLimits: RateLimitConfig;
 };
 
 declare module "hono" {

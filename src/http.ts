@@ -108,7 +108,7 @@ export function page(
 
 export function apiError(
   c: Context,
-  status: 400 | 401 | 403 | 404,
+  status: 400 | 401 | 403 | 404 | 429,
   message: string,
   opts?: { isManager?: boolean },
 ) {

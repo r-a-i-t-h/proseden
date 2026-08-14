@@ -4,6 +4,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { canRead } from "../access/permissions.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { page, wantsJson } from "../http.js";
+import { rateLimit } from "../middleware/rate-limit.js";
+import { clientIp } from "../rate-limit/client-ip.js";
 import { renderMessageBodyHtml } from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
 import type { UserRecord } from "../model/types.js";
@@ -11,7 +13,23 @@ import type { WorldStore } from "../store/world.js";
 
 export const authRoutes = new Hono();
 
-authRoutes.post("/register", async (c) => {
+const authAttemptLimit = rateLimit({
+  name: "auth",
+  bucket: (limits) => limits.auth,
+  key: authAttemptKeys,
+});
+
+const authPasswordLimit = rateLimit({
+  name: "auth",
+  bucket: (limits) => limits.auth,
+  key: (c) => {
+    const ip = clientIp(c);
+    const user = c.get("user");
+    return user ? [`ip:${ip}`, `user:${user.username.toLowerCase()}`] : [`ip:${ip}`];
+  },
+});
+
+authRoutes.post("/register", authAttemptLimit, async (c) => {
   const world = c.get("world");
   const sessions = c.get("sessions");
   const body = await readAuthBody(c);
@@ -59,7 +77,7 @@ authRoutes.post("/register", async (c) => {
   return c.redirect(resumeRedirect(c, user));
 });
 
-authRoutes.post("/login", async (c) => {
+authRoutes.post("/login", authAttemptLimit, async (c) => {
   const world = c.get("world");
   const sessions = c.get("sessions");
   const body = await readAuthBody(c);
@@ -90,7 +108,7 @@ authRoutes.post("/login", async (c) => {
   return c.redirect(resumeRedirect(c, user));
 });
 
-authRoutes.post("/password", async (c) => {
+authRoutes.post("/password", authPasswordLimit, async (c) => {
   const world = c.get("world");
   const sessions = c.get("sessions");
   const user = c.get("user");
@@ -191,6 +209,31 @@ async function readPasswordChangeBody(c: Context): Promise<{
     confirmPassword: String(form.confirmPassword ?? ""),
     json: wantsJson(c),
   };
+}
+
+async function authAttemptKeys(c: Context): Promise<string[]> {
+  const ip = clientIp(c);
+  const username = await peekAuthUsername(c);
+  const keys = [`ip:${ip}`];
+  if (username) keys.push(`user:${username.toLowerCase()}`);
+  return keys;
+}
+
+async function peekAuthUsername(c: Context): Promise<string | undefined> {
+  try {
+    const contentType = c.req.header("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const json = await c.req.json<{ username?: unknown }>();
+      return typeof json?.username === "string" && json.username.trim()
+        ? json.username.trim()
+        : undefined;
+    }
+    const form = await c.req.parseBody();
+    const username = form.username;
+    return typeof username === "string" && username.trim() ? username.trim() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function readAuthBody(c: Context): Promise<{

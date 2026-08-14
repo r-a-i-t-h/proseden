@@ -5,6 +5,8 @@ import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import { canRead, isModerator } from "../access/permissions.js";
 import { apiError, page, sceneBackLink, wantsJson } from "../http.js";
+import { rateLimit } from "../middleware/rate-limit.js";
+import { clientIp } from "../rate-limit/client-ip.js";
 import type { LiveEvent } from "../live/types.js";
 import { HEARTBEAT_INTERVAL_MS } from "../live/types.js";
 import {
@@ -17,7 +19,19 @@ export const liveRoutes = new Hono();
 
 const GUEST_COOKIE = "proseden_guest";
 
-liveRoutes.get("/events", async (c) => {
+const liveSseLimit = rateLimit({
+  name: "live-sse",
+  bucket: (limits) => limits.liveSse,
+  key: (c) => `ip:${clientIp(c)}`,
+});
+
+const liveChatLimit = rateLimit({
+  name: "live-chat",
+  bucket: (limits) => limits.liveChat,
+  key: liveChatKeys,
+});
+
+liveRoutes.get("/events", liveSseLimit, async (c) => {
   const world = c.get("world");
   const presence = c.get("presence");
   const hub = c.get("hub");
@@ -98,7 +112,7 @@ liveRoutes.get("/events", async (c) => {
   });
 });
 
-liveRoutes.post("/say", async (c) => {
+liveRoutes.post("/say", liveChatLimit, async (c) => {
   const presence = c.get("presence");
   const hub = c.get("hub");
   const identity = resolveLiveIdentity(c);
@@ -124,7 +138,7 @@ liveRoutes.post("/say", async (c) => {
   return c.json({ ok: true, message });
 });
 
-liveRoutes.post("/shout", async (c) => {
+liveRoutes.post("/shout", liveChatLimit, async (c) => {
   const presence = c.get("presence");
   const hub = c.get("hub");
   const identity = resolveLiveIdentity(c);
@@ -387,6 +401,18 @@ function relativeAge(iso: string): string {
   const hr = Math.floor(min / 60);
   if (hr < 48) return `${hr}h ago`;
   return `${Math.floor(hr / 24)}d ago`;
+}
+
+function liveChatKeys(c: Context): string[] {
+  const ip = clientIp(c);
+  const user = c.get("user");
+  if (user) return [`user:${user.username}`];
+  const guestId = getCookie(c, guestCookieName(c));
+  const keys = [`ip:${ip}`];
+  if (guestId && /^[a-f0-9]{16,64}$/i.test(guestId)) {
+    keys.push(`g:${guestId}`);
+  }
+  return keys;
 }
 
 function resolveLiveIdentity(c: Context): {
