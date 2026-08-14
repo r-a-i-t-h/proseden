@@ -27,6 +27,10 @@ export interface UserRecord {
   passwordSalt: string;
   createdAt: string;
   inventory: InventoryItem[];
+  /** Profile prose. Missing on disk defaults to "". */
+  description: string;
+  /** Named closer-look texts. Missing on disk defaults to {}. */
+  details: Record<string, string>;
   /** Share-all: grants on this user's scenes and groups. */
   grants?: Grant[];
   /** Persona-non-grata blocks on this user's content. */

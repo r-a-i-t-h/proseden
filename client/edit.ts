@@ -609,7 +609,7 @@ function accessTool(manage: ManageContext | undefined, inspector: HTMLElement): 
     "div",
     { class: "stack" },
     el("p", { class: "edit-kicker" }, `Access for scene ${scene.id}`),
-    el("p", { class: "muted" }, `Owner: ${scene.owner ?? "unknown"}`),
+    el("p", { class: "muted" }, "Owner: ", scene.owner ? el("a", { href: `u/${encodeURIComponent(scene.owner)}` }, scene.owner) : "unknown"),
     form,
     save,
   );

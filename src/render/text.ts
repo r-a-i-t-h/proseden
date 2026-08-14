@@ -9,6 +9,11 @@ import type {
   SceneRecord,
 } from "../model/types.js";
 
+function bylineText(owner: string | undefined, base: string): string | undefined {
+  if (!owner) return undefined;
+  return `by ${owner}  ${base}/u/${encodeURIComponent(owner)}`;
+}
+
 function entityKindLabel(kind: EntityKind): string {
   return kind === "scene" ? "Scene" : "Artefact";
 }
@@ -63,12 +68,12 @@ export function renderSceneText(opts: {
   if (detail) {
     const text = scene.details[detail];
     lines.push(entityTextTitle("scene", scene.id, scene.title, detail));
-    if (scene.owner) lines.push(`by ${scene.owner}`);
+    if (scene.owner) lines.push(bylineText(scene.owner, base)!);
     lines.push("");
     lines.push(text ?? `(No detail named "${detail}".)`);
   } else {
     lines.push(entityTextTitle("scene", scene.id, scene.title));
-    if (scene.owner) lines.push(`by ${scene.owner}`);
+    if (scene.owner) lines.push(bylineText(scene.owner, base)!);
     {
       const tags: string[] = [scene.visibility];
       if (scene.isJunction && scene.visibility === "public") tags.push("junction");
@@ -120,12 +125,12 @@ export function renderArtefactText(opts: {
   if (detail) {
     const text = artefact.details[detail];
     lines.push(entityTextTitle("artefact", artefact.id, artefact.title, detail));
-    if (artefact.owner) lines.push(`by ${artefact.owner}`);
+    if (artefact.owner) lines.push(bylineText(artefact.owner, base)!);
     lines.push("");
     lines.push(text ?? `(No detail named "${detail}".)`);
   } else {
     lines.push(entityTextTitle("artefact", artefact.id, artefact.title));
-    if (artefact.owner) lines.push(`by ${artefact.owner}`);
+    if (artefact.owner) lines.push(bylineText(artefact.owner, base)!);
     lines.push(`home: ${base}/s/${artefact.homeSceneId}?from=${artefact.homeSceneId}`);
     if (artefact.tags.length) lines.push(`tags: ${artefact.tags.join(", ")}`);
     lines.push("");
@@ -152,7 +157,7 @@ export function renderEditHistoryText(opts: {
           const snap = e.versionId
             ? `  snapshot: ${base}/${prefix}/${opts.id}/history/${encodeURIComponent(e.versionId)}`
             : "";
-          return `${e.at} by ${e.by} [${e.fields.join(", ") || "—"}]${e.retained ? " (retained)" : ""}${snap ? `\n${snap}` : ""}`;
+          return `${e.at} by ${e.by}  ${base}/u/${encodeURIComponent(e.by)} [${e.fields.join(", ") || "—"}]${e.retained ? " (retained)" : ""}${snap ? `\n${snap}` : ""}`;
         })
         .join("\n")
     : "(no edits logged)";
@@ -176,6 +181,8 @@ export function renderSnapshotText(opts: {
 export function renderProfileText(opts: {
   username: string;
   message?: string;
+  description?: string;
+  details?: Record<string, string>;
   basePath?: string;
   grants?: Grant[];
   denies?: Deny[];
@@ -190,15 +197,68 @@ export function renderProfileText(opts: {
   if (opts.message) {
     lines.push(opts.message, "");
   }
-  lines.push("Change password:");
+  lines.push("Appearance:");
+  if (opts.description?.trim()) {
+    lines.push(opts.description, "");
+  }
+  const detailNames = Object.keys(opts.details ?? {});
+  if (detailNames.length) {
+    lines.push("Details:");
+    for (const name of detailNames) {
+      lines.push(`  - ${name}`);
+    }
+    lines.push("");
+  }
+  lines.push(`  POST ${base}/profile`);
+  lines.push("  description, detailsJson");
+  lines.push("");
+  lines.push("Password:");
   lines.push(`  POST ${base}/auth/password`);
   lines.push("  currentPassword, newPassword, confirmPassword");
   lines.push("");
-  lines.push("Share-all (every scene and group you own):");
+  lines.push("Sharing (every scene and group you own):");
   lines.push(`  POST ${base}/u/${opts.username}/access`);
   lines.push("  grantsJson, deniesJson");
   lines.push("");
   lines.push(formatAccessSummary(opts.grants, opts.denies));
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+export function renderUserProfileText(opts: {
+  username: string;
+  description: string;
+  details: Record<string, string>;
+  detail?: string;
+  basePath?: string;
+  back?: { href: string; label: string };
+}): string {
+  const base = opts.basePath ?? "";
+  const path = `${base}/u/${encodeURIComponent(opts.username)}`;
+  const lines: string[] = [];
+  if (opts.detail) {
+    lines.push(`[User ${opts.username} — detail:${opts.detail}]`);
+    if (opts.back) {
+      lines.push(`${opts.back.label}  ${base}/${opts.back.href.replace(/^\.\//, "")}`);
+    }
+    lines.push(`← ${opts.username}  ${path}`, "");
+    lines.push(opts.details[opts.detail] ?? `(No detail named "${opts.detail}".)`);
+  } else {
+    lines.push(`[User ${opts.username}]`);
+    if (opts.back) {
+      lines.push(`${opts.back.label}  ${base}/${opts.back.href.replace(/^\.\//, "")}`);
+    }
+    lines.push("");
+    lines.push(opts.description.trim() || "(No description yet.)");
+    lines.push("");
+    const detailNames = Object.keys(opts.details);
+    if (detailNames.length) {
+      lines.push("Details:");
+      for (const name of detailNames) {
+        lines.push(`  - ${name}  ${path}?${encodeURIComponent(name)}`);
+      }
+      lines.push("");
+    }
+  }
   return `${lines.join("\n").trimEnd()}\n`;
 }
 

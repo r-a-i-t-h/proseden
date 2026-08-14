@@ -12,6 +12,7 @@ import { HEARTBEAT_INTERVAL_MS, SSE_CONNECT_PADDING_BYTES } from "../live/types.
 import {
   escapeHtml,
   renderPageBackCrumb,
+  userLinkHtml,
   type PageBackLink,
 } from "../render/html.js";
 
@@ -329,7 +330,7 @@ function renderLiveAdminHtml(
           ? `${escapeHtml(u.sceneTitle ?? "Untitled")} (#${u.lastSceneId})`
           : "—";
       return `<tr>
-        <td>${escapeHtml(u.username)}${u.live ? ' <span class="muted">live</span>' : ""}</td>
+        <td>${userLinkHtml(u.username)}${u.live ? ' <span class="muted">live</span>' : ""}</td>
         <td>${escapeHtml(age)}</td>
         <td>${loc}</td>
       </tr>`;

@@ -164,7 +164,7 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
 }
 
 function authLoggedIn(user: UserRecord, _editHref: string, canLive: boolean): string {
-  return `<span class="who"><strong>${escapeHtml(user.username)}</strong></span>
+  return `<span class="who"><strong><a href="${userPath(user.username)}">${escapeHtml(user.username)}</a></strong></span>
     <a href="profile">Profile</a>
     <a href="inv">Inventory</a>
     ${modeSwitchHtml({ canLive, canEdit: true })}
@@ -248,9 +248,12 @@ function renderDetailsSectionHtml(
   id: number,
   details: Record<string, string>,
 ): string {
+  return renderNamedDetailsHtml(entityPath(kind, id), details);
+}
+
+function renderNamedDetailsHtml(path: string, details: Record<string, string>): string {
   const names = Object.keys(details);
   if (!names.length) return "";
-  const path = entityPath(kind, id);
   const items = names
     .map(
       (name) =>
@@ -272,7 +275,7 @@ export function renderEditHistoryBodyHtml(opts: {
           const link = e.versionId
             ? ` <a href="${path}/history/${encodeURIComponent(e.versionId)}">view</a>`
             : "";
-          return `<li>${escapeHtml(e.at)} · ${escapeHtml(e.by)} · ${escapeHtml(e.fields.join(", ") || "—")}${e.retained ? " · retained" : ""}${link}</li>`;
+          return `<li>${escapeHtml(e.at)} · ${userLinkHtml(e.by)} · ${escapeHtml(e.fields.join(", ") || "—")}${e.retained ? " · retained" : ""}${link}</li>`;
         })
         .join("")}</ul>`
     : `<p class="muted">No edits logged.</p>`;
@@ -419,6 +422,12 @@ export function renderArtefactBodyHtml(opts: {
     }`;
 }
 
+const DETAILS_EXAMPLE = `{
+  "card": "Closer look at the mantel card.
+Second paragraph on a new line.",
+  "window": "Rain beads on the glass."
+}`;
+
 const GRANTS_EXAMPLE = `[
   { "who": "visitor", "rights": ["read"] },
   { "who": "*", "rights": ["read", "edit"] }
@@ -439,34 +448,75 @@ export function renderPageBackCrumb(back?: PageBackLink): string {
 export function renderProfileBodyHtml(opts: {
   username: string;
   message?: string;
+  description?: string;
+  details?: Record<string, string>;
   grants?: Grant[];
   denies?: Deny[];
   back?: PageBackLink;
+  openSection?: "appearance" | "password" | "sharing";
 }): string {
   const notice = opts.message
     ? `<p class="notice" role="status">${escapeHtml(opts.message)}</p>`
     : "";
   const accessAction = `u/${encodeURIComponent(opts.username)}/access`;
+  const open = opts.openSection ?? "appearance";
   return `${renderPageBackCrumb(opts.back)}<h1>Profile</h1>
     ${bylineHtml(opts.username)}
     ${notice}
-    <h2>Change password</h2>
-    <form method="post" action="auth/password" class="profile-form">
-      <label>Current password
-        <input name="currentPassword" type="password" autocomplete="current-password" required />
-      </label>
-      <label>New password
-        <input name="newPassword" type="password" autocomplete="new-password" required minlength="6" />
-      </label>
-      <label>Confirm new password
-        <input name="confirmPassword" type="password" autocomplete="new-password" required minlength="6" />
-      </label>
-      <button type="submit">Update password</button>
-    </form>
-    <h2>Share all my work</h2>
-    <p class="muted">Applies to every scene and group you own.</p>
-    ${renderAccessFormHtml(accessAction, opts.grants, opts.denies, "Save share-all")}
+    <details class="profile-section"${open === "appearance" ? " open" : ""}>
+      <summary>Appearance</summary>
+      <form method="post" action="profile" class="profile-form profile-appearance">
+        <label>Description
+          <textarea name="description" rows="8">${escapeHtml(opts.description ?? "")}</textarea>
+        </label>
+        ${renderJsonFieldHtml("Details", "detailsJson", 10, opts.details ?? {}, DETAILS_EXAMPLE, "Object of named closer-look texts.")}
+        <button type="submit">Save appearance</button>
+      </form>
+    </details>
+    <details class="profile-section"${open === "password" ? " open" : ""}>
+      <summary>Password</summary>
+      <form method="post" action="auth/password" class="profile-form">
+        <label>Current password
+          <input name="currentPassword" type="password" autocomplete="current-password" required />
+        </label>
+        <label>New password
+          <input name="newPassword" type="password" autocomplete="new-password" required minlength="6" />
+        </label>
+        <label>Confirm new password
+          <input name="confirmPassword" type="password" autocomplete="new-password" required minlength="6" />
+        </label>
+        <button type="submit">Update password</button>
+      </form>
+    </details>
+    <details class="profile-section"${open === "sharing" ? " open" : ""}>
+      <summary>Sharing</summary>
+      <p class="muted">Applies to every scene and group you own.</p>
+      ${renderAccessFormHtml(accessAction, opts.grants, opts.denies, "Save share-all")}
+    </details>
 `;
+}
+
+export function renderUserProfileBodyHtml(opts: {
+  username: string;
+  description: string;
+  details: Record<string, string>;
+  detail?: string;
+  back?: PageBackLink;
+}): string {
+  const path = userPath(opts.username);
+  const back = renderPageBackCrumb(opts.back);
+  if (opts.detail) {
+    const text = opts.details[opts.detail];
+    return `${back}<p class="crumb"><a href="${path}">← ${escapeHtml(opts.username)}</a></p>
+    <h1>${escapeHtml(opts.username)} <span class="detail-sub">detail: ${escapeHtml(opts.detail)}</span></h1>
+    <div class="desc">${formatProse(text ?? `No detail named “${opts.detail}”.`)}</div>`;
+  }
+  const desc = opts.description.trim()
+    ? formatProse(opts.description)
+    : `<p class="muted">No description yet.</p>`;
+  return `${back}<h1>${escapeHtml(opts.username)}</h1>
+    <div class="desc">${desc}</div>
+    ${renderNamedDetailsHtml(path, opts.details)}`;
 }
 
 export interface GroupListItem {
@@ -498,7 +548,7 @@ function renderGroupListSection(heading: string, groups: GroupListItem[]): strin
     .map((group) => {
       const scenes = group.sceneCount === 1 ? "1 scene" : `${group.sceneCount} scenes`;
       return `<li><a href="g/${encodeURIComponent(group.id)}">${escapeHtml(group.title)}</a>
-        <span class="muted"> (#${escapeHtml(group.id)} · ${escapeHtml(group.owner)} · ${scenes})</span></li>`;
+        <span class="muted"> (#${escapeHtml(group.id)} · ${userLinkHtml(group.owner)} · ${scenes})</span></li>`;
     })
     .join("");
   return `<h2>${escapeHtml(heading)}</h2><ul class="link-list">${items}</ul>`;
@@ -617,7 +667,7 @@ function renderTransferFormHtml(
       ? "this group, its scenes, and artefacts you own that are homed in those scenes"
       : "this scene and artefacts you own that are homed here";
   return `<h2>Transfer ownership</h2>
-    <p class="muted">Owner is ${escapeHtml(owner)}. Transfer ${what} to another registered user.</p>
+    <p class="muted">Owner is ${userLinkHtml(owner)}. Transfer ${what} to another registered user.</p>
     <form method="post" action="${escapeAttr(action)}" class="profile-form">
       <label>New owner <input name="to" required autocomplete="username" /></label>
       <input type="hidden" name="keepAccess" value="0" />
@@ -663,7 +713,15 @@ function renderJsonFieldHtml(
 }
 
 function bylineHtml(owner: string): string {
-  return owner ? `<p class="byline">by ${escapeHtml(owner)}</p>` : "";
+  return owner ? `<p class="byline">by ${userLinkHtml(owner)}</p>` : "";
+}
+
+export function userPath(username: string): string {
+  return `u/${encodeURIComponent(username)}`;
+}
+
+export function userLinkHtml(username: string): string {
+  return `<a href="${userPath(username)}">${escapeHtml(username)}</a>`;
 }
 
 function readAppVersion(): string {

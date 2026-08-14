@@ -52,6 +52,8 @@ describe("read-only HTML vs edit bootstrap", () => {
     expect(html).toContain('id="edit-root"');
     expect(html).toContain('id="edit-bootstrap"');
     expect(html).toContain("Moss softens the stone step");
+    expect(html).toContain('href="u/gardener"');
+    expect(html).toContain('<p class="byline">by <a href="u/gardener">gardener</a></p>');
     expect(html).not.toContain("data-method");
     expect(html).not.toContain("Create scene");
     expect(html).not.toContain("Save scene");
@@ -112,6 +114,7 @@ describe("read-only HTML vs edit bootstrap", () => {
     expect(html).not.toContain("data-method");
     expect(html).not.toContain("Create scene");
     expect(html).toContain('"username":"gardener"');
+    expect(html).toContain('href="u/gardener"');
     expect(html).not.toContain("passwordHash");
   });
 

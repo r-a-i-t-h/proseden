@@ -17,6 +17,8 @@ export function user(
     passwordSalt: "salt",
     createdAt: "2020-01-01T00:00:00.000Z",
     inventory: [],
+    description: "",
+    details: {},
     ...patch,
   };
 }

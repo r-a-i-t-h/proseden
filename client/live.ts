@@ -12,6 +12,7 @@ interface ChatMessage {
   id: string;
   kind: string;
   ts: string;
+  fromKey?: string;
   fromName?: string;
   sceneTitle?: string;
   sceneId?: number;
@@ -28,6 +29,17 @@ interface LiveEvent {
   fromSceneId?: number;
   toSceneId?: number;
   purgedSceneId?: number | "all";
+}
+
+function userProfileHref(userKey: string | undefined): string | undefined {
+  if (!userKey?.startsWith("u:")) return undefined;
+  return `u/${encodeURIComponent(userKey.slice(2))}`;
+}
+
+function namedUser(userKey: string | undefined, name: string): Node {
+  const href = userProfileHref(userKey);
+  const label = el("strong", {}, name);
+  return href ? el("a", { href }, label) : label;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -156,11 +168,11 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
       line.append(
         el("span", { class: "live-shout-label" }, fromWhere),
         document.createTextNode(" "),
-        el("strong", {}, msg.fromName ?? "?"),
+        namedUser(msg.fromKey, msg.fromName ?? "?"),
         document.createTextNode(`: ${msg.text}`),
       );
     } else {
-      line.append(el("strong", {}, msg.fromName ?? "?"), document.createTextNode(`: ${msg.text}`));
+      line.append(namedUser(msg.fromKey, msg.fromName ?? "?"), document.createTextNode(`: ${msg.text}`));
     }
     log.append(line);
     log.scrollTop = log.scrollHeight;
@@ -169,7 +181,9 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
   function renderHere(people: PresencePerson[]): void {
     hereList.replaceChildren();
     for (const p of people) {
-      const row = el("li", {}, p.displayName);
+      const row = el("li");
+      const href = userProfileHref(p.userKey);
+      row.append(href ? el("a", { href }, p.displayName) : document.createTextNode(p.displayName));
       if (selfKey && p.userKey !== selfKey && boot.user) {
         row.append(
           document.createTextNode(" "),
@@ -193,12 +207,11 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
       onlineList.replaceChildren();
       for (const p of data.online ?? []) {
         if (selfKey && p.userKey === selfKey) continue;
-        const label = `${p.displayName} · s/${p.sceneId}`;
-        const row = el(
-          "li",
-          {},
-          label,
-          document.createTextNode(" "),
+        const href = userProfileHref(p.userKey);
+        const row = el("li");
+        row.append(
+          href ? el("a", { href }, p.displayName) : document.createTextNode(p.displayName),
+          document.createTextNode(` · s/${p.sceneId} `),
           el("a", { href: `live/join/${encodeURIComponent(p.userKey)}` }, "Join"),
         );
         onlineList.append(row);

@@ -33,6 +33,8 @@ import {
   renderSceneBodyHtml,
   renderSnapshotBodyHtml,
   renderStaffBodyHtml,
+  renderUserProfileBodyHtml,
+  userLinkHtml,
 } from "../render/html.js";
 import {
   renderArtefactText,
@@ -43,6 +45,7 @@ import {
   renderProfileText,
   renderSceneText,
   renderSnapshotText,
+  renderUserProfileText,
 } from "../render/text.js";
 
 export const worldRoutes = new Hono();
@@ -262,7 +265,14 @@ worldRoutes.get("/profile", (c) => {
     ? "Password updated."
     : c.req.query("shared")
       ? "Share-all saved."
-      : undefined;
+      : c.req.query("appearance")
+        ? "Appearance saved."
+        : undefined;
+  const openSection = c.req.query("updated")
+    ? "password"
+    : c.req.query("shared")
+      ? "sharing"
+      : "appearance";
   const world = c.get("world");
   const back = sceneBackLink(user, world);
   return page(
@@ -272,13 +282,18 @@ worldRoutes.get("/profile", (c) => {
     renderProfileBodyHtml({
       username: user.username,
       message,
+      description: user.description,
+      details: user.details,
       grants: user.grants,
       denies: user.denies,
       back,
+      openSection,
     }),
     renderProfileText({
       username: user.username,
       message,
+      description: user.description,
+      details: user.details,
       basePath: c.get("assetBase"),
       grants: user.grants,
       denies: user.denies,
@@ -286,6 +301,39 @@ worldRoutes.get("/profile", (c) => {
     }),
   );
 });
+
+worldRoutes.put("/profile", async (c) => updateProfileAppearance(c));
+worldRoutes.post("/profile", async (c) => updateProfileAppearance(c));
+
+async function updateProfileAppearance(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const body = await readBody(c);
+  let details: Record<string, string> | undefined;
+  if (body.detailsJson !== undefined || body.details !== undefined) {
+    try {
+      details = parseDetails(body.detailsJson ?? body.details);
+    } catch (err) {
+      return apiError(c, 400, err instanceof Error ? err.message : "Invalid details JSON");
+    }
+  }
+
+  if (body.description === undefined && details === undefined) {
+    return apiError(c, 400, "description and/or details required");
+  }
+
+  const updated = await world.updateUserAppearance(user.username, {
+    description: body.description !== undefined ? String(body.description) : undefined,
+    details,
+  });
+
+  if (wantsJson(c)) {
+    return c.json({ description: updated.description, details: updated.details });
+  }
+  return c.redirect(`${c.get("assetBase")}/profile?appearance=1`);
+}
 
 worldRoutes.get("/inv", (c) => {
   const world = c.get("world");
@@ -482,6 +530,53 @@ worldRoutes.post("/s/:id/transfer", async (c) => {
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Could not transfer scene");
   }
+});
+
+worldRoutes.get("/u/:username", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  const username = String(c.req.param("username") ?? "");
+  const target = world.getUser(username);
+  if (!target) return apiError(c, 404, "User not found");
+
+  const description = target.description ?? "";
+  const details = target.details ?? {};
+  const detail = queryDetailName(c);
+  const payload = { username: target.username, description, details };
+  if (wantsJson(c)) {
+    if (detail) {
+      return c.json({
+        username: target.username,
+        detail,
+        text: details[detail] ?? null,
+      });
+    }
+    return c.json(payload);
+  }
+
+  const back = user
+    ? sceneBackLink(user, world)
+    : { href: "./", label: "← Back", history: true };
+  return page(
+    c,
+    200,
+    target.username,
+    renderUserProfileBodyHtml({
+      username: target.username,
+      description,
+      details,
+      detail,
+      back,
+    }),
+    renderUserProfileText({
+      username: target.username,
+      description,
+      details,
+      detail,
+      basePath: c.get("assetBase"),
+      back,
+    }),
+  );
 });
 
 worldRoutes.get("/u/:username/access", (c) => {
@@ -1131,7 +1226,7 @@ worldRoutes.get("/staff", (c) => {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(
       ([username, roles]) =>
-        `<li><strong>${escapeHtml(username)}</strong> — ${escapeHtml(roles.join(", ") || "(none)")}</li>`,
+        `<li><strong>${userLinkHtml(username)}</strong> — ${escapeHtml(roles.join(", ") || "(none)")}</li>`,
     )
     .join("");
   const back = user ? sceneBackLink(user, world) : undefined;

@@ -500,8 +500,27 @@ button:hover {
   margin: 0.75rem 0 0;
 }
 
+.profile-form.profile-appearance {
+  max-width: 28rem;
+}
+
 .profile-form button {
   align-self: start;
+}
+
+.profile-section {
+  margin: 1.25rem 0 0;
+}
+
+.profile-section > summary {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.15rem;
+  color: var(--moss);
+  cursor: pointer;
+}
+
+.profile-section > summary:hover {
+  color: var(--leaf);
 }
 
 .profile-share,
@@ -661,6 +680,15 @@ details.register summary {
 
 .who strong {
   color: var(--moss);
+}
+
+.who a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.who a:hover {
+  color: var(--ember);
 }
 
 button.linkish {

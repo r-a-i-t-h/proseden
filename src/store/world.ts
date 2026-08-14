@@ -191,8 +191,13 @@ export class WorldStore implements AccessWorld {
   }
 
   async saveUser(user: UserRecord): Promise<void> {
-    this.users.set(user.username, user);
-    await writeJsonAtomic(join(this.dataDir, "users", `${user.username}.json`), user);
+    const toSave: UserRecord = {
+      ...user,
+      description: user.description ?? "",
+      details: user.details ?? {},
+    };
+    this.users.set(toSave.username, toSave);
+    await writeJsonAtomic(join(this.dataDir, "users", `${toSave.username}.json`), toSave);
   }
 
   async saveScene(scene: SceneRecord): Promise<void> {
@@ -243,6 +248,21 @@ export class WorldStore implements AccessWorld {
       ...existing,
       grants: patch.grants ?? existing.grants ?? [],
       denies: patch.denies ?? existing.denies ?? [],
+    };
+    await this.saveUser(updated);
+    return updated;
+  }
+
+  async updateUserAppearance(
+    username: string,
+    patch: { description?: string; details?: Record<string, string> },
+  ): Promise<UserRecord> {
+    const existing = this.users.get(username);
+    if (!existing) throw new Error("User not found");
+    const updated: UserRecord = {
+      ...existing,
+      description: patch.description !== undefined ? patch.description : existing.description,
+      details: patch.details !== undefined ? patch.details : existing.details,
     };
     await this.saveUser(updated);
     return updated;
@@ -703,6 +723,8 @@ export class WorldStore implements AccessWorld {
       passwordSalt,
       createdAt: nowIso(),
       inventory: [],
+      description: "",
+      details: {},
     };
     await this.saveUser(user);
     return user;
@@ -1039,11 +1061,22 @@ function normalizeUser(raw: Record<string, unknown>): UserRecord {
           artefactId: Number(i.artefactId),
         }))
       : [],
+    description: String(raw.description ?? ""),
+    details: normalizeUserDetails(raw.details),
     grants: normalizeGrants(raw.grants),
     denies: normalizeDenies(raw.denies),
     lastSceneId: Number.isFinite(lastSceneId) && lastSceneId > 0 ? lastSceneId : undefined,
     lastSeenAt: raw.lastSeenAt !== undefined ? String(raw.lastSeenAt) : undefined,
   };
+}
+
+function normalizeUserDetails(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    out[k] = String(v);
+  }
+  return out;
 }
 
 function normalizeSceneMeta(raw: Record<string, unknown>, id: number): SceneMeta {
