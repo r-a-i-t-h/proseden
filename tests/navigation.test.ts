@@ -282,6 +282,42 @@ describe("HTTP teleport vs rights", () => {
     expect(location(res)).toBe(`/s/${ids.entrance}`);
   });
 
+  it("uses readable lastSceneId as from-hint when returning without ?from=", async () => {
+    const { app, tokens, ids, world } = harness;
+    const visit = await app.request(`/s/${ids.inner}?from=${ids.entrance}`, {
+      headers: auth(tokens.bob),
+    });
+    expect(visit.status).toBe(200);
+    expect(world.getUser("bob")?.lastSceneId).toBe(ids.inner);
+
+    // Same as ← Scene N from profile/admin: plain /s/inner, non-scene Referer.
+    const back = await app.request(`/s/${ids.inner}`, {
+      headers: {
+        ...auth(tokens.bob),
+        Referer: "http://example.test/profile",
+      },
+      redirect: "manual",
+    });
+    expect(back.status).toBe(200);
+    expect(await back.text()).toContain("Inner Chamber");
+  });
+
+  it("still bounces when lastSceneId is outside the entrance group", async () => {
+    const { app, tokens, ids, world } = harness;
+    const visit = await app.request(`/s/${ids.hall}`, {
+      headers: auth(tokens.bob),
+    });
+    expect(visit.status).toBe(200);
+    expect(world.getUser("bob")?.lastSceneId).toBe(ids.hall);
+
+    const res = await app.request(`/s/${ids.inner}`, {
+      headers: auth(tokens.bob),
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    expect(location(res)).toBe(`/s/${ids.entrance}`);
+  });
+
   it("lets the owner teleport straight into their inner room", async () => {
     const { app, tokens, ids } = harness;
     const res = await app.request(`/s/${ids.inner}`, {

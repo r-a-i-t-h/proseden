@@ -28,7 +28,7 @@ Entrance groups need a “from” scene to decide whether the traveller is alrea
 | Mode | From scene |
 |---|---|
 | Navigate | Always the path param `:id` (the scene being left) |
-| Teleport | `?from=<sceneId>` if present; otherwise the first `/s/(\d+)/` match in the `Referer` header; otherwise unknown (treated as outside) |
+| Teleport | `?from=<sceneId>` if present; otherwise the first `/s/(\d+)/` match in the `Referer` header; otherwise the signed-in user’s readable `lastSceneId` (so Profile / Data / `/u/...` returns stay inside an entrance group); otherwise unknown (treated as outside) |
 
 After a successful go, the redirect includes `?from=` so a subsequent teleport can keep intra-group context.
 

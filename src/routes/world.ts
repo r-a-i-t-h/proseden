@@ -17,7 +17,7 @@ import {
   isManager,
   isModerator,
 } from "../access/permissions.js";
-import { apiError, page, sceneBackLink, wantsJson } from "../http.js";
+import { apiError, liveSceneIdForUser, page, sceneBackLink, wantsJson } from "../http.js";
 import { prepareJsonTextarea } from "../json-textarea.js";
 import type { StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
@@ -63,7 +63,10 @@ worldRoutes.get("/s/:id", (c) => {
   const world = c.get("world");
   const user = c.get("user");
   const id = Number(c.req.param("id"));
-  const fromHint = parseFromScene(c);
+  // Prefer explicit ?from=/Referer; otherwise treat a readable lastSceneId as
+  // still being "here" (profile/admin/user-page returns) so entrance groups
+  // do not bounce the traveller to the entrance.
+  const fromHint = parseFromScene(c) ?? liveSceneIdForUser(user, world);
   const resolved = world.resolveTeleportTarget(id, fromHint, {
     asOwnerUsername: user?.username,
   });
