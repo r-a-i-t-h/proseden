@@ -1,4 +1,4 @@
-import { mergeChatTimeline } from "../src/live/types.js";
+import { HEARTBEAT_INTERVAL_MS, mergeChatTimeline } from "../src/live/types.js";
 import type { EditBootstrap } from "./edit.js";
 
 interface PresencePerson {
@@ -150,6 +150,8 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
   );
 
   let source: EventSource | null = null;
+  let wanted = false;
+  let pingTimer: ReturnType<typeof setInterval> | undefined;
   let seenIds = new Set<string>();
 
   function appendMessage(msg: ChatMessage): void {
@@ -259,8 +261,34 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
     }
   }
 
+  function stopPing(): void {
+    if (pingTimer !== undefined) {
+      clearInterval(pingTimer);
+      pingTimer = undefined;
+    }
+  }
+
+  function startPing(): void {
+    stopPing();
+    void sendPing();
+    pingTimer = setInterval(() => {
+      void sendPing();
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  async function sendPing(): Promise<void> {
+    if (document.visibilityState === "hidden" || !source) return;
+    try {
+      await postJson("live/ping", {});
+    } catch {
+      /* presence dropped; EventSource will reconnect if still wanted */
+    }
+  }
+
   function connect(): void {
+    wanted = true;
     if (sceneId === undefined || source) return;
+    if (document.visibilityState === "hidden") return;
     status.textContent = "Connecting…";
     const es = new EventSource(`live/events?scene=${sceneId}`);
     source = es;
@@ -286,9 +314,12 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
     es.onerror = () => {
       status.textContent = "Reconnecting…";
     };
+    startPing();
   }
 
   function disconnect(): void {
+    wanted = false;
+    stopPing();
     if (source) {
       source.close();
       source = null;
@@ -298,12 +329,31 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
   }
 
   function destroy(): void {
+    document.removeEventListener("visibilitychange", onVisibility);
     disconnect();
   }
 
+  function onVisibility(): void {
+    if (document.visibilityState === "hidden") {
+      stopPing();
+      if (source) {
+        source.close();
+        source = null;
+      }
+      if (wanted) status.textContent = "Away";
+      return;
+    }
+    if (wanted) connect();
+  }
+
+  document.addEventListener("visibilitychange", onVisibility);
+
   window.addEventListener("pageshow", (ev) => {
-    if (ev.persisted && source) {
-      disconnect();
+    if (ev.persisted && wanted) {
+      if (source) {
+        source.close();
+        source = null;
+      }
       connect();
     }
   });

@@ -2,6 +2,7 @@ import { mountEdit, readBootstrap, OLD_MODE_KEY, type EditBootstrap } from "./ed
 import { mountLive, type LiveController } from "./live.js";
 
 const PANEL_KEY = "proseden-panel";
+const GUEST_LIVE_KEY = "proseden-panel-guest-live";
 type PanelMode = "live" | "edit" | "view";
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -28,14 +29,15 @@ function readMode(boot: EditBootstrap): PanelMode {
     localStorage.setItem(PANEL_KEY, "edit");
     return "edit";
   }
+  if (!boot.user) {
+    if (sessionStorage.getItem(GUEST_LIVE_KEY) === "1" && boot.liveSceneId !== undefined) {
+      return "live";
+    }
+    return "view";
+  }
   const stored = localStorage.getItem(PANEL_KEY);
   if (stored === "live" || stored === "edit") {
-    if (stored === "edit" && !boot.user) return "view";
-    // Live needs a scene page; keep the sticky preference (applyMode persist=false)
-    // and fall back to edit so the panel stays open like edit→inventory.
-    if (stored === "live" && boot.liveSceneId === undefined) {
-      return boot.user ? "edit" : "view";
-    }
+    if (stored === "live" && boot.liveSceneId === undefined) return "edit";
     return stored;
   }
   // Migrate old edit sticky flag.
@@ -47,7 +49,13 @@ function readMode(boot: EditBootstrap): PanelMode {
   return "view";
 }
 
-function writeMode(mode: PanelMode): void {
+function writeMode(mode: PanelMode, signedIn: boolean): void {
+  if (!signedIn) {
+    if (mode === "live") sessionStorage.setItem(GUEST_LIVE_KEY, "1");
+    else sessionStorage.removeItem(GUEST_LIVE_KEY);
+    return;
+  }
+  sessionStorage.removeItem(GUEST_LIVE_KEY);
   if (mode === "view") localStorage.removeItem(PANEL_KEY);
   else localStorage.setItem(PANEL_KEY, mode);
 }
@@ -110,7 +118,7 @@ function bootPanel(): void {
     if (next === "edit" && !canEdit) next = canLive ? "live" : "view";
     if (next === "live" && !canLive) next = "view";
     mode = next;
-    if (persist) writeMode(next);
+    if (persist) writeMode(next, !!boot.user);
 
     const open = next === "live" || next === "edit";
     root.hidden = !open;

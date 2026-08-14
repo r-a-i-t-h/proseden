@@ -5,6 +5,7 @@ import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import { canRead, isModerator } from "../access/permissions.js";
 import { apiError, page, sceneBackLink, wantsJson } from "../http.js";
+import { guestCookieName, parseGuestId } from "../live/guest.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import { clientIp } from "../rate-limit/client-ip.js";
 import type { LiveEvent } from "../live/types.js";
@@ -18,7 +19,7 @@ import {
 
 export const liveRoutes = new Hono();
 
-const GUEST_COOKIE = "proseden_guest";
+const LIVE_USER_KEY = /^(u:[a-zA-Z0-9_-]{2,32}|g:[a-f0-9]{16,64})$/i;
 
 const liveSseLimit = rateLimit({
   name: "live-sse",
@@ -49,8 +50,8 @@ liveRoutes.get("/events", liveSseLimit, async (c) => {
     return c.json({ error: "Forbidden" }, identity.user ? 403 : 401);
   }
 
-  if (identity.guestId && !getCookie(c, guestCookieName(c))) {
-    setCookie(c, guestCookieName(c), identity.guestId, {
+  if (identity.guestId && !getCookie(c, cookieNameForGuest(c))) {
+    setCookie(c, cookieNameForGuest(c), identity.guestId, {
       httpOnly: true,
       sameSite: "Lax",
       path: c.get("assetBase") || "/",
@@ -80,6 +81,9 @@ liveRoutes.get("/events", liveSseLimit, async (c) => {
       });
     };
     presence.setSend(conn.connectionId, send);
+    presence.setAbort(conn.connectionId, () => {
+      void stream.close();
+    });
 
     // Chromium sends Accept-Encoding: gzip (EventSource cannot override that).
     // A 4KB SSE comment forces gzip/proxy buffers to flush so the snapshot is parsed.
@@ -108,7 +112,7 @@ liveRoutes.get("/events", liveSseLimit, async (c) => {
 
     try {
       while (!closed) {
-        presence.heartbeat(conn.connectionId);
+        if (!presence.getConnection(conn.connectionId)) break;
         await stream.writeSSE({ event: "ping", data: "{}" });
         await stream.sleep(HEARTBEAT_INTERVAL_MS);
       }
@@ -137,6 +141,7 @@ liveRoutes.post("/say", liveChatLimit, async (c) => {
     return c.json({ error: "Forbidden" }, 403);
   }
 
+  presence.heartbeatUser(identity.userKey);
   const message = hub.say({
     sceneId: online.sceneId,
     fromKey: identity.userKey,
@@ -159,6 +164,7 @@ liveRoutes.post("/shout", liveChatLimit, async (c) => {
 
   const world = c.get("world");
   const scene = world.getScene(online.sceneId);
+  presence.heartbeatUser(identity.userKey);
   const message = hub.shout({
     fromKey: identity.userKey,
     fromName: identity.displayName,
@@ -167,6 +173,15 @@ liveRoutes.post("/shout", liveChatLimit, async (c) => {
     sceneTitle: scene?.title ?? `Scene ${online.sceneId}`,
   });
   return c.json({ ok: true, message });
+});
+
+liveRoutes.post("/ping", async (c) => {
+  const presence = c.get("presence");
+  const identity = resolveLiveIdentity(c);
+  if (!presence.heartbeatUser(identity.userKey)) {
+    return c.json({ error: "Not present — open Live mode first." }, 400);
+  }
+  return c.json({ ok: true });
 });
 
 liveRoutes.get("/here", (c) => {
@@ -304,6 +319,26 @@ liveRoutes.post("/admin/purge", async (c) => {
   return c.redirect(`${c.get("assetBase")}/live/admin?purged=1`);
 });
 
+liveRoutes.post("/admin/kick", async (c) => {
+  const user = c.get("user");
+  const world = c.get("world");
+  if (!isModerator(user, world)) {
+    return c.json({ error: "Moderator access required" }, 403);
+  }
+  const body = await readJsonBody(c);
+  const userKey = String(body.userKey ?? "").trim();
+  if (!LIVE_USER_KEY.test(userKey)) {
+    return apiError(c, 400, "userKey required.");
+  }
+  const kicked = c.get("presence").kick(userKey);
+  if (!kicked) return apiError(c, 404, "That presence is not online.");
+  if (userKey.startsWith("u:")) {
+    void c.get("locations").flush(userKey.slice(2));
+  }
+  if (wantsJson(c)) return c.json({ ok: true, userKey });
+  return c.redirect(`${c.get("assetBase")}/live/admin?kicked=1`);
+});
+
 function renderLiveAdminHtml(
   users: Array<{
     username: string;
@@ -329,10 +364,20 @@ function renderLiveAdminHtml(
         u.lastSceneId !== undefined
           ? `${escapeHtml(u.sceneTitle ?? "Untitled")} (#${u.lastSceneId})`
           : "—";
+      const name = u.userKey.startsWith("g:")
+        ? escapeHtml(u.username)
+        : userLinkHtml(u.username);
+      const kick = u.live
+        ? `<form method="post" action="live/admin/kick" class="live-admin-kick" onsubmit="return confirm('Disconnect this presence?');">
+            <input type="hidden" name="userKey" value="${escapeHtml(u.userKey)}" />
+            <button type="submit">Kick</button>
+          </form>`
+        : "";
       return `<tr>
-        <td>${userLinkHtml(u.username)}${u.live ? ' <span class="muted">live</span>' : ""}</td>
+        <td>${name}${u.live ? ' <span class="muted">live</span>' : ""}</td>
         <td>${escapeHtml(age)}</td>
         <td>${loc}</td>
+        <td>${kick}</td>
       </tr>`;
     })
     .join("\n");
@@ -351,11 +396,11 @@ function renderLiveAdminHtml(
     })
     .join("\n");
   return `${renderPageBackCrumb(back)}<h1>Live admin</h1>
-    <p class="muted">Recently seen users and in-memory chat buffer stats (no message text).</p>
+    <p class="muted">Recently seen users and in-memory chat buffer stats (no message text). Kick drops a live connection immediately.</p>
     <h2>Users</h2>
     <table class="live-admin-table">
-      <thead><tr><th>User</th><th>Last seen</th><th>Location</th></tr></thead>
-      <tbody>${userRows || `<tr><td colspan="3" class="muted">None yet</td></tr>`}</tbody>
+      <thead><tr><th>User</th><th>Last seen</th><th>Location</th><th></th></tr></thead>
+      <tbody>${userRows || `<tr><td colspan="4" class="muted">None yet</td></tr>`}</tbody>
     </table>
     <h2>Chat buffers</h2>
     <table class="live-admin-table">
@@ -395,7 +440,7 @@ function renderLiveAdminText(
       `- ${b.sceneId} ${b.sceneTitle ?? ""} · ${b.count} msgs · oldest ${b.oldestAt ? relativeAge(b.oldestAt) : "—"} · newest ${b.newestAt ? relativeAge(b.newestAt) : "—"}`,
     );
   }
-  lines.push("", "Purge all: POST /live/admin/purge");
+  lines.push("", "Kick: POST /live/admin/kick { userKey }", "Purge all: POST /live/admin/purge");
   return lines.join("\n");
 }
 
@@ -415,11 +460,9 @@ function liveChatKeys(c: Context): string[] {
   const ip = clientIp(c);
   const user = c.get("user");
   if (user) return [`user:${user.username}`];
-  const guestId = getCookie(c, guestCookieName(c));
+  const guestId = parseGuestId(getCookie(c, cookieNameForGuest(c)));
   const keys = [`ip:${ip}`];
-  if (guestId && /^[a-f0-9]{16,64}$/i.test(guestId)) {
-    keys.push(`g:${guestId}`);
-  }
+  if (guestId) keys.push(`g:${guestId}`);
   return keys;
 }
 
@@ -433,8 +476,8 @@ function resolveLiveIdentity(c: Context): {
   if (user) {
     return { userKey: `u:${user.username}`, displayName: user.username, user };
   }
-  let guestId = getCookie(c, guestCookieName(c));
-  if (!guestId || !/^[a-f0-9]{16,64}$/i.test(guestId)) {
+  let guestId = parseGuestId(getCookie(c, cookieNameForGuest(c)));
+  if (!guestId) {
     guestId = randomBytes(16).toString("hex");
   }
   const short = guestId.slice(0, 6);
@@ -446,10 +489,8 @@ function resolveLiveIdentity(c: Context): {
   };
 }
 
-function guestCookieName(c: Context): string {
-  const base = c.get("sessionCookieName") ?? "proseden_session";
-  if (base.endsWith("_session")) return `${base.slice(0, -"_session".length)}_guest`;
-  return GUEST_COOKIE;
+function cookieNameForGuest(c: Context): string {
+  return guestCookieName(c.get("sessionCookieName") ?? "proseden_session");
 }
 
 function cookieSecure(): boolean {

@@ -864,6 +864,14 @@ button.linkish {
   margin-top: 0.75rem;
 }
 
+.live-admin-kick {
+  margin: 0;
+}
+
+.live-admin-kick button {
+  font: inherit;
+}
+
 .edit-toolbar[hidden] {
   display: none !important;
 }

@@ -12,14 +12,16 @@ Detail views (`/s/:id?card`) and artefact pages (`/a/:id`) keep you present in t
 | Edit | Existing editor (form state kept when switching to Live) | Connected (same as Live) |
 | View | Sidebar closed | Disconnected — not visible, not joinable |
 
-Preference: `localStorage` key `proseden-panel` = `live` \| `edit` (absent = View). Legacy `sessionStorage` `proseden-edit` migrates to Edit once. `?edit` still opens Edit.
+Preference: signed-in users store `localStorage` key `proseden-panel` = `live` \| `edit` (absent = View). Guests do **not** restore Live from localStorage — they must click Live; that choice lasts for the tab via `sessionStorage` `proseden-panel-guest-live`. Legacy `sessionStorage` `proseden-edit` migrates to Edit once. `?edit` still opens Edit.
 
 ## Transport
 
 - **SSE** `GET /live/events?scene=<id>` — snapshot then stream (`presence.*`, `chat.*`).
 - Responses set `X-Accel-Buffering: no` so nginx does not buffer the stream (UI otherwise sticks on “Connecting…”). Deploy templates also use a dedicated `location` with `proxy_buffering off` — see [DEPLOY.md](DEPLOY.md) if an older site file is missing it.
 - **POST** `/live/say`, `/live/shout` — require an active presence connection.
-- Guests get a short-lived guest cookie on public scenes; join requires sign-in.
+- **POST** `/live/ping` — client proof-of-life while the tab is visible. Server SSE pings keep the proxy socket alive but do **not** count as presence.
+- Hidden tabs close the EventSource (reconnect grace still covers quick switches). After **3 minutes** without a client ping, idle sweep drops the connection.
+- Guests get a short-lived guest cookie on public scenes; join requires sign-in. Login, register, and logout clear that cookie and kick the `g:` presence so it cannot linger next to the signed-in user.
 
 ## Chat linger
 
@@ -41,7 +43,7 @@ Logged-in users get `lastSceneId` / `lastSeenAt` on `data/users/<name>.json` (de
 
 ## Staff
 
-Moderators/managers: `/live/admin` (recent users, buffer counts/ages, purge all).
+Moderators/managers: `/live/admin` (recent users, buffer counts/ages, kick live presence, purge all).
 
 ## API sketch
 
@@ -53,6 +55,8 @@ Moderators/managers: `/live/admin` (recent users, buffer counts/ages, purge all)
 | GET | `/live/join/:userKey` | Redirect or JSON |
 | POST | `/live/say` | `{ text }` |
 | POST | `/live/shout` | `{ text }` |
+| POST | `/live/ping` | Client heartbeat |
 | POST | `/live/purge` | `{ sceneId }` moderator |
 | GET | `/live/admin` | HTML/JSON |
+| POST | `/live/admin/kick` | `{ userKey }` moderator — drop that presence now |
 | POST | `/live/admin/purge` | Clear all buffers |

@@ -7,7 +7,8 @@ import { hashPassword } from "../src/auth/password.js";
 import { SessionStore } from "../src/auth/sessions.js";
 import { SceneHub } from "../src/live/hub.js";
 import { PresenceStore } from "../src/live/presence.js";
-import { mergeChatTimeline, PRESENCE_RECONNECT_GRACE_MS, SSE_CONNECT_PADDING_BYTES } from "../src/live/types.js";
+import { mergeChatTimeline, PRESENCE_IDLE_MS, PRESENCE_RECONNECT_GRACE_MS, SSE_CONNECT_PADDING_BYTES } from "../src/live/types.js";
+import { guestCookieName } from "../src/live/guest.js";
 import { WorldStore } from "../src/store/world.js";
 
 type App = ReturnType<typeof createApp>;
@@ -564,5 +565,172 @@ describe("live presence and chat", () => {
     const html = await res.text();
     expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
     expect(html).toContain(`← Scene ${sceneIds.public}`);
+  });
+
+  it("idle sweep drops connections that have not heartbeated", () => {
+    vi.useFakeTimers();
+    const conn = presence.connect({
+      userKey: "g:aaaaaaaaaaaaaaaa",
+      displayName: "guest-aaaaaa",
+      sceneId: sceneIds.public,
+    });
+    vi.advanceTimersByTime(PRESENCE_IDLE_MS + 1);
+    presence.sweepIdle();
+    expect(presence.getConnection(conn.connectionId)).toBeUndefined();
+    vi.advanceTimersByTime(PRESENCE_RECONNECT_GRACE_MS);
+    expect(presence.here(sceneIds.public).some((p) => p.userKey === "g:aaaaaaaaaaaaaaaa")).toBe(
+      false,
+    );
+  });
+
+  it("client heartbeat keeps a connection past idle", () => {
+    vi.useFakeTimers();
+    const conn = presence.connect({
+      userKey: "u:alice",
+      displayName: "alice",
+      sceneId: sceneIds.public,
+    });
+    vi.advanceTimersByTime(PRESENCE_IDLE_MS - 1000);
+    expect(presence.heartbeatUser("u:alice")).toBe(true);
+    vi.advanceTimersByTime(PRESENCE_IDLE_MS - 1000);
+    presence.sweepIdle();
+    expect(presence.getConnection(conn.connectionId)).toBeDefined();
+  });
+
+  it("kick drops presence immediately without reconnect grace", () => {
+    vi.useFakeTimers();
+    const leaves: string[] = [];
+    presence.onEvent((e) => {
+      if (e.kind === "presence.leave" && e.person) leaves.push(e.person.userKey);
+    });
+    presence.connect({
+      userKey: "g:aaaaaaaaaaaaaaaa",
+      displayName: "guest-aaaaaa",
+      sceneId: sceneIds.public,
+    });
+    expect(presence.kick("g:aaaaaaaaaaaaaaaa")).toBe(true);
+    expect(leaves).toEqual(["g:aaaaaaaaaaaaaaaa"]);
+    expect(presence.here(sceneIds.public)).toEqual([]);
+    vi.advanceTimersByTime(PRESENCE_RECONNECT_GRACE_MS);
+    expect(leaves).toEqual(["g:aaaaaaaaaaaaaaaa"]);
+  });
+
+  it("login clears the guest cookie and kicks leftover guest presence", async () => {
+    presence.connect({
+      userKey: "g:aaaaaaaaaaaaaaaa",
+      displayName: "guest-aaaaaa",
+      sceneId: sceneIds.public,
+    });
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Cookie: "proseden_guest=aaaaaaaaaaaaaaaa",
+      },
+      body: JSON.stringify({ username: "alice", password: "secret1" }),
+    });
+    expect(res.status).toBe(200);
+    expect(presence.findByUserKey("g:aaaaaaaaaaaaaaaa")).toBeUndefined();
+    const cookies = res.headers.getSetCookie();
+    expect(cookies.some((c) => /proseden_guest=/i.test(c) && /max-age=0/i.test(c))).toBe(true);
+  });
+
+  it("failed login does not kick guest presence", async () => {
+    presence.connect({
+      userKey: "g:aaaaaaaaaaaaaaaa",
+      displayName: "guest-aaaaaa",
+      sceneId: sceneIds.public,
+    });
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Cookie: "proseden_guest=aaaaaaaaaaaaaaaa",
+      },
+      body: JSON.stringify({ username: "alice", password: "wrong-password" }),
+    });
+    expect(res.status).toBe(401);
+    expect(presence.findByUserKey("g:aaaaaaaaaaaaaaaa")?.displayName).toBe("guest-aaaaaa");
+  });
+
+  it("register kicks leftover guest presence", async () => {
+    presence.connect({
+      userKey: "g:bbbbbbbbbbbbbbbb",
+      displayName: "guest-bbbbbb",
+      sceneId: sceneIds.public,
+    });
+    const res = await app.request("/auth/register", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Cookie: "proseden_guest=bbbbbbbbbbbbbbbb",
+      },
+      body: JSON.stringify({ username: "carol", password: "secret1" }),
+    });
+    expect(res.status).toBe(201);
+    expect(presence.findByUserKey("g:bbbbbbbbbbbbbbbb")).toBeUndefined();
+  });
+
+  it("POST /live/ping requires presence then heartbeats", async () => {
+    const headers = {
+      Authorization: `Bearer ${tokens.alice}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    const missing = await app.request("/live/ping", { method: "POST", headers, body: "{}" });
+    expect(missing.status).toBe(400);
+
+    presence.connect({
+      userKey: "u:alice",
+      displayName: "alice",
+      sceneId: sceneIds.public,
+    });
+    const ok = await app.request("/live/ping", { method: "POST", headers, body: "{}" });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ ok: true });
+  });
+
+  it("moderator can kick a live guest", async () => {
+    presence.connect({
+      userKey: "g:aaaaaaaaaaaaaaaa",
+      displayName: "guest-aaaaaa",
+      sceneId: sceneIds.public,
+    });
+    const denied = await app.request("/live/admin/kick", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.alice}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ userKey: "g:aaaaaaaaaaaaaaaa" }),
+    });
+    expect(denied.status).toBe(403);
+
+    const html = await app.request("/live/admin", {
+      headers: { Authorization: `Bearer ${tokens.mod}`, Accept: "text/html" },
+    });
+    expect(await html.text()).toContain('action="live/admin/kick"');
+
+    const kicked = await app.request("/live/admin/kick", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.mod}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ userKey: "g:aaaaaaaaaaaaaaaa" }),
+    });
+    expect(kicked.status).toBe(200);
+    expect(await kicked.json()).toEqual({ ok: true, userKey: "g:aaaaaaaaaaaaaaaa" });
+    expect(presence.findByUserKey("g:aaaaaaaaaaaaaaaa")).toBeUndefined();
+  });
+
+  it("names guest cookies from the session cookie", () => {
+    expect(guestCookieName("proseden_session")).toBe("proseden_guest");
+    expect(guestCookieName("proseden_garden_session")).toBe("proseden_garden_guest");
   });
 });

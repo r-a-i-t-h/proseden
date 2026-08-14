@@ -44,6 +44,7 @@ const SKIP_WRITE_PATHS = new Set([
   "/auth/logout",
   "/live/say",
   "/live/shout",
+  "/live/ping",
 ]);
 
 const writeRateLimitInner = rateLimit({
@@ -55,7 +56,7 @@ const writeRateLimitInner = rateLimit({
   },
 });
 
-/** Coarse cap on remaining POST/PUT mutations. Auth, chat, and logout have their own rules. */
+/** Coarse cap on remaining POST/PUT mutations. Auth, chat, ping, and logout have their own rules. */
 export const writeRateLimit = createMiddleware(async (c, next) => {
   const method = c.req.method;
   if (method !== "POST" && method !== "PUT") {

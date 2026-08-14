@@ -55,6 +55,8 @@ export interface PresenceConnection {
   lastSeenAt: string;
   /** Optional send callback for SSE; cleared on close. */
   send?: (event: LiveEvent) => void;
+  /** Close the SSE stream (kick / idle). Must not recurse into disconnect. */
+  abort?: () => void;
 }
 
 export const SCENE_BUFFER_MAX = 100;

@@ -80,10 +80,27 @@ export class PresenceStore {
     if (conn) conn.send = send;
   }
 
+  setAbort(connectionId: string, abort: () => void): void {
+    const conn = this.connections.get(connectionId);
+    if (conn) conn.abort = abort;
+  }
+
   heartbeat(connectionId: string): void {
     const conn = this.connections.get(connectionId);
     if (!conn) return;
     conn.lastSeenAt = new Date().toISOString();
+  }
+
+  /** Client proof-of-life (ping / chat). Server SSE pings must not call this. */
+  heartbeatUser(userKey: string): boolean {
+    const now = new Date().toISOString();
+    let found = false;
+    for (const conn of this.connections.values()) {
+      if (conn.userKey !== userKey) continue;
+      conn.lastSeenAt = now;
+      found = true;
+    }
+    return found;
   }
 
   /**
@@ -125,6 +142,39 @@ export class PresenceStore {
     const remaining = this.connectionsForUser(conn.userKey);
     if (remaining.length === 0) {
       this.scheduleLeave(this.toPerson(conn));
+    }
+    this.runAbort(conn);
+  }
+
+  /**
+   * Drop every connection for a userKey and emit leave immediately (no reconnect grace).
+   * Used for login guest handoff and moderator kick.
+   */
+  kick(userKey: string): boolean {
+    const pending = this.takePendingLeave(userKey);
+    const conns = this.connectionsForUser(userKey);
+    const person = conns[0] ? this.toPerson(conns[0]) : pending?.person;
+    for (const conn of conns) {
+      this.connections.delete(conn.connectionId);
+    }
+    if (!person) return false;
+    this.emit({
+      kind: "presence.leave",
+      ts: new Date().toISOString(),
+      sceneId: person.sceneId,
+      person,
+    });
+    for (const conn of conns) this.runAbort(conn);
+    return true;
+  }
+
+  /** Drop connections whose last *client* heartbeat is older than PRESENCE_IDLE_MS. */
+  sweepIdle(): void {
+    const cutoff = Date.now() - PRESENCE_IDLE_MS;
+    for (const conn of [...this.connections.values()]) {
+      if (Date.parse(conn.lastSeenAt) < cutoff) {
+        this.disconnect(conn.connectionId);
+      }
     }
   }
 
@@ -257,6 +307,12 @@ export class PresenceStore {
     });
   }
 
+  private runAbort(conn: PresenceConnection): void {
+    const abort = conn.abort;
+    conn.abort = undefined;
+    abort?.();
+  }
+
   private emit(event: LiveEvent): void {
     for (const listener of this.listeners) listener(event);
     if (event.kind === "presence.join" && event.sceneId !== undefined) {
@@ -269,12 +325,4 @@ export class PresenceStore {
     }
   }
 
-  private sweepIdle(): void {
-    const cutoff = Date.now() - PRESENCE_IDLE_MS;
-    for (const conn of [...this.connections.values()]) {
-      if (Date.parse(conn.lastSeenAt) < cutoff) {
-        this.disconnect(conn.connectionId);
-      }
-    }
-  }
 }

@@ -4,6 +4,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { canRead } from "../access/permissions.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { page, wantsJson } from "../http.js";
+import { guestCookieName, guestUserKey, parseGuestId } from "../live/guest.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import { clientIp } from "../rate-limit/client-ip.js";
 import { renderMessageBodyHtml } from "../render/html.js";
@@ -62,6 +63,7 @@ authRoutes.post("/register", authAttemptLimit, async (c) => {
     maxAge: 60 * 60 * 24 * 14,
     secure: cookieSecure(),
   });
+  dropGuestPresence(c);
 
   if (body.json) {
     return c.json(
@@ -97,6 +99,7 @@ authRoutes.post("/login", authAttemptLimit, async (c) => {
     maxAge: 60 * 60 * 24 * 14,
     secure: cookieSecure(),
   });
+  dropGuestPresence(c);
   if (body.json) {
     return c.json({
       ok: true,
@@ -155,10 +158,18 @@ authRoutes.post("/logout", async (c) => {
   const match = cookieHeader.match(new RegExp(`${cookieName}=([^;]+)`));
   sessions.destroy(bearer ?? match?.[1]);
   deleteCookie(c, cookieName, { path: c.get("assetBase") || "/" });
+  dropGuestPresence(c);
 
   if (wantsJson(c)) return c.json({ ok: true });
   return c.redirect(`${c.get("assetBase")}/`);
 });
+
+function dropGuestPresence(c: Context): void {
+  const name = guestCookieName(c.get("sessionCookieName") ?? "proseden_session");
+  const guestId = parseGuestId(getCookie(c, name));
+  if (guestId) c.get("presence").kick(guestUserKey(guestId));
+  deleteCookie(c, name, { path: c.get("assetBase") || "/" });
+}
 
 function resumeSceneId(world: WorldStore, user: UserRecord): number | undefined {
   if (user.lastSceneId === undefined) return undefined;
