@@ -7,7 +7,7 @@ import { hashPassword } from "../src/auth/password.js";
 import { SessionStore } from "../src/auth/sessions.js";
 import { SceneHub } from "../src/live/hub.js";
 import { PresenceStore } from "../src/live/presence.js";
-import { mergeChatTimeline, PRESENCE_RECONNECT_GRACE_MS } from "../src/live/types.js";
+import { mergeChatTimeline, PRESENCE_RECONNECT_GRACE_MS, SSE_CONNECT_PADDING_BYTES } from "../src/live/types.js";
 import { WorldStore } from "../src/store/world.js";
 
 type App = ReturnType<typeof createApp>;
@@ -279,6 +279,7 @@ describe("live presence and chat", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/text\/event-stream/);
     expect(res.headers.get("x-accel-buffering")).toBe("no");
+    expect(res.headers.get("cache-control")).toMatch(/no-transform/);
 
     const reader = res.body?.getReader();
     expect(reader).toBeTruthy();
@@ -291,6 +292,7 @@ describe("live presence and chat", () => {
       buf += decoder.decode(value, { stream: true });
     }
     await reader!.cancel();
+    expect(buf.startsWith(`:${" ".repeat(SSE_CONNECT_PADDING_BYTES)}\n\n`)).toBe(true);
     expect(buf).toContain("event: presence.snapshot");
     expect(buf).toContain(`"sceneId":${sceneIds.public}`);
   });

@@ -8,7 +8,7 @@ import { apiError, page, sceneBackLink, wantsJson } from "../http.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import { clientIp } from "../rate-limit/client-ip.js";
 import type { LiveEvent } from "../live/types.js";
-import { HEARTBEAT_INTERVAL_MS } from "../live/types.js";
+import { HEARTBEAT_INTERVAL_MS, SSE_CONNECT_PADDING_BYTES } from "../live/types.js";
 import {
   escapeHtml,
   renderPageBackCrumb,
@@ -61,8 +61,9 @@ liveRoutes.get("/events", liveSseLimit, async (c) => {
   // nginx proxies buffer by default; without this (or proxy_buffering off),
   // EventSource hangs on "Connecting…" until the buffer fills.
   c.header("X-Accel-Buffering", "no");
+  // streamSSE overwrites Cache-Control with no-cache; no-transform is set on the Response.
 
-  return streamSSE(c, async (stream) => {
+  const res = streamSSE(c, async (stream) => {
     let closed = false;
     const conn = presence.connect({
       userKey: identity.userKey,
@@ -78,6 +79,10 @@ liveRoutes.get("/events", liveSseLimit, async (c) => {
       });
     };
     presence.setSend(conn.connectionId, send);
+
+    // Chromium sends Accept-Encoding: gzip (EventSource cannot override that).
+    // A 4KB SSE comment forces gzip/proxy buffers to flush so the snapshot is parsed.
+    await stream.write(`:${" ".repeat(SSE_CONNECT_PADDING_BYTES)}\n\n`);
 
     const snap = hub.snapshot(sceneId);
     await stream.writeSSE({
@@ -110,6 +115,8 @@ liveRoutes.get("/events", liveSseLimit, async (c) => {
       cleanup();
     }
   });
+  res.headers.set("Cache-Control", "no-cache, no-transform");
+  return res;
 });
 
 liveRoutes.post("/say", liveChatLimit, async (c) => {
