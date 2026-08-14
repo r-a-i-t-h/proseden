@@ -12,8 +12,8 @@ interface PendingLeave {
 /**
  * In-memory live presence. Coalesce who's-here / online by userKey.
  * Leave is emitted only when the last connection for a userKey drops —
- * and then only after a short reconnect grace so same-scene page loads
- * (detail / artefact) do not flicker leave/arrive.
+ * and then only after a reconnect grace so navigations and brief socket
+ * drops do not flicker leave/arrive.
  */
 export class PresenceStore {
   private connections = new Map<string, PresenceConnection>();

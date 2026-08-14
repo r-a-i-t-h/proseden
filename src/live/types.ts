@@ -66,8 +66,8 @@ export const PRESENCE_IDLE_MS = 3 * 60 * 1000;
 export const HEARTBEAT_INTERVAL_MS = 20_000;
 /** SSE comment bytes written before the first event so gzip/proxy buffers flush. */
 export const SSE_CONNECT_PADDING_BYTES = 4096;
-/** Hold presence across full-page navigations (detail / artefact) so leave/arrive does not flicker. */
-export const PRESENCE_RECONNECT_GRACE_MS = 5_000;
+/** Hold presence across navigations and brief socket drops so leave/arrive does not flicker. */
+export const PRESENCE_RECONNECT_GRACE_MS = 60_000;
 
 /** Interleave scene chat and the global shout ring by time (stable for equal `ts`). */
 export function mergeChatTimeline(messages: ChatMessage[], shouts: ChatMessage[]): ChatMessage[] {

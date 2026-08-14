@@ -277,7 +277,7 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
   }
 
   async function sendPing(): Promise<void> {
-    if (document.visibilityState === "hidden" || !source) return;
+    if (!source) return;
     try {
       await postJson("live/ping", {});
     } catch {
@@ -288,7 +288,6 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
   function connect(): void {
     wanted = true;
     if (sceneId === undefined || source) return;
-    if (document.visibilityState === "hidden") return;
     status.textContent = "Connecting…";
     const es = new EventSource(`live/events?scene=${sceneId}`);
     source = es;
@@ -329,24 +328,8 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
   }
 
   function destroy(): void {
-    document.removeEventListener("visibilitychange", onVisibility);
     disconnect();
   }
-
-  function onVisibility(): void {
-    if (document.visibilityState === "hidden") {
-      stopPing();
-      if (source) {
-        source.close();
-        source = null;
-      }
-      if (wanted) status.textContent = "Away";
-      return;
-    }
-    if (wanted) connect();
-  }
-
-  document.addEventListener("visibilitychange", onVisibility);
 
   window.addEventListener("pageshow", (ev) => {
     if (ev.persisted && wanted) {
