@@ -16,6 +16,7 @@ import {
   userLinkHtml,
   type PageBackLink,
 } from "../render/html.js";
+import { relativeAge } from "../render/relative-age.js";
 
 export const liveRoutes = new Hono();
 
@@ -442,18 +443,6 @@ function renderLiveAdminText(
   }
   lines.push("", "Kick: POST /live/admin/kick { userKey }", "Purge all: POST /live/admin/purge");
   return lines.join("\n");
-}
-
-function relativeAge(iso: string): string {
-  const ms = Date.now() - Date.parse(iso);
-  if (!Number.isFinite(ms) || ms < 0) return iso;
-  const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 48) return `${hr}h ago`;
-  return `${Math.floor(hr / 24)}d ago`;
 }
 
 function liveChatKeys(c: Context): string[] {

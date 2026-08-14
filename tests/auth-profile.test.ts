@@ -289,6 +289,7 @@ describe("profile and password change", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("<h1>alice</h1>");
+    expect(html).toContain("0 scenes · 0 artefacts");
     expect(html).toContain("A keeper of quiet gardens.");
     expect(html).toContain('href="u/alice?hands"');
     expect(html).toContain(">hands</a>");
@@ -299,6 +300,57 @@ describe("profile and password change", () => {
     expect(html).not.toContain("<summary>Sharing</summary>");
     expect(html).toContain("← Back");
     expect(html).toContain('data-nav="back"');
+  });
+
+  it("shows directly owned scene and artefact counts and last seen", async () => {
+    const scene = await world.createScene({
+      owner: "alice",
+      title: "Garden",
+      body: "Quiet.",
+      visibility: "public",
+    });
+    await world.createArtefact({
+      owner: "alice",
+      homeSceneId: scene.id,
+      title: "Trowel",
+      body: "Worn.",
+    });
+    await world.createArtefact({
+      owner: "alice",
+      homeSceneId: scene.id,
+      title: "Seed packet",
+      body: "Empty.",
+    });
+    // Bob owns a scene alice can access via grant — must not count toward alice.
+    const password = await hashPassword("secret1");
+    await world.createUser("bob", password.hash, password.salt);
+    const bobScene = await world.createScene({
+      owner: "bob",
+      title: "Bob's shed",
+      body: "Tools.",
+      visibility: "private",
+    });
+    await world.updateSceneAccess(bobScene.id, {
+      grants: [{ who: "alice", rights: ["read", "edit"] }],
+    });
+    await world.createArtefact({
+      owner: "bob",
+      homeSceneId: bobScene.id,
+      title: "Bob's rake",
+      body: "Not alice's.",
+    });
+
+    const alice = world.getUser("alice")!;
+    await world.saveUser({
+      ...alice,
+      lastSeenAt: new Date(Date.now() - 90_000).toISOString(),
+    });
+
+    const res = await app().request("/u/alice", { headers: { Accept: "text/html" } });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("1 scene · 2 artefacts · last seen 1m ago");
+    expect(html).not.toContain("Bob's rake");
   });
 
   it("shows a named user detail", async () => {
@@ -320,6 +372,21 @@ describe("profile and password change", () => {
       description: "Soft-spoken.",
       details: { coat: "Patched at the elbow." },
     });
+    const scene = await world.createScene({
+      owner: "alice",
+      title: "Study",
+      body: "Quiet.",
+      visibility: "public",
+    });
+    await world.createArtefact({
+      owner: "alice",
+      homeSceneId: scene.id,
+      body: "A pen.",
+    });
+    const alice = world.getUser("alice")!;
+    const lastSeenAt = "2026-01-02T03:04:05.000Z";
+    await world.saveUser({ ...alice, lastSeenAt });
+
     const res = await app().request("/u/alice", {
       headers: { Accept: "application/json" },
     });
@@ -328,6 +395,9 @@ describe("profile and password change", () => {
       username: "alice",
       description: "Soft-spoken.",
       details: { coat: "Patched at the elbow." },
+      ownedScenes: 1,
+      ownedArtefacts: 1,
+      lastSeenAt,
     });
   });
 

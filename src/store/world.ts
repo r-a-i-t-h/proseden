@@ -567,6 +567,12 @@ export class WorldStore implements AccessWorld {
       .sort((a, b) => a.id - b.id);
   }
 
+  listArtefactsOwnedBy(username: string): ArtefactRecord[] {
+    return [...this.artefacts.values()]
+      .filter((a) => a.owner === username)
+      .sort((a, b) => a.id - b.id);
+  }
+
   listUsers(): UserRecord[] {
     return [...this.users.values()].sort((a, b) => a.username.localeCompare(b.username));
   }

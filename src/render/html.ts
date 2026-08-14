@@ -14,6 +14,7 @@ import type {
   UserRecord,
 } from "../model/types.js";
 import { escapeHtml, formatProse } from "./prose.js";
+import { relativeAge } from "./relative-age.js";
 
 export { escapeHtml } from "./prose.js";
 export type { EntityKind } from "../model/types.js";
@@ -506,6 +507,9 @@ export function renderUserProfileBodyHtml(opts: {
   description: string;
   details: Record<string, string>;
   detail?: string;
+  ownedScenes?: number;
+  ownedArtefacts?: number;
+  lastSeenAt?: string;
   back?: PageBackLink;
 }): string {
   const path = userPath(opts.username);
@@ -519,9 +523,34 @@ export function renderUserProfileBodyHtml(opts: {
   const desc = opts.description.trim()
     ? formatProse(opts.description)
     : `<p class="muted">No description yet.</p>`;
+  const meta = renderUserProfileMetaHtml(opts);
   return `${back}<h1>${escapeHtml(opts.username)}</h1>
+    ${meta}
     <div class="desc">${desc}</div>
     ${renderNamedDetailsHtml(path, opts.details)}`;
+}
+
+function renderUserProfileMetaHtml(opts: {
+  ownedScenes?: number;
+  ownedArtefacts?: number;
+  lastSeenAt?: string;
+}): string {
+  const parts: string[] = [];
+  if (opts.ownedScenes !== undefined) {
+    parts.push(pluralCount(opts.ownedScenes, "scene", "scenes"));
+  }
+  if (opts.ownedArtefacts !== undefined) {
+    parts.push(pluralCount(opts.ownedArtefacts, "artefact", "artefacts"));
+  }
+  if (opts.lastSeenAt) {
+    parts.push(`last seen ${relativeAge(opts.lastSeenAt)}`);
+  }
+  if (!parts.length) return "";
+  return `<p class="meta">${parts.map(escapeHtml).join(" · ")}</p>`;
+}
+
+function pluralCount(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
 }
 
 export interface GroupListItem {

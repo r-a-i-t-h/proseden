@@ -9,6 +9,7 @@ import type {
   InboxMessage,
   SceneRecord,
 } from "../model/types.js";
+import { relativeAge } from "./relative-age.js";
 
 function bylineText(owner: string | undefined, base: string): string | undefined {
   if (!owner) return undefined;
@@ -230,6 +231,9 @@ export function renderUserProfileText(opts: {
   description: string;
   details: Record<string, string>;
   detail?: string;
+  ownedScenes?: number;
+  ownedArtefacts?: number;
+  lastSeenAt?: string;
   basePath?: string;
   back?: { href: string; label: string };
 }): string {
@@ -248,6 +252,8 @@ export function renderUserProfileText(opts: {
     if (opts.back) {
       lines.push(`${opts.back.label}  ${base}/${opts.back.href.replace(/^\.\//, "")}`);
     }
+    const meta = userProfileMetaText(opts);
+    if (meta) lines.push(meta);
     lines.push("");
     lines.push(opts.description.trim() || "(No description yet.)");
     lines.push("");
@@ -261,6 +267,24 @@ export function renderUserProfileText(opts: {
     }
   }
   return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function userProfileMetaText(opts: {
+  ownedScenes?: number;
+  ownedArtefacts?: number;
+  lastSeenAt?: string;
+}): string {
+  const parts: string[] = [];
+  if (opts.ownedScenes !== undefined) {
+    parts.push(`${opts.ownedScenes} ${opts.ownedScenes === 1 ? "scene" : "scenes"}`);
+  }
+  if (opts.ownedArtefacts !== undefined) {
+    parts.push(`${opts.ownedArtefacts} ${opts.ownedArtefacts === 1 ? "artefact" : "artefacts"}`);
+  }
+  if (opts.lastSeenAt) {
+    parts.push(`last seen ${relativeAge(opts.lastSeenAt)}`);
+  }
+  return parts.join(" · ");
 }
 
 export function renderGroupsIndexText(

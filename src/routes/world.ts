@@ -658,7 +658,17 @@ worldRoutes.get("/u/:username", (c) => {
   const description = target.description ?? "";
   const details = target.details ?? {};
   const detail = queryDetailName(c);
-  const payload = { username: target.username, description, details };
+  const ownedScenes = world.listScenesOwnedBy(target.username).length;
+  const ownedArtefacts = world.listArtefactsOwnedBy(target.username).length;
+  const lastSeenAt = target.lastSeenAt;
+  const payload = {
+    username: target.username,
+    description,
+    details,
+    ownedScenes,
+    ownedArtefacts,
+    ...(lastSeenAt ? { lastSeenAt } : {}),
+  };
   if (wantsJson(c)) {
     if (detail) {
       return c.json({
@@ -682,6 +692,9 @@ worldRoutes.get("/u/:username", (c) => {
       description,
       details,
       detail,
+      ownedScenes,
+      ownedArtefacts,
+      lastSeenAt,
       back,
     }),
     renderUserProfileText({
@@ -689,6 +702,9 @@ worldRoutes.get("/u/:username", (c) => {
       description,
       details,
       detail,
+      ownedScenes,
+      ownedArtefacts,
+      lastSeenAt,
       basePath: c.get("assetBase"),
       back,
     }),
