@@ -192,11 +192,11 @@ button:hover {
   gap: var(--layout-gap);
 }
 
-/* View: same prose column width as live/edit, centered in the full panel. */
+/* View: same prose column width/alignment as live/edit so progressive
+   enhancement only reveals the sidebar instead of shifting content. */
 .layout:not(.with-manage) .prose {
   width: 100%;
   max-width: calc(100% - var(--sidebar-track) - var(--layout-gap));
-  margin-inline: auto;
 }
 
 @media (max-width: 860px) {
@@ -206,7 +206,6 @@ button:hover {
 
   .layout:not(.with-manage) .prose {
     max-width: none;
-    margin-inline: 0;
   }
 }
 
