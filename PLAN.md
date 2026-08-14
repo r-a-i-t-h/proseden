@@ -117,3 +117,5 @@ flowchart TD
 ## Out of scope
 
 - Nested groups, chat, presence, search, WYSIWYG, multi-process writers, content filters
+- Verb-noun adventure parser (HTTP remains the interaction model)
+- Full adventure-game runtime — see [PUZZLES.md](PUZZLES.md) for the intended middle ground (gates, holdings, combines) when that work is scheduled

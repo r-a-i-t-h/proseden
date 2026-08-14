@@ -2,7 +2,7 @@
 
 A prose-driven textual world served over HTTP. Scenes and artefacts are plain descriptions with optional closer details. Public scenes are open to anyone; private scenes and edits require authentication.
 
-See [LIVE.md](LIVE.md) for presence/chat and [SPEC.md](SPEC.md) for the product vision, [NAVIGATION.md](NAVIGATION.md) for teleport vs exit navigation, and [MULTI_INSTANCE.md](MULTI_INSTANCE.md) for hosting several worlds under one domain. To put Proseden on a VPS behind nginx, follow **[DEPLOY.md](DEPLOY.md)** (installer, updates, DNS, HTTPS). This README covers the v1 implementation.
+See [LIVE.md](LIVE.md) for presence/chat and [SPEC.md](SPEC.md) for the product vision, [NAVIGATION.md](NAVIGATION.md) for teleport vs exit navigation, and [MULTI_INSTANCE.md](MULTI_INSTANCE.md) for hosting several worlds under one domain. Puzzle-shaped exploration (conditions, holdings, combines — not an adventure engine) is sketched in **[PUZZLES.md](PUZZLES.md)**. To put Proseden on a VPS behind nginx, follow **[DEPLOY.md](DEPLOY.md)** (installer, updates, DNS, HTTPS). This README covers the v1 implementation.
 
 ## Quick start
 
