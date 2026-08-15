@@ -179,4 +179,20 @@ function bootPanel(): void {
   });
 }
 
+/** Focus username when Log in / Register details open (browser autofill target). */
+function wireAuthPanelFocus(): void {
+  for (const details of document.querySelectorAll<HTMLDetailsElement>(
+    "#auth-panel details.login, #auth-panel details.register",
+  )) {
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      const username = details.querySelector<HTMLInputElement>('input[name="username"]');
+      if (!username) return;
+      // After the summary click, defer so focus isn't left on <summary>.
+      requestAnimationFrame(() => username.focus());
+    });
+  }
+}
+
+wireAuthPanelFocus();
 bootPanel();
