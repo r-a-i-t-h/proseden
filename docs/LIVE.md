@@ -19,7 +19,7 @@ Preference: signed-in users store `localStorage` key `proseden-panel` = `live` \
 ## Transport
 
 - **SSE** `GET /live/events?scene=<id>` — snapshot then stream (`presence.*`, `chat.*`).
-- Responses set `X-Accel-Buffering: no` so nginx does not buffer the stream (UI otherwise sticks on “Connecting…”). Deploy templates also use a dedicated `location` with `proxy_buffering off` — see [DEPLOY.md](DEPLOY.md) if an older site file is missing it.
+- Responses set `X-Accel-Buffering: no` so nginx does not buffer the stream (UI otherwise sticks on “Connecting…”). Deploy templates also use a dedicated `location` with `proxy_buffering off` — see [DEPLOY.md](../DEPLOY.md) if an older site file is missing it.
 - **POST** `/live/say`, `/live/shout` — require an active presence connection.
 - **POST** `/live/ping` — client proof-of-life (kept running in background tabs). Server SSE pings keep the proxy socket alive but do **not** count as presence.
 - After **3 minutes** without a client ping, idle sweep drops the connection. Reconnect grace is **60 seconds** so navigations and brief socket drops do not emit leave/arrive.

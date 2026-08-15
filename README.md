@@ -2,7 +2,7 @@
 
 A prose-driven textual world served over HTTP. Scenes and artefacts are plain descriptions with optional closer details. Public scenes are open to anyone; private scenes and edits require authentication.
 
-See [LIVE.md](LIVE.md) for presence/chat and [SPEC.md](SPEC.md) for the product vision, [NAVIGATION.md](NAVIGATION.md) for teleport vs exit navigation, and [MULTI_INSTANCE.md](MULTI_INSTANCE.md) for hosting several worlds under one domain. Quests, flags, gated prose, and artefact alchemy are described in **[PUZZLES.md](PUZZLES.md)**. To put Proseden on a VPS behind nginx, follow **[DEPLOY.md](DEPLOY.md)** (installer, updates, DNS, HTTPS). This README covers the v1 implementation.
+See [LIVE.md](docs/LIVE.md) for presence/chat and [SPEC.md](docs/SPEC.md) for the product vision, [NAVIGATION.md](docs/NAVIGATION.md) for teleport vs exit navigation, and [MULTI_INSTANCE.md](docs/MULTI_INSTANCE.md) for hosting several worlds under one domain. Quests, flags, gated prose, and artefact alchemy are described in **[PUZZLES.md](docs/PUZZLES.md)**; the quest file format is **[QUESTS.md](docs/QUESTS.md)**. To put Proseden on a VPS behind nginx, follow **[DEPLOY.md](DEPLOY.md)** (installer, updates, DNS, HTTPS). This README covers the v1 implementation.
 
 ## Quick start
 
@@ -49,7 +49,7 @@ Each instance keeps its own app copy and `data/` directory. `sudo proseden-updat
 
 ### Subdirectory / multiple copies
 
-See [MULTI_INSTANCE.md](MULTI_INSTANCE.md) for reverse-proxy examples, cookie isolation, and a checklist. Short version:
+See [MULTI_INSTANCE.md](docs/MULTI_INSTANCE.md) for reverse-proxy examples, cookie isolation, and a checklist. Short version:
 
 ```bash
 PROSEDEN_BASE_PATH=garden PROSEDEN_DATA=./data-garden PORT=3336 npm start
@@ -180,4 +180,4 @@ Every prose edit is appended to `scenes/<id>.edits.jsonl` (or artefacts). Snapsh
 
 ## Deferred
 
-See [LIVE.md](LIVE.md) for presence/chat. Nested groups, search, follow-mode, and multi-process writers stay out of scope.
+See [LIVE.md](docs/LIVE.md) for presence/chat. Nested groups, search, follow-mode, and multi-process writers stay out of scope.

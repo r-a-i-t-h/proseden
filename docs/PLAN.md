@@ -103,7 +103,7 @@ flowchart TD
 
 - Keep single-process file write-through + atomic renames
 - HTML sidebar sections grow per phase; text/curl stay first-class
-- Update `SPEC.md` / `README.md` as each phase lands
+- Update `docs/SPEC.md` / `README.md` as each phase lands
 - No new database; groups/entrance-groups/staff/history are additional files under `data/`
 
 ## Suggested build order for PRs

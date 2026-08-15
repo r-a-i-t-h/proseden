@@ -250,7 +250,7 @@ include /etc/nginx/snippets/proseden-raith.conf;
 
 into the file you named, if that file contains exactly one `server` block. If it contains several, the installer prints the line and you paste it yourself into the right block.
 
-The app must see the prefix (`PROSEDEN_BASE_PATH=raith`). Do not strip `/raith` in nginx. See [MULTI_INSTANCE.md](MULTI_INSTANCE.md).
+The app must see the prefix (`PROSEDEN_BASE_PATH=raith`). Do not strip `/raith` in nginx. See [MULTI_INSTANCE.md](docs/MULTI_INSTANCE.md).
 
 Do not mix a root-mounted world (cookie path `/`) with `/raith` on the same hostname — the root cookie would be visible under every path.
 
@@ -339,7 +339,7 @@ location /live/events {
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Use the matching loopback port from that instance’s `env`. Path mounts need `/<base>/live/events` instead (see `deploy/nginx/location.conf`). App releases also send `X-Accel-Buffering: no` so buffering is disabled even without this block. See [LIVE.md](LIVE.md).
+Use the matching loopback port from that instance’s `env`. Path mounts need `/<base>/live/events` instead (see `deploy/nginx/location.conf`). App releases also send `X-Accel-Buffering: no` so buffering is disabled even without this block. See [LIVE.md](docs/LIVE.md).
 
 **Update left the world empty**  
 Updates never copy `seed/` over existing `data/`. If `data/meta.json` was deleted, the next start *will* re-seed. Restore `data/` from backup if you still have one.

@@ -32,11 +32,11 @@ PendingLeave
   └─ kick ───────────────────────────► Absent           (emit leave now)
 ```
 
-Implementation: [`src/live/presence.ts`](src/live/presence.ts) (connections, grace, idle, kick) and [`src/live/hub.ts`](src/live/hub.ts) (arrive/leave chat + linger cancel).
+Implementation: [`src/live/presence.ts`](../src/live/presence.ts) (connections, grace, idle, kick) and [`src/live/hub.ts`](../src/live/hub.ts) (arrive/leave chat + linger cancel).
 
 ## Timing constants
 
-From [`src/live/types.ts`](src/live/types.ts):
+From [`src/live/types.ts`](../src/live/types.ts):
 
 | Constant | Value | Role |
 |----------|-------|------|

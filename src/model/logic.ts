@@ -1,4 +1,4 @@
-/** Quest / flag / alchemy types (see PUZZLES.md). */
+/** Quest / flag / alchemy types (see docs/QUESTS.md and docs/PUZZLES.md). */
 
 export type FlagValue = boolean | number | string;
 

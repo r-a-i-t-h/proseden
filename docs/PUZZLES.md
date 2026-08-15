@@ -5,6 +5,7 @@ This document is the canonical design for **quests**, **flags**, **badges**,
 **flag-gated prose**, and **artefact alchemy**.
 
 Related: [SPEC.md](SPEC.md), [PLAN.md](PLAN.md), [NAVIGATION.md](NAVIGATION.md).
+Quest file fields, predicates, knock-ons, and evaluation: **[QUESTS.md](QUESTS.md)**.
 
 ---
 
@@ -87,6 +88,9 @@ type Pred =
 ---
 
 ## Quests
+
+The JSON shape, validation, and evaluation rules are specified in
+**[QUESTS.md](QUESTS.md)** (this section is the design summary).
 
 One file per quest: `data/quests/<name>.json`. The `name` is the write
 namespace. Managers edit via a giant JSON textarea (no fancy builder in v1).

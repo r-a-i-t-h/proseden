@@ -28,7 +28,8 @@ Navigation and interaction will be very simple, in the style of the oldest
 adventure games. E.g. simple "verb noun" constructs.
 
 Despite being an adventure around a described world, including collecting
-artefacts, there is no mission. Quests (see [PUZZLES.md](PUZZLES.md)) are
+artefacts, there is no mission. Quests (see [PUZZLES.md](PUZZLES.md) and
+the JSON definition in [QUESTS.md](QUESTS.md)) are
 named logic bundles that set per-reader flags — not assignments the reader
 is “on.”
 
@@ -184,4 +185,4 @@ Artefacts are collected as inventory *links* to the original; collecting does
 not remove them from their home scene.
 
 On-disk world data lives as text/JSON files under `data/`, loaded fully into
-memory at boot, with write-through on edit. See [README.md](README.md).
+memory at boot, with write-through on edit. See [README.md](../README.md).

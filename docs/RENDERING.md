@@ -3,7 +3,7 @@
 Decision record for how Proseden builds HTML and text responses, and how optional client editors may upgrade form controls.
 
 **Status:** implemented (document model + preference-gated editors)  
-**Related:** [SPEC.md](../SPEC.md), [LIVE.md](../LIVE.md), [NAVIGATION.md](../NAVIGATION.md)
+**Related:** [SPEC.md](SPEC.md), [LIVE.md](LIVE.md), [NAVIGATION.md](NAVIGATION.md)
 
 ---
 
