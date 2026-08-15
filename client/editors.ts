@@ -61,6 +61,38 @@ function wrapSelection(textarea: HTMLTextAreaElement, before: string, after: str
   textarea.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+/** Prefix the current line (e.g. `# ` / `## ` for in-description headings). */
+function prefixLine(textarea: HTMLTextAreaElement, prefix: string): void {
+  const start = textarea.selectionStart;
+  const value = textarea.value;
+  const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+  const lineEndIdx = value.indexOf("\n", start);
+  const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx;
+  const line = value.slice(lineStart, lineEnd);
+  const stripped = line.replace(/^#{1,2}\s+/, "");
+  const next = `${prefix}${stripped}`;
+  textarea.setRangeText(next, lineStart, lineEnd, "end");
+  textarea.focus();
+  const selStart = lineStart + prefix.length;
+  textarea.setSelectionRange(selStart, selStart + stripped.length);
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/** Insert a block line (`---`) with blank lines so formatProse treats it as hr. */
+function insertBlockLine(textarea: HTMLTextAreaElement, line: string): void {
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const value = textarea.value;
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  const lead = before.length === 0 || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+  const trail = after.length === 0 || after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
+  const insert = `${lead}${line}${trail}`;
+  textarea.setRangeText(insert, start, end, "end");
+  textarea.focus();
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 let editorFieldSeq = 0;
 
 function ensureControlId(control: HTMLElement): string {
@@ -105,6 +137,9 @@ function enhanceProse(textarea: HTMLTextAreaElement): void {
     ["strike", "~…~", () => wrapSelection(textarea, "~", "~")],
     ["code", "`…`", () => wrapSelection(textarea, "`", "`")],
     ["link", "[ ]( )", () => wrapSelection(textarea, "[", "](https://)")],
+    ["title", "# …", () => prefixLine(textarea, "# ")],
+    ["sub", "## …", () => prefixLine(textarea, "## ")],
+    ["break", "---", () => insertBlockLine(textarea, "---")],
   ];
   for (const [label, title, action] of buttons) {
     const btn = el("button", { type: "button", class: "editor-tool", title, tabindex: "-1" }, label);
