@@ -362,6 +362,30 @@ export function renderInboxText(
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+export function renderMsgText(
+  usernames: string[],
+  basePath = "",
+  back?: { href: string; label: string },
+  flash?: string,
+): string {
+  const lines = ["[Msg]", ""];
+  if (back) lines.push(`${back.label}  ${basePath}/${back.href.replace(/^\.\//, "")}`, "");
+  if (flash) lines.push(flash, "");
+  lines.push("Send a free-text note to one reader or everyone.");
+  lines.push(
+    "Line breaks and prose adornments are kept: _emphasis_, *bold*, ~strike~, ---, and [links](https://…).",
+  );
+  lines.push("");
+  lines.push(`POST ${basePath}/msg`);
+  lines.push("  to: username or * (ALL users)");
+  lines.push("  body: message text");
+  lines.push("");
+  lines.push("Users:");
+  if (!usernames.length) lines.push("  (none)");
+  else for (const name of usernames) lines.push(`  ${name}`);
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
 export function renderMessageText(title: string, message: string): string {
   return `[${title}]\n\n${message}\n`;
 }

@@ -558,6 +558,12 @@ button:hover {
   border: 1px solid var(--line);
 }
 
+.notice-error {
+  background: rgba(180, 83, 42, 0.14);
+  border-color: rgba(180, 83, 42, 0.35);
+  color: var(--ember);
+}
+
 .json-field {
   display: flex;
   flex-direction: column;

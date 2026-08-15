@@ -61,7 +61,8 @@ exit request to that scene's owner. From any readable scene they may also
 invite another user to view it ("invite to view"). The recipient's inbox lists
 messages in full (no read/unread); Confirm installs an exit request and
 notifies the requester. Delete discards a message. This is a world-building
-facility, not personal mail.
+facility, not personal mail — except that staff managers may send a free-text
+notice to one user or all users.
 
 Artefacts are placed in scenes and, like all else, are merely a text
 description which can have details examined.
@@ -87,7 +88,8 @@ Some admin roles exist:
 "Organisers" can change navigational links and groupings, to restructure the
 world.
 
-"Managers" administer personnel and permissions.
+"Managers" administer personnel and permissions, and may send free-text
+notices to one user or all users.
 
 ## Version Control
 

@@ -19,7 +19,7 @@ import {
 } from "../access/permissions.js";
 import { apiError, liveSceneIdForUser, page, sceneBackLink, wantsJson } from "../http.js";
 import { prepareJsonTextarea } from "../json-textarea.js";
-import type { StaffRole } from "../model/types.js";
+import type { InboxMessage, StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
   escapeHtml,
@@ -30,6 +30,7 @@ import {
   renderInboxBodyHtml,
   renderInventoryBodyHtml,
   renderMessageBodyHtml,
+  renderMsgBodyHtml,
   renderProfileBodyHtml,
   renderSceneBodyHtml,
   renderSnapshotBodyHtml,
@@ -44,6 +45,7 @@ import {
   renderInboxText,
   renderInventoryText,
   renderMessageText,
+  renderMsgText,
   renderProfileText,
   renderSceneText,
   renderSnapshotText,
@@ -1469,6 +1471,123 @@ async function deleteArtefact(c: Context) {
   await world.deleteArtefact(id);
   if (wantsJson(c)) return c.json({ ok: true });
   return c.redirect(`${c.get("assetBase")}/`);
+}
+
+worldRoutes.get("/msg", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!isManager(user, world)) {
+    return apiError(c, user ? 403 : 401, "Manager role required");
+  }
+  const usernames = world.listUsers().map((u) => u.username);
+  const notice = msgSentNotice(c.req.query("sent"), c.req.query("n"));
+  if (wantsJson(c)) {
+    return c.json({ users: usernames, all: "*", ...(notice ? { notice } : {}) });
+  }
+  const back = sceneBackLink(user!, world);
+  return page(
+    c,
+    200,
+    "Msg",
+    renderMsgBodyHtml({ usernames, notice, back }),
+    renderMsgText(usernames, c.get("assetBase"), back, notice),
+  );
+});
+
+worldRoutes.post("/msg", async (c) => sendManagerMessage(c));
+
+async function sendManagerMessage(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!isManager(user, world)) {
+    return apiError(c, user ? 403 : 401, "Manager role required");
+  }
+  const body = await readBody(c);
+  const toRaw = String(body.to ?? body.toUser ?? "").trim();
+  const text = typeof body.body === "string" ? body.body : String(body.body ?? "");
+  const trimmed = text.trim();
+  const usernames = world.listUsers().map((u) => u.username);
+
+  const fail = (error: string) => {
+    if (wantsJson(c) || negotiateFormat(c) === "text") {
+      return apiError(c, 400, error);
+    }
+    const back = sceneBackLink(user!, world);
+    return page(
+      c,
+      400,
+      "Msg",
+      renderMsgBodyHtml({ usernames, selected: toRaw, body: text, error, back }),
+      renderMsgText(usernames, c.get("assetBase"), back, error),
+    );
+  };
+
+  if (!toRaw) return fail("Choose a recipient.");
+  if (!trimmed) return fail("Message is required.");
+
+  const all = toRaw === "*" || /^all(?:\s+users)?$/i.test(toRaw);
+  let recipients: string[];
+  if (all) {
+    if (!usernames.length) return fail("No users to message.");
+    recipients = usernames;
+  } else if (!world.getUser(toRaw)) {
+    return fail(`User not found: ${toRaw}`);
+  } else {
+    recipients = [toRaw];
+  }
+
+  const subject = `Message from ${user!.username}`;
+  const sentTo: string[] = [];
+  const messages: InboxMessage[] = [];
+  try {
+    for (const toUser of recipients) {
+      const message = await world.createInboxMessage({
+        type: "notice",
+        toUser,
+        fromUser: user!.username,
+        subject,
+        body: trimmed,
+      });
+      messages.push(message);
+      sentTo.push(toUser);
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "Could not send message";
+    const partial = sentTo.length
+      ? ` Sent to ${sentTo.length} of ${recipients.length} before failing.`
+      : "";
+    return fail(`${detail}.${partial}`);
+  }
+
+  if (wantsJson(c)) {
+    return c.json({ ok: true, to: sentTo, count: sentTo.length, messages }, 201);
+  }
+  const summary = msgDeliveredSummary(all, sentTo);
+  if (negotiateFormat(c) === "text") {
+    return c.text(renderMessageText("Msg", summary), 201);
+  }
+  const qs = all
+    ? `sent=all&n=${sentTo.length}`
+    : `sent=${encodeURIComponent(sentTo[0]!)}`;
+  return c.redirect(`${c.get("assetBase")}/msg?${qs}`);
+}
+
+function msgSentNotice(sent?: string, nRaw?: string): string | undefined {
+  if (!sent) return undefined;
+  if (sent === "all") {
+    const n = Number(nRaw);
+    const count = Number.isFinite(n) && n > 0 ? n : 0;
+    return `Message sent to all ${count} ${count === 1 ? "user" : "users"}.`;
+  }
+  return `Message sent to ${sent}.`;
+}
+
+function msgDeliveredSummary(all: boolean, sentTo: string[]): string {
+  if (all) {
+    const n = sentTo.length;
+    return `Message sent to all ${n} ${n === 1 ? "user" : "users"}.`;
+  }
+  return `Message sent to ${sentTo[0]}.`;
 }
 
 worldRoutes.get("/staff", (c) => {

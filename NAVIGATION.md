@@ -97,6 +97,10 @@ The request is delivered only to the **owner** of the origin scene (not manage g
 
 This is a world-building aid, not personal messaging.
 
+## Manager messages
+
+Staff managers may send a free-text notice to one registered user or everyone. The Edit toolbar **Msg** link (managers only) opens `/msg`. The form posts `POST /msg` with `to` (a username or `*` / `ALL users`) and `body`. The body keeps line breaks and the same prose adornments as scene text: `_emphasis_`, `*bold*`, `~strike~`, `---` (horizontal rule), and `[label](https://…)`. Each recipient gets a `notice` in their inbox. Success and failure are reported on the Msg page (or as JSON `{ ok, to, messages }` / `{ error }`).
+
 ## View invites
 
 From any scene you can read, **Actions** → Invite posts `POST /s/:id/view-invites` with a username. That delivers an `invite_to_view` message to their inbox (the scene need not be yours). Re-inviting the same person to the same scene refreshes the existing message instead of stacking a second copy. The recipient can follow a link to the scene and delete the message; there is no confirm step, and the invite does not grant access.
@@ -126,7 +130,9 @@ Assume entrance group “Wing”: entrance = scene `2` (private, Bob may read), 
 | `GET` | `/inbox` | Inbox |
 | `POST` | `/inbox/:id/confirm` | Confirm exit request |
 | `POST` | `/inbox/:id/delete` | Delete inbox message |
+| `GET` | `/msg` | Compose a manager message (manager) |
+| `POST` | `/msg` | Send to one user or all (manager) |
 | `POST` | `/eg` | Create entrance group |
 | `POST` | `/s/:id/entrance-group` | Assign/clear entrance group on a scene |
 
-Regression coverage lives in `tests/navigation.test.ts` and `tests/inbox.test.ts`.
+Regression coverage lives in `tests/navigation.test.ts`, `tests/inbox.test.ts`, and `tests/msg.test.ts`.

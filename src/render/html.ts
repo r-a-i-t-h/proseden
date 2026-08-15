@@ -32,7 +32,7 @@ export interface HtmlShellOptions {
   manage?: ManageContext;
   /** Scenes owned by the signed-in user (sidebar jump list). */
   ownedScenes?: OwnedSceneLink[];
-  /** Staff manager — shows /data and /staff links in the sidebar. */
+  /** Staff manager — shows /msg, /data and /staff links in the sidebar. */
   isManager?: boolean;
   /** Moderator or manager — live admin / purge. */
   isModerator?: boolean;
@@ -712,6 +712,42 @@ export function renderInboxBodyHtml(opts: {
     })
     .join("");
   return `${crumb}<h1>Inbox</h1>${notice}${items}`;
+}
+
+export function renderMsgBodyHtml(opts: {
+  usernames: string[];
+  selected?: string;
+  body?: string;
+  notice?: string;
+  error?: string;
+  back?: PageBackLink;
+}): string {
+  const flash = opts.error
+    ? `<p class="notice notice-error" role="alert">${escapeHtml(opts.error)}</p>`
+    : opts.notice
+      ? `<p class="notice" role="status">${escapeHtml(opts.notice)}</p>`
+      : "";
+  const selected = opts.selected ?? "";
+  const options = [
+    `<option value="" disabled${selected ? "" : " selected"}>Choose recipient…</option>`,
+    `<option value="*"${selected === "*" ? " selected" : ""}>ALL users</option>`,
+    ...opts.usernames.map((name) => {
+      const sel = selected === name ? " selected" : "";
+      return `<option value="${escapeAttr(name)}"${sel}>${escapeHtml(name)}</option>`;
+    }),
+  ];
+  return `${renderPageBackCrumb(opts.back)}<h1>Msg</h1>
+    <p class="muted">Send a free-text note to one reader or everyone. Line breaks and prose adornments are kept: _emphasis_, *bold*, ~strike~, ---, and [links](https://…).</p>
+    ${flash}
+    <form method="post" action="msg" class="profile-form profile-appearance" id="msg-form">
+      <label>To
+        <select name="to" required>${options.join("")}</select>
+      </label>
+      <label>Message
+        <textarea name="body" rows="12" required>${escapeHtml(opts.body ?? "")}</textarea>
+      </label>
+      <button type="submit">Send</button>
+    </form>`;
 }
 
 export function renderStaffBodyHtml(opts: {

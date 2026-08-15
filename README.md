@@ -101,6 +101,8 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `GET` | `/inbox` | Inbox (auth); no read/unread — delete to clear |
 | `POST` | `/inbox/:id/confirm` | Confirm exit request (recipient) |
 | `POST`/`DELETE` | `/inbox/:id/delete` or `/inbox/:id` | Delete inbox message (recipient) |
+| `GET` | `/msg` | Compose a manager message (manager) |
+| `POST` | `/msg` | Send free-text notice to one user or all (manager) |
 | `GET` | `/profile` | Profile, password, and share-all (auth) |
 | `POST` | `/auth/register` `/auth/login` `/auth/logout` | Session cookie + optional JSON token |
 | `POST` | `/auth/password` | Change password (auth); other sessions for that user are dropped |
