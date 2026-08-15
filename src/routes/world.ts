@@ -1128,13 +1128,13 @@ worldRoutes.post("/s/:id/view-invites", async (c) => {
   }
 
   const body = await readBody(c);
-  const username = String(body.userid ?? body.username ?? body.toUser ?? "").trim();
-  if (!username) return apiError(c, 400, "Username is required");
-  if (username === user.username) {
+  const userid = String(body.userid ?? "").trim();
+  if (!userid) return apiError(c, 400, "Username is required");
+  if (userid === user.username) {
     return apiError(c, 400, "You cannot invite yourself");
   }
 
-  const invitee = world.getUser(username);
+  const invitee = world.getUser(userid);
   if (!invitee) return apiError(c, 404, "Invalid username");
 
   const sceneName = sceneTitle(scene);
