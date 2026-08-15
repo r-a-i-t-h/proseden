@@ -203,7 +203,7 @@ function renderNode(node: Node): string {
           note: node.control.jsonHelp ?? "",
         });
       }
-      if (node.control.type === "checkbox") {
+      if (node.control.type === "checkbox" || node.control.type === "button") {
         return renderControl(node.control);
       }
       if (node.control.type === "hidden" || !node.label) {
