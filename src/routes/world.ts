@@ -160,6 +160,7 @@ worldRoutes.get("/s/:id", (c) => {
       detail,
       isEntrance,
       accessSummary,
+      subscribed: user ? world.isSubscribed(id, user.username) : undefined,
     }),
     {
       kind: "scene",
@@ -1256,6 +1257,41 @@ worldRoutes.post("/s/:id/view-invites", async (c) => {
   }
 });
 
+worldRoutes.post("/s/:id/subscribe", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const id = Number(c.req.param("id"));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canRead(user, scene, world)) {
+    return apiError(c, 403, "Cannot subscribe to an unreachable scene");
+  }
+
+  try {
+    const subscribers = await world.subscribeScene(id, user.username);
+    if (wantsJson(c)) return c.json({ ok: true, subscribed: true, subscribers });
+    return c.redirect(`${c.get("assetBase")}/s/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not subscribe");
+  }
+});
+
+worldRoutes.delete("/s/:id/subscribe", async (c) => dropSubscribe(c));
+worldRoutes.post("/s/:id/subscribe/drop", async (c) => dropSubscribe(c));
+
+async function dropSubscribe(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = Number(c.req.param("id"));
+  if (!world.getScene(id)) return apiError(c, 404, "Scene not found");
+  const subscribers = await world.unsubscribeScene(id, user.username);
+  if (wantsJson(c)) return c.json({ ok: true, subscribed: false, subscribers });
+  return c.redirect(`${c.get("assetBase")}/s/${id}`);
+}
+
 worldRoutes.delete("/s/:id/exits/:exit", async (c) => removeExit(c));
 worldRoutes.post("/s/:id/exits/:exit/delete", async (c) => removeExit(c));
 worldRoutes.post("/s/:id/exits/delete", async (c) => removeExits(c));
@@ -1526,7 +1562,7 @@ async function deleteArtefact(c: Context) {
     isModerator(user, world) ||
     (!!home && canManage(user, home, world));
   if (!allowed) return apiError(c, 403, "Not allowed to delete this artefact");
-  await world.deleteArtefact(id);
+  await world.deleteArtefact(id, { by: user.username, notify: true });
   if (wantsJson(c)) return c.json({ ok: true });
   return c.redirect(`${c.get("assetBase")}/`);
 }

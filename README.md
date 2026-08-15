@@ -114,6 +114,8 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `POST` | `/s/:id/exits` | Add directed exit (manage origin, or any user from a public junction) |
 | `POST` | `/s/:id/exit-requests` | Ask origin owner to add an exit to a scene you own |
 | `POST` | `/s/:id/view-invites` | Invite a user to view this scene (inbox; auth) |
+| `POST` | `/s/:id/subscribe` | Subscribe to scene content changes (auth; must canRead) |
+| `DELETE`/`POST` | `/s/:id/subscribe` or `/subscribe/drop` | Unsubscribe |
 | `DELETE`/`POST` | `/s/:id/exits/:exit/delete` | Remove one exit (manage/organise any; on a public junction, also exits to scenes you own) |
 | `POST` | `/s/:id/exits/delete` | Remove one or more exits (`exitId` / `exitIds`) |
 | `GET`/`PUT`/`POST` | `/s/:id/access` | Scene grants/denies (manage) |
@@ -160,6 +162,7 @@ data/
   inbox/<id>.json
   scenes/<id>.md
   scenes/<id>.exits.json
+  scenes/<id>.subs.json   # optional; usernames watching this scene
   artefacts/<id>.md
 backup/
   2026-08-11T201530Z.tar.gz   # data/ only; sibling of data/, never nested inside it
@@ -170,6 +173,8 @@ Managers can create, download, and delete archives from **Data**. `proseden-upda
 Prose files use YAML frontmatter plus `## detail:<slug>` sections. Hash-leading lines in body/detail text are saved escaped (`\#`, `\##`) so they cannot be mistaken for section markers.
 
 **Collect** adds an inventory link to the artefact; it does not remove it from its home scene. Multiple readers may collect the same artefact.
+
+**Subscribe** on a scene (signed-in readers) watches title, description, details, and artefacts at that scene. Changes deliver a coalesced `scene_update` inbox notice (kinds merge; no prose text). Exits and ACL edits do not notify.
 
 Every prose edit is appended to `scenes/<id>.edits.jsonl` (or artefacts). Snapshots are retained only when the save includes `retainSnapshot` / “Keep version”, stored under `scenes/<id>.versions/<iso>.md`. Exits are not versioned.
 

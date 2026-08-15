@@ -159,11 +159,26 @@ export interface InviteToViewMessage extends InboxMessageBase {
   sceneId: number;
 }
 
+/** Kinds of content change that trigger scene subscription notices. */
+export type SceneSubscriptionChangeKind =
+  | "title"
+  | "description"
+  | "details"
+  | "artefacts";
+
+/** Notify a subscriber that a watched scene (or its artefacts) changed. */
+export interface SceneUpdateMessage extends InboxMessageBase {
+  type: "scene_update";
+  sceneId: number;
+  changeKinds: SceneSubscriptionChangeKind[];
+}
+
 export type InboxMessage =
   | ExitRequestMessage
   | NoticeMessage
   | PeerMessage
-  | InviteToViewMessage;
+  | InviteToViewMessage
+  | SceneUpdateMessage;
 
 export interface SessionRecord {
   token: string;

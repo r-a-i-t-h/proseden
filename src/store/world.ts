@@ -1,6 +1,6 @@
 import { cp, mkdir, readdir, access, rename, rm, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import type { AccessWorld } from "../access/permissions.js";
+import { canRead, type AccessWorld } from "../access/permissions.js";
 import { normalizeDenies, normalizeGrants, stripLegacyInvites } from "../access/acl.js";
 import type {
   ArtefactMeta,
@@ -20,6 +20,8 @@ import type {
   PeerMessage,
   SceneMeta,
   SceneRecord,
+  SceneSubscriptionChangeKind,
+  SceneUpdateMessage,
   SettingsFile,
   StaffFile,
   StaffRole,
@@ -41,6 +43,8 @@ export class WorldStore implements AccessWorld {
   users = new Map<string, UserRecord>();
   scenes = new Map<number, SceneRecord>();
   exits = new Map<number, ExitRecord[]>();
+  /** Per-scene subscriber usernames (`{id}.subs.json`). */
+  subscriptions = new Map<number, string[]>();
   artefacts = new Map<number, ArtefactRecord>();
   groups = new Map<string, GroupRecord>();
   entranceGroups = new Map<string, EntranceGroupRecord>();
@@ -67,6 +71,7 @@ export class WorldStore implements AccessWorld {
     this.users.clear();
     this.scenes.clear();
     this.exits.clear();
+    this.subscriptions.clear();
     this.artefacts.clear();
     this.groups.clear();
     this.entranceGroups.clear();
@@ -132,6 +137,13 @@ export class WorldStore implements AccessWorld {
         this.exits.set(id, rawExits.map(normalizeExit));
       } else {
         this.exits.set(id, []);
+      }
+
+      const subsPath = join(this.dataDir, "scenes", `${id}.subs.json`);
+      if (await exists(subsPath)) {
+        this.subscriptions.set(id, normalizeSubs(await readJson<unknown>(subsPath)));
+      } else {
+        this.subscriptions.set(id, []);
       }
     }
 
@@ -682,7 +694,7 @@ export class WorldStore implements AccessWorld {
     }
 
     for (const artefact of [...this.artefacts.values()].filter((a) => a.homeSceneId === id)) {
-      await this.deleteArtefact(artefact.id);
+      await this.deleteArtefact(artefact.id, { notify: false });
     }
 
     for (const [fromId, exits] of [...this.exits.entries()]) {
@@ -697,9 +709,11 @@ export class WorldStore implements AccessWorld {
     const egId = scene.entranceGroupId;
     this.scenes.delete(id);
     this.exits.delete(id);
+    this.subscriptions.delete(id);
 
     await rm(join(this.dataDir, "scenes", `${id}.md`), { force: true });
     await rm(join(this.dataDir, "scenes", `${id}.exits.json`), { force: true });
+    await rm(join(this.dataDir, "scenes", `${id}.subs.json`), { force: true });
     await rm(join(this.dataDir, "scenes", `${id}.edits.jsonl`), { force: true });
     await rm(join(this.dataDir, "scenes", `${id}.versions`), { recursive: true, force: true });
 
@@ -720,8 +734,13 @@ export class WorldStore implements AccessWorld {
     }
   }
 
-  async deleteArtefact(id: number): Promise<void> {
-    if (!this.artefacts.has(id)) throw new Error("Artefact not found");
+  async deleteArtefact(
+    id: number,
+    opts?: { by?: string; notify?: boolean },
+  ): Promise<void> {
+    const existing = this.artefacts.get(id);
+    if (!existing) throw new Error("Artefact not found");
+    const homeSceneId = existing.homeSceneId;
     this.artefacts.delete(id);
     await rm(join(this.dataDir, "artefacts", `${id}.md`), { force: true });
     await rm(join(this.dataDir, "artefacts", `${id}.edits.jsonl`), { force: true });
@@ -733,6 +752,9 @@ export class WorldStore implements AccessWorld {
           inventory: user.inventory.filter((i) => i.artefactId !== id),
         });
       }
+    }
+    if (opts?.notify !== false && opts?.by) {
+      await this.notifySceneSubscribers(homeSceneId, ["artefacts"], opts.by);
     }
   }
 
@@ -754,6 +776,109 @@ export class WorldStore implements AccessWorld {
   async saveExits(fromSceneId: number, exits: ExitRecord[]): Promise<void> {
     this.exits.set(fromSceneId, exits);
     await writeJsonAtomic(join(this.dataDir, "scenes", `${fromSceneId}.exits.json`), exits);
+  }
+
+  getSubscribers(sceneId: number): string[] {
+    return this.subscriptions.get(sceneId) ?? [];
+  }
+
+  isSubscribed(sceneId: number, username: string): boolean {
+    return this.getSubscribers(sceneId).includes(username);
+  }
+
+  async saveSubs(sceneId: number, usernames: string[]): Promise<void> {
+    const cleaned = [...new Set(usernames.map((u) => u.trim()).filter(Boolean))].sort();
+    this.subscriptions.set(sceneId, cleaned);
+    await writeJsonAtomic(join(this.dataDir, "scenes", `${sceneId}.subs.json`), cleaned);
+  }
+
+  async subscribeScene(sceneId: number, username: string): Promise<string[]> {
+    if (!this.scenes.has(sceneId)) throw new Error("Scene not found");
+    if (!this.users.has(username)) throw new Error("User not found");
+    const current = this.getSubscribers(sceneId);
+    if (current.includes(username)) return current;
+    await this.saveSubs(sceneId, [...current, username]);
+    return this.getSubscribers(sceneId);
+  }
+
+  async unsubscribeScene(sceneId: number, username: string): Promise<string[]> {
+    const current = this.getSubscribers(sceneId);
+    if (!current.includes(username)) return current;
+    await this.saveSubs(
+      sceneId,
+      current.filter((u) => u !== username),
+    );
+    return this.getSubscribers(sceneId);
+  }
+
+  /**
+   * Fan out (or coalesce) scene_update notices to subscribers.
+   * Skips the editor; drops recipients who no longer canRead (and prunes them).
+   */
+  async notifySceneSubscribers(
+    sceneId: number,
+    kinds: SceneSubscriptionChangeKind[],
+    byUsername: string,
+  ): Promise<void> {
+    const mergedKinds = mergeChangeKinds(kinds);
+    if (!mergedKinds.length) return;
+    const scene = this.scenes.get(sceneId);
+    if (!scene) return;
+
+    const subscribers = this.getSubscribers(sceneId);
+    if (!subscribers.length) return;
+
+    const kept: string[] = [];
+    let pruned = false;
+    for (const username of subscribers) {
+      if (username === byUsername) {
+        kept.push(username);
+        continue;
+      }
+      const user = this.users.get(username);
+      if (!user || !canRead(user, scene, this)) {
+        pruned = true;
+        continue;
+      }
+      kept.push(username);
+      await this.deliverSceneUpdate(user.username, scene, mergedKinds, byUsername);
+    }
+    if (pruned) {
+      await this.saveSubs(sceneId, kept);
+    }
+  }
+
+  private async deliverSceneUpdate(
+    toUser: string,
+    scene: SceneRecord,
+    kinds: SceneSubscriptionChangeKind[],
+    byUsername: string,
+  ): Promise<void> {
+    const sceneName = sceneTitleForNotice(scene);
+    const subject = `Subscribed scene change: ${sceneName}`;
+    const body = `Changed: ${kinds.join(", ")}`;
+    const existing = this.findDuplicateSceneUpdate(toUser, scene.id);
+    if (existing) {
+      const changeKinds = mergeChangeKinds([...existing.changeKinds, ...kinds]);
+      await this.saveInboxMessage({
+        ...existing,
+        createdAt: nowIso(),
+        fromUser: byUsername,
+        subject,
+        body: `Changed: ${changeKinds.join(", ")}`,
+        changeKinds,
+      });
+      return;
+    }
+    await this.createInboxMessage({
+      type: "scene_update",
+      toUser,
+      fromUser: byUsername,
+      subject,
+      body,
+      sceneId: scene.id,
+      changeKinds: kinds,
+    });
   }
 
   async saveArtefact(artefact: ArtefactRecord): Promise<void> {
@@ -814,6 +939,7 @@ export class WorldStore implements AccessWorld {
     };
     await this.saveScene(scene);
     await this.saveExits(id, []);
+    this.subscriptions.set(id, []);
     return scene;
   }
 
@@ -849,6 +975,11 @@ export class WorldStore implements AccessWorld {
     }
     if (fields.length || opts?.retainSnapshot) {
       await this.appendEditLog("scenes", id, entry);
+    }
+
+    const notifyKinds = sceneContentChangeKinds(fields);
+    if (notifyKinds.length && opts?.by) {
+      await this.notifySceneSubscribers(id, notifyKinds, opts.by);
     }
     return updated;
   }
@@ -887,6 +1018,13 @@ export class WorldStore implements AccessWorld {
     }
     if (fields.length || opts?.retainSnapshot) {
       await this.appendEditLog("artefacts", id, entry);
+    }
+
+    if (fields.length && opts?.by) {
+      const homes = new Set<number>([existing.homeSceneId, updated.homeSceneId]);
+      for (const homeId of homes) {
+        await this.notifySceneSubscribers(homeId, ["artefacts"], opts.by);
+      }
     }
     return updated;
   }
@@ -1047,6 +1185,7 @@ export class WorldStore implements AccessWorld {
       details: input.details ?? {},
     };
     await this.saveArtefact(artefact);
+    await this.notifySceneSubscribers(input.homeSceneId, ["artefacts"], input.owner);
     return artefact;
   }
 
@@ -1134,12 +1273,22 @@ export class WorldStore implements AccessWorld {
     return undefined;
   }
 
+  findDuplicateSceneUpdate(toUser: string, sceneId: number): SceneUpdateMessage | undefined {
+    for (const m of this.inbox.values()) {
+      if (m.type === "scene_update" && m.toUser === toUser && m.sceneId === sceneId) {
+        return m;
+      }
+    }
+    return undefined;
+  }
+
   async createInboxMessage(
     input:
       | (Omit<ExitRequestMessage, "id" | "createdAt"> & { createdAt?: string })
       | (Omit<NoticeMessage, "id" | "createdAt"> & { createdAt?: string })
       | (Omit<PeerMessage, "id" | "createdAt"> & { createdAt?: string })
-      | (Omit<InviteToViewMessage, "id" | "createdAt"> & { createdAt?: string }),
+      | (Omit<InviteToViewMessage, "id" | "createdAt"> & { createdAt?: string })
+      | (Omit<SceneUpdateMessage, "id" | "createdAt"> & { createdAt?: string }),
   ): Promise<InboxMessage> {
     const id = this.meta.nextInboxId ?? 1;
     this.meta.nextInboxId = id + 1;
@@ -1169,6 +1318,18 @@ export class WorldStore implements AccessWorld {
         subject: input.subject,
         body: input.body,
         sceneId: input.sceneId,
+      };
+    } else if (input.type === "scene_update") {
+      message = {
+        id,
+        type: "scene_update",
+        toUser: input.toUser,
+        fromUser: input.fromUser,
+        createdAt,
+        subject: input.subject,
+        body: input.body,
+        sceneId: input.sceneId,
+        changeKinds: mergeChangeKinds(input.changeKinds),
       };
     } else if (input.type === "message") {
       message = {
@@ -1348,6 +1509,16 @@ function normalizeInboxMessage(
     if (!Number.isFinite(sceneId)) return undefined;
     return { ...base, type: "invite_to_view", sceneId };
   }
+  if (type === "scene_update") {
+    const sceneId = Number(raw.sceneId);
+    if (!Number.isFinite(sceneId)) return undefined;
+    return {
+      ...base,
+      type: "scene_update",
+      sceneId,
+      changeKinds: normalizeChangeKinds(raw.changeKinds),
+    };
+  }
   if (type === "notice") {
     return { ...base, type: "notice" };
   }
@@ -1437,6 +1608,55 @@ function changedFields(
     if (JSON.stringify(prev[key]) !== JSON.stringify(value)) fields.push(key);
   }
   return fields;
+}
+
+const SCENE_CHANGE_KIND_ORDER: SceneSubscriptionChangeKind[] = [
+  "title",
+  "description",
+  "details",
+  "artefacts",
+];
+
+function sceneContentChangeKinds(fields: string[]): SceneSubscriptionChangeKind[] {
+  const kinds: SceneSubscriptionChangeKind[] = [];
+  if (fields.includes("title")) kinds.push("title");
+  if (fields.includes("body")) kinds.push("description");
+  if (fields.includes("details")) kinds.push("details");
+  return kinds;
+}
+
+function mergeChangeKinds(
+  kinds: readonly SceneSubscriptionChangeKind[],
+): SceneSubscriptionChangeKind[] {
+  const set = new Set(kinds);
+  return SCENE_CHANGE_KIND_ORDER.filter((k) => set.has(k));
+}
+
+function normalizeChangeKinds(raw: unknown): SceneSubscriptionChangeKind[] {
+  if (!Array.isArray(raw)) return [];
+  const allowed = new Set<string>(SCENE_CHANGE_KIND_ORDER);
+  const kinds: SceneSubscriptionChangeKind[] = [];
+  for (const item of raw) {
+    const s = String(item);
+    if (allowed.has(s)) kinds.push(s as SceneSubscriptionChangeKind);
+  }
+  return mergeChangeKinds(kinds);
+}
+
+function normalizeSubs(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return [
+    ...new Set(
+      raw
+        .map((v) => String(v).trim())
+        .filter(Boolean),
+    ),
+  ].sort();
+}
+
+function sceneTitleForNotice(scene: { id: number; title?: string }): string {
+  const title = scene.title?.trim();
+  return title || `scene ${scene.id}`;
 }
 
 function definedEntries<T extends object>(patch: T): Partial<T> {

@@ -63,6 +63,9 @@ export function inboxPageView(opts: {
       if (msg.type === "invite_to_view") {
         textLines.push(`  View: GET {base}/s/${msg.sceneId}`);
       }
+      if (msg.type === "scene_update") {
+        textLines.push(`  View: GET {base}/s/${msg.sceneId}`);
+      }
       if (peerOn && msg.type === "message") {
         textLines.push(`  Reply: GET {base}/inbox?to=${encodeURIComponent(msg.fromUser)}`);
       }
@@ -130,7 +133,7 @@ export function inboxPageView(opts: {
             ),
           ]
         : [
-            ...(msg.type === "invite_to_view"
+            ...(msg.type === "invite_to_view" || msg.type === "scene_update"
               ? [unsafeHtml(`<a href="s/${msg.sceneId}">View scene</a>`)]
               : []),
             ...(peerOn && msg.type === "message"

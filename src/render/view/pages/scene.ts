@@ -109,6 +109,8 @@ export function scenePageView(opts: {
   detail?: string;
   isEntrance?: boolean;
   accessSummary?: string;
+  /** When set (signed-in), show subscribe/unsubscribe like artefact Collect. */
+  subscribed?: boolean;
 }): PageView {
   const { scene, exits, artefacts, detail, isEntrance } = opts;
   const title = scene.title ?? `Scene ${scene.id}`;
@@ -157,6 +159,41 @@ export function scenePageView(opts: {
       )
     : undefined;
 
+  const subscribe =
+    opts.subscribed === undefined
+      ? undefined
+      : opts.subscribed
+        ? htmlOnly(
+            form(
+              {
+                method: "post",
+                action: `s/${scene.id}/subscribe/drop`,
+                class: "reader-action",
+              },
+              button("Unsubscribe"),
+            ),
+          )
+        : htmlOnly(
+            form(
+              {
+                method: "post",
+                action: `s/${scene.id}/subscribe`,
+                class: "reader-action",
+              },
+              button("Subscribe"),
+            ),
+          );
+
+  const textRecipes = [
+    `Teleport: GET {base}/s/<id>?from=${scene.id}`,
+    `Invite to view: POST {base}/s/${scene.id}/view-invites`,
+  ];
+  if (opts.subscribed === false) {
+    textRecipes.push(`Subscribe: POST {base}/s/${scene.id}/subscribe`);
+  } else if (opts.subscribed === true) {
+    textRecipes.push(`Unsubscribe: POST {base}/s/${scene.id}/subscribe/drop`);
+  }
+
   return pageView(
     title,
     nodes(
@@ -178,6 +215,7 @@ export function scenePageView(opts: {
             ),
           ])
         : undefined,
+      subscribe,
       htmlOnly(
         section("Actions", [
           form(
@@ -215,10 +253,7 @@ export function scenePageView(opts: {
       ),
       textOnly({
         type: "actionRecipes",
-        recipes: [
-          `Teleport: GET {base}/s/<id>?from=${scene.id}`,
-          `Invite to view: POST {base}/s/${scene.id}/view-invites`,
-        ],
+        recipes: textRecipes,
       }),
       opts.accessSummary
         ? textOnly(
