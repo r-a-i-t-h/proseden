@@ -103,7 +103,7 @@ a:hover {
   margin: 0.5rem 0;
 }
 
-.action-form label {
+.action-form .labeled-field {
   display: grid;
   grid-template-columns: 12rem 5.5rem;
   align-items: center;
@@ -112,8 +112,9 @@ a:hover {
   font-size: inherit;
 }
 
-.action-form label:has(> input[type="hidden"]) {
-  display: contents;
+.action-form .labeled-field > label {
+  color: inherit;
+  font-size: inherit;
 }
 
 .action-form input[name="to"],
