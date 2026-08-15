@@ -104,19 +104,22 @@ a:hover {
 }
 
 .action-form label {
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: 12rem 5.5rem;
   align-items: center;
-  gap: 0.4rem;
+  column-gap: 0.4rem;
   color: inherit;
   font-size: inherit;
 }
 
-.action-form input[name="to"] {
-  width: 5.5rem;
+.action-form label:has(> input[type="hidden"]) {
+  display: contents;
 }
 
-.action-form input[name="username"] {
-  width: 8rem;
+.action-form input[name="to"],
+.action-form input[name="uid"] {
+  width: 5.5rem;
+  box-sizing: border-box;
 }
 
 label {

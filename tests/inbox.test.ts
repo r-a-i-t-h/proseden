@@ -246,7 +246,7 @@ describe("inbox / view invites", () => {
     const res = await app.request("/s/1/view-invites", {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ userid: "alice" }),
+      body: JSON.stringify({ uid: "alice" }),
     });
     expect(res.status).toBe(401);
   });
@@ -255,7 +255,7 @@ describe("inbox / view invites", () => {
     const res = await app.request("/s/1/view-invites", {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ userid: "carol" }),
+      body: JSON.stringify({ uid: "carol" }),
     });
     expect(res.status).toBe(201);
     const msg = await res.json();
@@ -280,21 +280,21 @@ describe("inbox / view invites", () => {
     const self = await app.request("/s/1/view-invites", {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ userid: "bob" }),
+      body: JSON.stringify({ uid: "bob" }),
     });
     expect(self.status).toBe(400);
 
     const missing = await app.request("/s/1/view-invites", {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ userid: "nobody" }),
+      body: JSON.stringify({ uid: "nobody" }),
     });
     expect(missing.status).toBe(404);
 
     const privateScene = await app.request("/s/2/view-invites", {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ userid: "carol" }),
+      body: JSON.stringify({ uid: "carol" }),
     });
     expect(privateScene.status).toBe(403);
   });
@@ -303,7 +303,7 @@ describe("inbox / view invites", () => {
     const first = await app.request("/s/1/view-invites", {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ userid: "carol" }),
+      body: JSON.stringify({ uid: "carol" }),
     });
     expect(first.status).toBe(201);
     const original = await first.json();
@@ -311,7 +311,7 @@ describe("inbox / view invites", () => {
     const second = await app.request("/s/1/view-invites", {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ userid: "carol" }),
+      body: JSON.stringify({ uid: "carol" }),
     });
     expect(second.status).toBe(200);
     const refreshed = await second.json();
@@ -323,7 +323,7 @@ describe("inbox / view invites", () => {
     await app.request("/s/3/view-invites", {
       method: "POST",
       headers: auth(tokens.alice),
-      body: JSON.stringify({ userid: "bob" }),
+      body: JSON.stringify({ uid: "bob" }),
     });
 
     const page = await app.request("/inbox", {
