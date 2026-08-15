@@ -1,9 +1,11 @@
 /**
  * Preference-gated progressive enhancement for prose/JSON textareas.
  * Default is plain — upgrades only when the user opts in.
+ * Structured JSON table editors (data-json-kind) appear with the enhanced JSON tools.
  */
 
 import { formatJsonTextarea, prepareJsonTextarea } from "../src/json-textarea.js";
+import { getJsonTableSchema } from "../src/json-table.js";
 
 export type EditorPref = "plain" | "enhanced";
 
@@ -117,10 +119,68 @@ function enhanceProse(textarea: HTMLTextAreaElement): void {
   insertBeforeTextarea(textarea, toolbar);
 }
 
-function enhanceJson(textarea: HTMLTextAreaElement): void {
-  if (textarea.dataset.enhanced === "json") return;
-  textarea.dataset.enhanced = "json";
+type JsonTextarea = HTMLTextAreaElement & { __jsonFormatBlur?: () => void };
+
+function stripJsonChrome(textarea: JsonTextarea): void {
+  if (textarea.__jsonFormatBlur) {
+    textarea.removeEventListener("blur", textarea.__jsonFormatBlur);
+    delete textarea.__jsonFormatBlur;
+  }
+  const prev = textarea.previousElementSibling;
+  if (prev?.classList.contains("editor-toolbar")) prev.remove();
+  const next = textarea.nextElementSibling;
+  if (next?.classList.contains("editor-json-status")) next.remove();
+  delete textarea.dataset.enhanced;
+}
+
+function stripEnhancement(textarea: HTMLTextAreaElement): void {
+  if (textarea.dataset.editor === "json") {
+    stripJsonChrome(textarea);
+    return;
+  }
+  const prev = textarea.previousElementSibling;
+  if (prev?.classList.contains("editor-toolbar")) prev.remove();
+  const next = textarea.nextElementSibling;
+  if (next?.classList.contains("editor-json-status")) next.remove();
+  delete textarea.dataset.enhanced;
+}
+
+/**
+ * JSON tools (format + structured editor) only when the enhanced JSON
+ * preference is on. Editor requires a registered data-json-kind schema.
+ */
+function syncJsonToolbar(textarea: JsonTextarea, formatOn: boolean): void {
+  const schema = getJsonTableSchema(textarea.dataset.jsonKind);
+  const wantsEditor = formatOn && Boolean(schema);
+  if (!formatOn) {
+    stripJsonChrome(textarea);
+    return;
+  }
+
+  const desired = `${wantsEditor ? "editor" : ""}|format`;
+  if (textarea.dataset.enhanced === `json:${desired}`) return;
+
+  stripJsonChrome(textarea);
+
   const status = el("p", { class: "editor-json-status muted", hidden: true });
+  const bar = el("div", { class: "editor-toolbar", role: "toolbar", "aria-label": "JSON tools" });
+
+  if (wantsEditor) {
+    const editorBtn = el(
+      "button",
+      { type: "button", class: "editor-tool", title: "Edit as table", tabindex: "-1" },
+      "editor",
+    );
+    editorBtn.addEventListener("mousedown", (ev) => ev.preventDefault());
+    editorBtn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      void import("./json-table-editor.js").then(({ openJsonTableEditor }) => {
+        openJsonTableEditor(textarea, { status, returnFocus: editorBtn });
+      });
+    });
+    bar.append(editorBtn);
+  }
+
   const format = (): void => {
     try {
       const parsed = JSON.parse(prepareJsonTextarea(textarea.value));
@@ -134,39 +194,36 @@ function enhanceJson(textarea: HTMLTextAreaElement): void {
       status.textContent = err instanceof Error ? err.message : "Invalid JSON";
     }
   };
+  textarea.__jsonFormatBlur = format;
   textarea.addEventListener("blur", format);
-  const bar = el("div", { class: "editor-toolbar", role: "toolbar", "aria-label": "JSON tools" });
-  const btn = el("button", { type: "button", class: "editor-tool", title: "Format JSON", tabindex: "-1" }, "format");
-  btn.addEventListener("mousedown", (ev) => ev.preventDefault());
-  btn.addEventListener("click", (ev) => {
+  const formatBtn = el(
+    "button",
+    { type: "button", class: "editor-tool", title: "Format JSON", tabindex: "-1" },
+    "format",
+  );
+  formatBtn.addEventListener("mousedown", (ev) => ev.preventDefault());
+  formatBtn.addEventListener("click", (ev) => {
     ev.preventDefault();
     format();
   });
-  bar.append(btn);
+  bar.append(formatBtn);
+
   insertBeforeTextarea(textarea, bar);
   textarea.insertAdjacentElement("afterend", status);
-}
-
-function stripEnhancement(textarea: HTMLTextAreaElement): void {
-  const prev = textarea.previousElementSibling;
-  if (prev?.classList.contains("editor-toolbar")) prev.remove();
-  const next = textarea.nextElementSibling;
-  if (next?.classList.contains("editor-json-status")) next.remove();
-  delete textarea.dataset.enhanced;
+  textarea.dataset.enhanced = `json:${desired}`;
 }
 
 /** Upgrade or restore textareas marked with data-editor according to preferences. */
 export function applyEditorPreferences(root: ParentNode = document): void {
   const prosePref = readEditorPref("prose");
   const jsonPref = readEditorPref("json");
-  for (const node of root.querySelectorAll<HTMLTextAreaElement>("textarea[data-editor]")) {
+  for (const node of Array.from(root.querySelectorAll<HTMLTextAreaElement>("textarea[data-editor]"))) {
     const kind = node.dataset.editor;
     if (kind === "prose") {
       if (prosePref === "enhanced") enhanceProse(node);
       else stripEnhancement(node);
     } else if (kind === "json") {
-      if (jsonPref === "enhanced") enhanceJson(node);
-      else stripEnhancement(node);
+      syncJsonToolbar(node, jsonPref === "enhanced");
     }
   }
 }

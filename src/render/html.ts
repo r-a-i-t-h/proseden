@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { dataJsonKindAttr } from "../json-table.js";
 import { formatJsonTextarea } from "../json-textarea.js";
 import type {
   ArtefactRecord,
@@ -622,7 +623,7 @@ function renderJsonFieldHtml(
           </div>
         </details>
       </div>
-      <textarea name="${escapeAttr(name)}" rows="${rows}">${escapeHtml(formatJsonTextarea(value))}</textarea>
+      <textarea name="${escapeAttr(name)}" rows="${rows}" data-editor="json"${dataJsonKindAttr(name)}>${escapeHtml(formatJsonTextarea(value))}</textarea>
     </div>`;
 }
 

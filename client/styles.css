@@ -962,3 +962,124 @@ button.linkish {
 .editor-json-status[data-kind="err"] {
   color: var(--ember);
 }
+
+.json-table-dialog {
+  width: min(56rem, calc(100vw - 2rem));
+  max-height: min(90vh, 52rem);
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--paper, #f7f3ea);
+  color: var(--ink);
+  box-shadow: 0 1rem 2.5rem rgba(28, 36, 30, 0.28);
+}
+
+.json-table-dialog::backdrop {
+  background: rgba(28, 36, 30, 0.45);
+}
+
+.json-table-form {
+  display: flex;
+  flex-direction: column;
+  max-height: min(90vh, 52rem);
+  padding: 1rem 1.1rem 0.9rem;
+  gap: 0.65rem;
+}
+
+.json-table-title {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.json-table-error {
+  margin: 0;
+  color: var(--ember);
+}
+
+.json-table-scroll {
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 12rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.json-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.json-table th,
+.json-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.json-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--fog);
+  font-weight: 600;
+  z-index: 1;
+}
+
+.json-table-text,
+.json-table-prose {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+}
+
+.json-table-prose {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.json-table-rights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  padding-top: 0.2rem;
+}
+
+.json-table-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.json-table-actions {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.json-table-actions .editor-tool {
+  margin-right: 0.2rem;
+}
+
+.json-table-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding-top: 0.15rem;
+}
+
+.json-table-footer-spacer {
+  flex: 1 1 auto;
+}
+
+.json-table-apply {
+  border-color: var(--moss);
+}

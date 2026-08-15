@@ -2,6 +2,7 @@ import { escapeAttr } from "../escape.js";
 import { entityDisplayTitle, userPath } from "../entity.js";
 import { escapeHtml, formatProse } from "../prose.js";
 import { relativeAgeHtml } from "../relative-age.js";
+import { dataJsonKindAttr } from "../../json-table.js";
 import { formatJsonTextarea } from "../../json-textarea.js";
 import type { Control, MetaPart, Node } from "./types.js";
 
@@ -108,7 +109,7 @@ function renderJsonField(node: Extract<Node, { type: "jsonField" }>): string {
           </div>
         </details>
       </div>
-      <textarea name="${escapeAttr(node.name)}" rows="${node.rows ?? 10}" data-editor="json">${escapeHtml(formatJsonTextarea(node.value))}</textarea>
+      <textarea name="${escapeAttr(node.name)}" rows="${node.rows ?? 10}" data-editor="json"${dataJsonKindAttr(node.name)}>${escapeHtml(formatJsonTextarea(node.value))}</textarea>
     </div>`;
 }
 

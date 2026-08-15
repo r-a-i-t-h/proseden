@@ -1,3 +1,4 @@
+import { jsonKindFromFieldName } from "../src/json-table.js";
 import { formatJsonTextarea } from "../src/json-textarea.js";
 import {
   DENIES_EXAMPLE,
@@ -133,9 +134,15 @@ function field(labelText: string, control: HTMLElement): HTMLElement {
 
 function jsonField(label: string, name: string, rows: number, value: unknown, example: string, note: string) {
   const fallback = name === "detailsJson" ? {} : [];
+  const kind = jsonKindFromFieldName(name);
   const textarea = el(
     "textarea",
-    { name, rows: String(rows), "data-editor": "json" },
+    {
+      name,
+      rows: String(rows),
+      "data-editor": "json",
+      ...(kind ? { "data-json-kind": kind } : {}),
+    },
     formatJsonTextarea(value ?? fallback),
   );
   const help = el(
