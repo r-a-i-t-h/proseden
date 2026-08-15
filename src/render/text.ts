@@ -101,7 +101,9 @@ export function renderSceneText(opts: {
       }
       lines.push("");
     }
-    lines.push(`Travel: GET ${base}/s/<id>?from=${scene.id}`);
+    lines.push("Actions:");
+    lines.push(`  Teleport: GET ${base}/s/<id>?from=${scene.id}`);
+    lines.push(`  Invite to view: POST ${base}/s/${scene.id}/view-invites`);
     lines.push("");
     if (opts.accessSummary) {
       lines.push("Access:");
@@ -349,6 +351,9 @@ export function renderInboxText(
       lines.push(msg.body);
       if (msg.type === "exit_request") {
         lines.push(`  Confirm: POST ${basePath}/inbox/${msg.id}/confirm`);
+      }
+      if (msg.type === "invite_to_view") {
+        lines.push(`  View: GET ${basePath}/s/${msg.sceneId}`);
       }
       lines.push(`  Delete: POST ${basePath}/inbox/${msg.id}/delete`);
       lines.push("");

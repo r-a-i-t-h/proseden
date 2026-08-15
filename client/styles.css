@@ -95,15 +95,28 @@ a:hover {
   width: 8rem;
 }
 
-.travel-form {
+.action-form {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  align-items: end;
+  align-items: center;
+  margin: 0.5rem 0;
 }
 
-.travel-form input[name="to"] {
+.action-form label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  color: inherit;
+  font-size: inherit;
+}
+
+.action-form input[name="to"] {
   width: 5.5rem;
+}
+
+.action-form input[name="username"] {
+  width: 8rem;
 }
 
 label {

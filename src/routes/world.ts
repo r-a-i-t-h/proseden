@@ -483,6 +483,11 @@ function sceneLabel(scene: { id: number; title?: string }): string {
   return title ? `${title} (${scene.id})` : `Scene ${scene.id}`;
 }
 
+function sceneTitle(scene: { id: number; title?: string }): string {
+  const title = scene.title?.trim();
+  return title || `scene ${scene.id}`;
+}
+
 // --- mutations ---
 
 worldRoutes.post("/s", async (c) => {
@@ -1133,6 +1138,61 @@ worldRoutes.post("/s/:id/exit-requests", async (c) => {
     return c.redirect(`${c.get("assetBase")}/s/${id}`);
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Could not create exit request");
+  }
+});
+
+worldRoutes.post("/s/:id/view-invites", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const id = Number(c.req.param("id"));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canRead(user, scene, world)) {
+    return apiError(c, 403, "Cannot invite others to an unreachable scene");
+  }
+
+  const body = await readBody(c);
+  const username = String(body.username ?? body.toUser ?? "").trim();
+  if (!username) return apiError(c, 400, "Username is required");
+  if (username === user.username) {
+    return apiError(c, 400, "You cannot invite yourself");
+  }
+
+  const invitee = world.getUser(username);
+  if (!invitee) return apiError(c, 404, "Invalid username");
+
+  const sceneName = sceneTitle(scene);
+  const subject = `Invite to view: ${sceneName}`;
+  const messageBody = `${user.username} has invited you to view the scene, ${sceneName}. It's either new or has been updated recently.`;
+
+  try {
+    const existing = world.findDuplicateViewInvite(invitee.username, user.username, id);
+    if (existing) {
+      const refreshed = {
+        ...existing,
+        createdAt: new Date().toISOString(),
+        subject,
+        body: messageBody,
+      };
+      await world.saveInboxMessage(refreshed);
+      if (wantsJson(c)) return c.json(refreshed);
+      return c.redirect(`${c.get("assetBase")}/s/${id}`);
+    }
+
+    const message = await world.createInboxMessage({
+      type: "invite_to_view",
+      toUser: invitee.username,
+      fromUser: user.username,
+      subject,
+      body: messageBody,
+      sceneId: id,
+    });
+    if (wantsJson(c)) return c.json(message, 201);
+    return c.redirect(`${c.get("assetBase")}/s/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not send invite");
   }
 });
 

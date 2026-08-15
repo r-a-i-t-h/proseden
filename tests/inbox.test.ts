@@ -227,3 +227,115 @@ describe("inbox / exit requests", () => {
     expect(html).toContain("Confirm");
   });
 });
+
+describe("inbox / view invites", () => {
+  let world: WorldStore;
+  let app: App;
+  let dataDir: string;
+  let tokens: Record<string, string>;
+
+  beforeEach(async () => {
+    ({ world, app, dataDir, tokens } = await createTestWorld());
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it("rejects unauthenticated invites", async () => {
+    const res = await app.request("/s/1/view-invites", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "alice" }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("creates an invite from a scene you do not own", async () => {
+    const res = await app.request("/s/1/view-invites", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ username: "carol" }),
+    });
+    expect(res.status).toBe(201);
+    const msg = await res.json();
+    expect(msg.type).toBe("invite_to_view");
+    expect(msg.toUser).toBe("carol");
+    expect(msg.fromUser).toBe("bob");
+    expect(msg.sceneId).toBe(1);
+    expect(msg.body).toBe(
+      "bob has invited you to view the scene, Public Hall. It's either new or has been updated recently.",
+    );
+
+    const carolInbox = await app.request("/inbox", { headers: auth(tokens.carol) });
+    const carol = await carolInbox.json();
+    expect(carol.messages).toHaveLength(1);
+    expect(carol.messages[0].id).toBe(msg.id);
+
+    const aliceInbox = await app.request("/inbox", { headers: auth(tokens.alice) });
+    expect((await aliceInbox.json()).messages).toHaveLength(0);
+  });
+
+  it("rejects inviting yourself, a missing user, or an unreachable scene", async () => {
+    const self = await app.request("/s/1/view-invites", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ username: "bob" }),
+    });
+    expect(self.status).toBe(400);
+
+    const missing = await app.request("/s/1/view-invites", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ username: "nobody" }),
+    });
+    expect(missing.status).toBe(404);
+
+    const privateScene = await app.request("/s/2/view-invites", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ username: "carol" }),
+    });
+    expect(privateScene.status).toBe(403);
+  });
+
+  it("refreshes a pending invite instead of stacking a duplicate", async () => {
+    const first = await app.request("/s/1/view-invites", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ username: "carol" }),
+    });
+    expect(first.status).toBe(201);
+    const original = await first.json();
+
+    const second = await app.request("/s/1/view-invites", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ username: "carol" }),
+    });
+    expect(second.status).toBe(200);
+    const refreshed = await second.json();
+    expect(refreshed.id).toBe(original.id);
+    expect(world.listInboxFor("carol")).toHaveLength(1);
+  });
+
+  it("shows the invite in the inbox HTML with a scene link", async () => {
+    await app.request("/s/3/view-invites", {
+      method: "POST",
+      headers: auth(tokens.alice),
+      body: JSON.stringify({ username: "bob" }),
+    });
+
+    const page = await app.request("/inbox", {
+      headers: { Authorization: `Bearer ${tokens.bob}`, Accept: "text/html" },
+    });
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain("Inbox (1)");
+    expect(html).toContain("Invite to view: Bob Garden");
+    expect(html).toContain("alice has invited you to view the scene, Bob Garden.");
+    expect(html).toContain('href="s/3"');
+    expect(html).toContain("View scene");
+    expect(html).not.toContain("Confirm");
+  });
+});

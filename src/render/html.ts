@@ -366,24 +366,53 @@ export function renderSceneBodyHtml(opts: {
     ${artefactLinks ? `<section><h2>Artefacts</h2><ul class="link-list">${artefactLinks}</ul></section>` : ""}
     ${exitLinks ? `<section><h2>Exits</h2><ul class="link-list">${exitLinks}</ul></section>` : ""}
     <section>
-      <h2>Travel</h2>
-      <form method="get" action="s/" class="travel-form" id="travel-form">
-        <label>Scene id <input name="to" type="number" min="1" required /></label>
+      <h2>Actions</h2>
+      <form method="get" action="s/" class="action-form" id="travel-form">
+        <label>Teleport to scene id: <input name="to" type="number" min="1" required /></label>
         <input type="hidden" name="from" value="${scene.id}" />
         <button type="submit">Go</button>
+      </form>
+      <form method="post" action="s/${scene.id}/view-invites" class="action-form" id="invite-form">
+        <label>Invite to view, user: <input name="username" required /></label>
+        <button type="submit">Invite</button>
       </form>
     </section>
     <script>
       (function () {
-        var form = document.getElementById("travel-form");
-        if (!form) return;
-        form.addEventListener("submit", function (ev) {
-          ev.preventDefault();
-          var to = form.querySelector('input[name="to"]').value;
-          var from = form.querySelector('input[name="from"]').value;
-          if (!to) return;
-          window.location.href = "s/" + encodeURIComponent(to) + "?from=" + encodeURIComponent(from);
-        });
+        var travel = document.getElementById("travel-form");
+        if (travel) {
+          travel.addEventListener("submit", function (ev) {
+            ev.preventDefault();
+            var to = travel.querySelector('input[name="to"]').value;
+            var from = travel.querySelector('input[name="from"]').value;
+            if (!to) return;
+            window.location.href = "s/" + encodeURIComponent(to) + "?from=" + encodeURIComponent(from);
+          });
+        }
+        var invite = document.getElementById("invite-form");
+        if (invite) {
+          invite.addEventListener("submit", function (ev) {
+            ev.preventDefault();
+            var username = invite.querySelector('input[name="username"]').value.trim();
+            if (!username) return;
+            var body = new URLSearchParams();
+            body.set("username", username);
+            fetch(invite.action, {
+              method: "POST",
+              headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+              body: body,
+            }).then(function (r) {
+              return r.json().then(function (data) {
+                if (r.ok) {
+                  invite.querySelector('input[name="username"]').value = "";
+                  alert((data.toUser || username) + " has been invited to view this scene");
+                } else {
+                  alert(data.error || "Invalid username");
+                }
+              });
+            });
+          });
+        }
       })();
     </script>`;
 }
@@ -662,11 +691,15 @@ export function renderInboxBodyHtml(opts: {
   }
   const items = opts.messages
     .map((msg) => {
+      const viewLink =
+        msg.type === "invite_to_view"
+          ? `<a href="s/${msg.sceneId}">View scene</a>`
+          : "";
       const actions =
         msg.type === "exit_request"
           ? `<form method="post" action="inbox/${msg.id}/confirm" class="inline"><button type="submit">Confirm</button></form>
         <form method="post" action="inbox/${msg.id}/delete" class="inline"><button type="submit" class="edit-danger">Delete</button></form>`
-          : `<form method="post" action="inbox/${msg.id}/delete" class="inline"><button type="submit" class="edit-danger">Delete</button></form>`;
+          : `${viewLink}${viewLink ? "\n        " : ""}<form method="post" action="inbox/${msg.id}/delete" class="inline"><button type="submit" class="edit-danger">Delete</button></form>`;
       return `<article class="inbox-item">
       <header class="inbox-meta">
         <time datetime="${escapeAttr(msg.createdAt)}">${escapeHtml(msg.createdAt)}</time>

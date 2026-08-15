@@ -13,6 +13,7 @@ import type {
   Grant,
   GroupRecord,
   InboxMessage,
+  InviteToViewMessage,
   InventoryItem,
   MetaFile,
   NoticeMessage,
@@ -1090,10 +1091,29 @@ export class WorldStore implements AccessWorld {
     return undefined;
   }
 
+  findDuplicateViewInvite(
+    toUser: string,
+    fromUser: string,
+    sceneId: number,
+  ): InviteToViewMessage | undefined {
+    for (const m of this.inbox.values()) {
+      if (
+        m.type === "invite_to_view" &&
+        m.toUser === toUser &&
+        m.fromUser === fromUser &&
+        m.sceneId === sceneId
+      ) {
+        return m;
+      }
+    }
+    return undefined;
+  }
+
   async createInboxMessage(
     input:
       | (Omit<ExitRequestMessage, "id" | "createdAt"> & { createdAt?: string })
-      | (Omit<NoticeMessage, "id" | "createdAt"> & { createdAt?: string }),
+      | (Omit<NoticeMessage, "id" | "createdAt"> & { createdAt?: string })
+      | (Omit<InviteToViewMessage, "id" | "createdAt"> & { createdAt?: string }),
   ): Promise<InboxMessage> {
     const id = this.meta.nextInboxId ?? 1;
     this.meta.nextInboxId = id + 1;
@@ -1112,6 +1132,17 @@ export class WorldStore implements AccessWorld {
         fromSceneId: input.fromSceneId,
         toSceneId: input.toSceneId,
         nickname: input.nickname,
+      };
+    } else if (input.type === "invite_to_view") {
+      message = {
+        id,
+        type: "invite_to_view",
+        toUser: input.toUser,
+        fromUser: input.fromUser,
+        createdAt,
+        subject: input.subject,
+        body: input.body,
+        sceneId: input.sceneId,
       };
     } else {
       message = {
@@ -1263,6 +1294,11 @@ function normalizeInboxMessage(
       toSceneId,
       nickname: String(raw.nickname ?? ""),
     };
+  }
+  if (type === "invite_to_view") {
+    const sceneId = Number(raw.sceneId);
+    if (!Number.isFinite(sceneId)) return undefined;
+    return { ...base, type: "invite_to_view", sceneId };
   }
   if (type === "notice") {
     return { ...base, type: "notice" };

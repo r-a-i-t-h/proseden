@@ -108,6 +108,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `PUT`/`POST` | `/s/:id` | Update scene (owner) |
 | `POST` | `/s/:id/exits` | Add directed exit (manage origin, or any user from a public junction) |
 | `POST` | `/s/:id/exit-requests` | Ask origin owner to add an exit to a scene you own |
+| `POST` | `/s/:id/view-invites` | Invite a user to view this scene (inbox; auth) |
 | `DELETE`/`POST` | `/s/:id/exits/:exit/delete` | Remove one exit (manage/organise any; on a public junction, also exits to scenes you own) |
 | `POST` | `/s/:id/exits/delete` | Remove one or more exits (`exitId` / `exitIds`) |
 | `GET`/`PUT`/`POST` | `/s/:id/access` | Scene grants/denies (manage) |

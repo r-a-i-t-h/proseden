@@ -142,7 +142,13 @@ export interface NoticeMessage extends InboxMessageBase {
   type: "notice";
 }
 
-export type InboxMessage = ExitRequestMessage | NoticeMessage;
+/** Ping someone to look at a scene (new or recently updated). */
+export interface InviteToViewMessage extends InboxMessageBase {
+  type: "invite_to_view";
+  sceneId: number;
+}
+
+export type InboxMessage = ExitRequestMessage | NoticeMessage | InviteToViewMessage;
 
 export interface SessionRecord {
   token: string;

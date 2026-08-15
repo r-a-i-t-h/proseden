@@ -13,12 +13,14 @@ See [SPEC.md](SPEC.md) for the product rules; this document describes the v1 HTT
 
 Exits are stored per origin scene (`scenes/<id>.exits.json`) with an incremental `exitId`, a `nickname`, and `toSceneId`. `:exit` may be the numeric id or the nickname (case-insensitive).
 
-HTML scene pages list exits under **Exits** and expose a **Travel** form that teleports to a typed scene id while sending `?from=<current>`.
+HTML scene pages list exits under **Exits** and expose an **Actions** section: teleport to a typed scene id (sending `?from=<current>`), and invite a signed-in user to view the current scene.
 
-Text clients get the same go URLs plus a travel hint:
+Text clients get the same go URLs plus action hints:
 
 ```text
-Travel: GET /s/<id>?from=<current>
+Actions:
+  Teleport: GET /s/<id>?from=<current>
+  Invite to view: POST /s/<current>/view-invites
 ```
 
 ## Knowing where you came from
@@ -95,6 +97,10 @@ The request is delivered only to the **owner** of the origin scene (not manage g
 
 This is a world-building aid, not personal messaging.
 
+## View invites
+
+From any scene you can read, **Actions** → Invite posts `POST /s/:id/view-invites` with a username. That delivers an `invite_to_view` message to their inbox (the scene need not be yours). Re-inviting the same person to the same scene refreshes the existing message instead of stacking a second copy. The recipient can follow a link to the scene and delete the message; there is no confirm step, and the invite does not grant access.
+
 ## Worked examples
 
 Assume entrance group “Wing”: entrance = scene `2` (private, Bob may read), inner = scene `3` (private, Bob may read), vault = scene `4` (private, Alice only). Scene `1` is a public hall outside the group.
@@ -116,6 +122,7 @@ Assume entrance group “Wing”: entrance = scene `2` (private, Bob may read), 
 | `GET` | `/s/:id/go/:exit` | Navigate via exit |
 | `POST` | `/s/:id/exits` | Add exit |
 | `POST` | `/s/:id/exit-requests` | Request exit (owner inbox) |
+| `POST` | `/s/:id/view-invites` | Invite a user to view this scene |
 | `GET` | `/inbox` | Inbox |
 | `POST` | `/inbox/:id/confirm` | Confirm exit request |
 | `POST` | `/inbox/:id/delete` | Delete inbox message |
