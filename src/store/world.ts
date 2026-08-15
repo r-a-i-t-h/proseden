@@ -17,8 +17,10 @@ import type {
   InventoryItem,
   MetaFile,
   NoticeMessage,
+  PeerMessage,
   SceneMeta,
   SceneRecord,
+  SettingsFile,
   StaffFile,
   StaffRole,
   UserRecord,
@@ -44,6 +46,7 @@ export class WorldStore implements AccessWorld {
   entranceGroups = new Map<string, EntranceGroupRecord>();
   inbox = new Map<number, InboxMessage>();
   staff: StaffFile = { roles: {} };
+  settings: SettingsFile = { peerMessagingEnabled: true };
 
   constructor(dataDir: string) {
     this.dataDir = dataDir;
@@ -60,6 +63,7 @@ export class WorldStore implements AccessWorld {
       entranceSceneId: 1,
     };
     this.staff = { roles: {} };
+    this.settings = { peerMessagingEnabled: true };
     this.users.clear();
     this.scenes.clear();
     this.exits.clear();
@@ -94,6 +98,13 @@ export class WorldStore implements AccessWorld {
     const staffPath = join(this.dataDir, "staff.json");
     if (await exists(staffPath)) {
       this.staff = normalizeStaff(await readJson<Record<string, unknown>>(staffPath));
+    }
+
+    const settingsPath = join(this.dataDir, "settings.json");
+    if (await exists(settingsPath)) {
+      this.settings = normalizeSettings(await readJson<Record<string, unknown>>(settingsPath));
+    } else {
+      this.settings = { peerMessagingEnabled: true };
     }
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".json")) {
@@ -229,6 +240,20 @@ export class WorldStore implements AccessWorld {
 
   async saveStaff(): Promise<void> {
     await writeJsonAtomic(join(this.dataDir, "staff.json"), this.staff);
+  }
+
+  async saveSettings(): Promise<void> {
+    await writeJsonAtomic(join(this.dataDir, "settings.json"), this.settings);
+  }
+
+  isPeerMessagingEnabled(): boolean {
+    return this.settings.peerMessagingEnabled !== false;
+  }
+
+  async setPeerMessagingEnabled(enabled: boolean): Promise<SettingsFile> {
+    this.settings = { ...this.settings, peerMessagingEnabled: enabled };
+    await this.saveSettings();
+    return this.settings;
   }
 
   async saveGroup(group: GroupRecord): Promise<void> {
@@ -1113,6 +1138,7 @@ export class WorldStore implements AccessWorld {
     input:
       | (Omit<ExitRequestMessage, "id" | "createdAt"> & { createdAt?: string })
       | (Omit<NoticeMessage, "id" | "createdAt"> & { createdAt?: string })
+      | (Omit<PeerMessage, "id" | "createdAt"> & { createdAt?: string })
       | (Omit<InviteToViewMessage, "id" | "createdAt"> & { createdAt?: string }),
   ): Promise<InboxMessage> {
     const id = this.meta.nextInboxId ?? 1;
@@ -1144,6 +1170,16 @@ export class WorldStore implements AccessWorld {
         body: input.body,
         sceneId: input.sceneId,
       };
+    } else if (input.type === "message") {
+      message = {
+        id,
+        type: "message",
+        toUser: input.toUser,
+        fromUser: input.fromUser,
+        createdAt,
+        subject: input.subject,
+        body: input.body,
+      };
     } else {
       message = {
         id,
@@ -1170,6 +1206,18 @@ export class WorldStore implements AccessWorld {
     this.inbox.delete(id);
     await unlink(join(this.dataDir, "inbox", `${id}.json`));
     return existing;
+  }
+
+  /** Delete every inbox message sent by username (all types). Returns deleted count. */
+  async deleteInboxFromUser(username: string): Promise<number> {
+    const ids: number[] = [];
+    for (const m of this.inbox.values()) {
+      if (m.fromUser === username) ids.push(m.id);
+    }
+    for (const id of ids) {
+      await this.deleteInboxMessage(id);
+    }
+    return ids.length;
   }
 }
 
@@ -1303,7 +1351,16 @@ function normalizeInboxMessage(
   if (type === "notice") {
     return { ...base, type: "notice" };
   }
+  if (type === "message") {
+    return { ...base, type: "message" };
+  }
   return undefined;
+}
+
+function normalizeSettings(raw: Record<string, unknown>): SettingsFile {
+  return {
+    peerMessagingEnabled: raw.peerMessagingEnabled !== false,
+  };
 }
 
 function normalizeStaff(raw: Record<string, unknown>): StaffFile {

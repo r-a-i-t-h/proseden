@@ -45,6 +45,7 @@ const SKIP_WRITE_PATHS = new Set([
   "/live/say",
   "/live/shout",
   "/live/ping",
+  "/inbox/send",
 ]);
 
 const writeRateLimitInner = rateLimit({

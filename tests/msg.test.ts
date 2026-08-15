@@ -69,6 +69,7 @@ describe("manager messages", () => {
     const body = await manager.json();
     expect(body.users).toEqual(["alice", "bob", "carol"]);
     expect(body.all).toBe("*");
+    expect(body.peerMessagingEnabled).toBe(true);
   });
 
   it("lists usernames and ALL users on the HTML form", async () => {
@@ -78,6 +79,8 @@ describe("manager messages", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("<h1>Msg</h1>");
+    expect(html).toContain("Peer messaging");
+    expect(html).toContain("Disable peer messaging");
     expect(html).toContain("ALL users");
     expect(html).toContain('<option value="*">ALL users</option>');
     expect(html).toContain('<option value="alice">alice</option>');
@@ -104,7 +107,7 @@ describe("manager messages", () => {
     expect(payload.count).toBe(1);
     expect(payload.messages[0].type).toBe("notice");
     expect(payload.messages[0].fromUser).toBe("alice");
-    expect(payload.messages[0].subject).toBe("Message from alice");
+    expect(payload.messages[0].subject).toBe("Manager message from alice");
 
     expect(world.listInboxFor("bob")).toHaveLength(1);
     expect(world.listInboxFor("alice")).toHaveLength(0);
@@ -114,12 +117,13 @@ describe("manager messages", () => {
       headers: { Authorization: `Bearer ${tokens.bob}`, Accept: "text/html" },
     });
     const html = await inbox.text();
-    expect(html).toContain("Message from alice");
+    expect(html).toContain("Manager message from alice");
     expect(html).toContain("<strong>read</strong>");
     expect(html).toContain("<s>old</s>");
     expect(html).toContain("<hr />");
     expect(html).toContain('href="https://example.com/"');
-    expect(html).toContain("Inbox (1)");
+    expect(html).toContain("Messages (1)");
+    expect(html).not.toContain("Reply");
   });
 
   it("sends a notice to ALL users", async () => {
@@ -225,6 +229,66 @@ describe("manager messages", () => {
     expect(world.listInboxFor("carol")).toHaveLength(0);
   });
 
+  it("toggles peer messaging and purges inbox from a user", async () => {
+    await app.request("/inbox/send", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ uid: "alice", body: "Spam one" }),
+    });
+    await app.request("/inbox/send", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ uid: "carol", body: "Spam two" }),
+    });
+    await app.request("/msg", {
+      method: "POST",
+      headers: auth(tokens.alice),
+      body: JSON.stringify({ to: "carol", body: "Keep me" }),
+    });
+    expect(world.listInboxFor("alice")).toHaveLength(1);
+    expect(world.listInboxFor("carol")).toHaveLength(2);
+
+    const off = await app.request("/msg/peer-messaging", {
+      method: "POST",
+      headers: auth(tokens.alice),
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(off.status).toBe(200);
+    expect((await off.json()).peerMessagingEnabled).toBe(false);
+    expect(world.isPeerMessagingEnabled()).toBe(false);
+
+    const msgPage = await app.request("/msg", { headers: auth(tokens.alice) });
+    expect((await msgPage.json()).peerMessagingEnabled).toBe(false);
+
+    const html = await (
+      await app.request("/msg", {
+        headers: { Authorization: `Bearer ${tokens.alice}`, Accept: "text/html" },
+      })
+    ).text();
+    expect(html).toContain("Enable peer messaging");
+    expect(html).toContain("Purge inbox from user");
+
+    const purge = await app.request("/msg/purge-from", {
+      method: "POST",
+      headers: auth(tokens.alice),
+      body: JSON.stringify({ uid: "bob" }),
+    });
+    expect(purge.status).toBe(200);
+    const purged = await purge.json();
+    expect(purged.deleted).toBe(2);
+    expect(purged.uid).toBe("bob");
+    expect(world.listInboxFor("alice")).toHaveLength(0);
+    expect(world.listInboxFor("carol")).toHaveLength(1);
+    expect(world.listInboxFor("carol")[0]!.fromUser).toBe("alice");
+
+    const on = await app.request("/msg/peer-messaging", {
+      method: "POST",
+      headers: auth(tokens.alice),
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect((await on.json()).peerMessagingEnabled).toBe(true);
+  });
+
   it("serves text compose hints and a clear send result", async () => {
     const page = await app.request("/msg", {
       headers: { Authorization: `Bearer ${tokens.alice}`, Accept: "text/plain" },
@@ -233,6 +297,7 @@ describe("manager messages", () => {
     const text = await page.text();
     expect(text).toContain("[Msg]");
     expect(text).toContain("to: username or * (ALL users)");
+    expect(text).toContain("Peer messaging: enabled");
     expect(text).toContain("alice");
 
     const sent = await app.request("/msg", {

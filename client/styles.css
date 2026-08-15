@@ -122,7 +122,8 @@ a:hover {
   box-sizing: border-box;
 }
 
-label {
+label,
+.labeled-field {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
@@ -468,6 +469,11 @@ button:hover:not(.editor-tool):not(.mode-switch-btn):not(.linkish):not(.edit-too
   gap: 0.2rem;
 }
 
+.edit-field > label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .edit-check {
   flex-direction: row;
   align-items: center;
@@ -691,6 +697,27 @@ button:hover:not(.editor-tool):not(.mode-switch-btn):not(.linkish):not(.edit-too
   margin: 0 0 1.5rem;
   padding-bottom: 1.25rem;
   border-bottom: 1px solid var(--line);
+}
+
+.messages-compose {
+  margin: 0 0 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.messages-compose > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1.15rem;
+  list-style: none;
+}
+
+.messages-compose > summary::-webkit-details-marker {
+  display: none;
+}
+
+.messages-compose > summary:hover {
+  color: var(--ember);
 }
 
 .inbox-meta {

@@ -98,11 +98,14 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `GET` | `/s/:id/go/:exit` | Follow exit by id or nickname (access-checked) |
 | `GET` | `/a/:id` | Artefact |
 | `GET` | `/inv` | Inventory (auth) |
-| `GET` | `/inbox` | Inbox (auth); no read/unread — delete to clear |
+| `GET` | `/inbox` | Messages page (auth); no read/unread — delete to clear; peer compose when enabled |
+| `POST` | `/inbox/send` | Peer free-text message (auth; when peer messaging enabled) |
 | `POST` | `/inbox/:id/confirm` | Confirm exit request (recipient) |
 | `POST`/`DELETE` | `/inbox/:id/delete` or `/inbox/:id` | Delete inbox message (recipient) |
-| `GET` | `/msg` | Compose a manager message (manager) |
+| `GET` | `/msg` | Manager notices + peer-messaging controls (manager) |
 | `POST` | `/msg` | Send free-text notice to one user or all (manager) |
+| `POST` | `/msg/peer-messaging` | Enable/disable peer messaging (manager) |
+| `POST` | `/msg/purge-from` | Delete all inbox messages from a user (manager) |
 | `GET` | `/profile` | Profile, password, and share-all (auth) |
 | `POST` | `/auth/register` `/auth/login` `/auth/logout` | Session cookie + optional JSON token |
 | `POST` | `/auth/password` | Change password (auth); other sessions for that user are dropped |

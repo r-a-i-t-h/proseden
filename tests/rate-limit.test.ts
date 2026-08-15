@@ -224,6 +224,21 @@ describe("HTTP rate limits", () => {
     expect(await blocked.json()).toEqual({ error: "Too many requests. Try again later." });
   });
 
+  it("returns 429 after too many peer messages", async () => {
+    const password = await hashPassword("secret1");
+    await world.createUser("bob", password.hash, password.salt);
+    const hono = app({ peerMail: { max: 2, windowMs: 60_000 } });
+    const headers = jsonHeaders({ Authorization: `Bearer ${token}` });
+    const body = JSON.stringify({ uid: "bob", body: "hi" });
+
+    expect((await hono.request("/inbox/send", { method: "POST", headers, body })).status).toBe(201);
+    expect((await hono.request("/inbox/send", { method: "POST", headers, body })).status).toBe(201);
+
+    const blocked = await hono.request("/inbox/send", { method: "POST", headers, body });
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toEqual({ error: "Too many requests. Try again later." });
+  });
+
   it("limits guest chat by IP so cookie rotation does not bypass", async () => {
     const hono = app({ liveChat: { max: 1, windowMs: 60_000 } });
     const headers = jsonHeaders({ "X-Forwarded-For": "203.0.113.30" });

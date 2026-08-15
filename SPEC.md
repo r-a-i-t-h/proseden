@@ -58,11 +58,15 @@ well as a nickname. Navigation can use either the number or the name.
 
 When a writer can read a scene but cannot add exits from it, they may send an
 exit request to that scene's owner. From any readable scene they may also
-invite another user to view it ("invite to view"). The recipient's inbox lists
-messages in full (no read/unread); Confirm installs an exit request and
-notifies the requester. Delete discards a message. This is a world-building
-facility, not personal mail — except that staff managers may send a free-text
-notice to one user or all users.
+invite another user to view it ("invite to view"). The recipient's Messages
+page (URL `/inbox`) lists messages in full (no read/unread); Confirm installs
+an exit request and notifies the requester. Delete discards a message.
+
+The Messages page is also peer free-text mail when enabled: any signed-in user
+may send a short note to another registered user. Staff managers may always
+send a free-text notice to one user or all users via `/msg`, and may disable
+peer messaging or purge all inbox messages from a given sender if abused.
+On-disk storage remains under `data/inbox/`.
 
 Artefacts are placed in scenes and, like all else, are merely a text
 description which can have details examined.
@@ -88,8 +92,9 @@ Some admin roles exist:
 "Topographers" can change navigational links and groupings, to restructure the
 world.
 
-"Managers" administer personnel and permissions, and may send free-text
-notices to one user or all users.
+"Managers" administer personnel and permissions, may send free-text notices to
+one user or all users, may enable or disable peer messaging, and may delete
+all inbox messages sent by a given user.
 
 ## Version Control
 

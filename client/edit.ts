@@ -122,8 +122,13 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function field(label: string, control: HTMLElement): HTMLLabelElement {
-  return el("label", { class: "edit-field" }, label, control);
+let editFieldSeq = 0;
+
+/** Caption + control; label uses `for` so later toolbars are not labeled controls. */
+function field(labelText: string, control: HTMLElement): HTMLElement {
+  editFieldSeq += 1;
+  if (!control.id) control.id = `edit-field-${editFieldSeq}`;
+  return el("div", { class: "edit-field" }, el("label", { for: control.id }, labelText), control);
 }
 
 function jsonField(label: string, name: string, rows: number, value: unknown, example: string, note: string) {

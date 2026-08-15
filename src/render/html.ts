@@ -186,7 +186,7 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
 }
 
 function authLoggedIn(user: UserRecord, canLive: boolean, inboxCount: number): string {
-  const inboxLabel = inboxCount > 0 ? `Inbox (${inboxCount})` : "Inbox";
+  const inboxLabel = inboxCount > 0 ? `Messages (${inboxCount})` : "Messages";
   return `<span class="who"><strong><a href="${userPath(user.username)}">${escapeHtml(user.username)}</a></strong></span>
     <a href="profile">Profile</a>
     <a href="inbox">${escapeHtml(inboxLabel)}</a>
@@ -509,7 +509,11 @@ export function renderInventoryBodyHtml(
 export function renderInboxBodyHtml(opts: {
   messages: InboxMessage[];
   message?: string;
+  error?: string;
   back?: PageBackLink;
+  peerMessagingEnabled?: boolean;
+  composeTo?: string;
+  composeBody?: string;
 }): string {
   return toHtml(inboxPageView(opts).body);
 }
@@ -521,6 +525,7 @@ export function renderMsgBodyHtml(opts: {
   notice?: string;
   error?: string;
   back?: PageBackLink;
+  peerMessagingEnabled?: boolean;
 }): string {
   return toHtml(msgPageView(opts).body);
 }

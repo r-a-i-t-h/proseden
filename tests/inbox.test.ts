@@ -222,7 +222,8 @@ describe("inbox / exit requests", () => {
     });
     expect(page.status).toBe(200);
     const html = await page.text();
-    expect(html).toContain("Inbox (1)");
+    expect(html).toContain("Messages (1)");
+    expect(html).toContain("<h1>Messages</h1>");
     expect(html).toContain("Exit request: garden");
     expect(html).toContain("Confirm");
   });
@@ -331,11 +332,145 @@ describe("inbox / view invites", () => {
     });
     expect(page.status).toBe(200);
     const html = await page.text();
-    expect(html).toContain("Inbox (1)");
+    expect(html).toContain("Messages (1)");
     expect(html).toContain("Invite to view: Bob Garden");
     expect(html).toContain("alice has invited you to view the scene, Bob Garden.");
     expect(html).toContain('href="s/3"');
     expect(html).toContain("View scene");
     expect(html).not.toContain("Confirm");
+  });
+});
+
+describe("inbox / peer messages", () => {
+  let world: WorldStore;
+  let app: App;
+  let dataDir: string;
+  let tokens: Record<string, string>;
+
+  beforeEach(async () => {
+    ({ world, app, dataDir, tokens } = await createTestWorld());
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it("sends a peer message and shows compose on the Messages page", async () => {
+    const page = await app.request("/inbox", {
+      headers: { Authorization: `Bearer ${tokens.bob}`, Accept: "text/html" },
+    });
+    const html = await page.text();
+    expect(html).toContain("<h1>Messages</h1>");
+    expect(html).toContain("<h2>Inbox</h2>");
+    expect(html).toContain("Compose");
+    expect(html).toContain('action="inbox/send"');
+    expect(html).toContain("<details");
+    expect(html).toContain('name="uid"');
+    expect(html).not.toContain('name="subject"');
+    expect(html).not.toContain('name="to"');
+
+    const res = await app.request("/inbox/send", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({
+        uid: "alice",
+        body: "Please *see* the hall.",
+      }),
+    });
+    expect(res.status).toBe(201);
+    const payload = await res.json();
+    expect(payload.ok).toBe(true);
+    expect(payload.message.type).toBe("message");
+    expect(payload.message.toUser).toBe("alice");
+    expect(payload.message.fromUser).toBe("bob");
+    expect(payload.message.subject).toBe("Personal message from bob");
+
+    const aliceInbox = await app.request("/inbox", { headers: auth(tokens.alice) });
+    const alice = await aliceInbox.json();
+    expect(alice.peerMessagingEnabled).toBe(true);
+    expect(alice.messages).toHaveLength(1);
+    expect(alice.messages[0].type).toBe("message");
+
+    const aliceHtml = await (
+      await app.request("/inbox", {
+        headers: { Authorization: `Bearer ${tokens.alice}`, Accept: "text/html" },
+      })
+    ).text();
+    expect(aliceHtml).toContain("Personal message from bob");
+    expect(aliceHtml).toContain("<strong>see</strong>");
+    expect(aliceHtml).toContain('href="inbox?to=bob"');
+    expect(aliceHtml).toContain("Reply");
+  });
+
+  it("sets a fixed subject and rejects self, missing user, empty body", async () => {
+    const ok = await app.request("/inbox/send", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ uid: "alice", body: "Hi" }),
+    });
+    expect(ok.status).toBe(201);
+    expect((await ok.json()).message.subject).toBe("Personal message from bob");
+
+    const self = await app.request("/inbox/send", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ uid: "bob", body: "Nope" }),
+    });
+    expect(self.status).toBe(400);
+
+    const missing = await app.request("/inbox/send", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ uid: "nobody", body: "Nope" }),
+    });
+    expect(missing.status).toBe(404);
+
+    const empty = await app.request("/inbox/send", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ uid: "alice", body: "  " }),
+    });
+    expect(empty.status).toBe(400);
+  });
+
+  it("offers Reply only on peer messages, not manager notices", async () => {
+    await app.request("/inbox/send", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ uid: "alice", body: "Peer note" }),
+    });
+    await world.createInboxMessage({
+      type: "notice",
+      toUser: "alice",
+      fromUser: "carol",
+      subject: "Manager message from carol",
+      body: "Staff note",
+    });
+
+    const html = await (
+      await app.request("/inbox", {
+        headers: { Authorization: `Bearer ${tokens.alice}`, Accept: "text/html" },
+      })
+    ).text();
+    expect(html).toContain('href="inbox?to=bob"');
+    expect(html).not.toContain('href="inbox?to=carol"');
+  });
+
+  it("blocks peer send when messaging is disabled", async () => {
+    await world.setPeerMessagingEnabled(false);
+    const res = await app.request("/inbox/send", {
+      method: "POST",
+      headers: auth(tokens.bob),
+      body: JSON.stringify({ uid: "alice", body: "Hi" }),
+    });
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toMatch(/disabled/i);
+
+    const page = await app.request("/inbox", {
+      headers: { Authorization: `Bearer ${tokens.bob}`, Accept: "text/html" },
+    });
+    const html = await page.text();
+    expect(html).not.toContain('action="inbox/send"');
+    expect(html).toContain("<h1>Messages</h1>");
   });
 });

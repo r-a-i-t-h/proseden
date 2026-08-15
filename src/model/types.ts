@@ -107,6 +107,12 @@ export interface StaffFile {
   roles: Record<string, StaffRole[]>;
 }
 
+/** Runtime world settings (data/settings.json). */
+export interface SettingsFile {
+  /** Peer free-text Messages compose. Missing file defaults to enabled. */
+  peerMessagingEnabled: boolean;
+}
+
 export interface MetaFile {
   nextSceneId: number;
   nextArtefactId: number;
@@ -137,9 +143,14 @@ export interface ExitRequestMessage extends InboxMessageBase {
   nickname: string;
 }
 
-/** Plain notice (e.g. exit confirmed). */
+/** Plain notice (e.g. exit confirmed, manager /msg). */
 export interface NoticeMessage extends InboxMessageBase {
   type: "notice";
+}
+
+/** Peer free-text message (Messages compose). */
+export interface PeerMessage extends InboxMessageBase {
+  type: "message";
 }
 
 /** Ping someone to look at a scene (new or recently updated). */
@@ -148,7 +159,11 @@ export interface InviteToViewMessage extends InboxMessageBase {
   sceneId: number;
 }
 
-export type InboxMessage = ExitRequestMessage | NoticeMessage | InviteToViewMessage;
+export type InboxMessage =
+  | ExitRequestMessage
+  | NoticeMessage
+  | PeerMessage
+  | InviteToViewMessage;
 
 export interface SessionRecord {
   token: string;

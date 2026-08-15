@@ -59,6 +59,40 @@ function wrapSelection(textarea: HTMLTextAreaElement, before: string, after: str
   textarea.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+let editorFieldSeq = 0;
+
+function ensureControlId(control: HTMLElement): string {
+  if (control.id) return control.id;
+  editorFieldSeq += 1;
+  control.id = `editor-field-${editorFieldSeq}`;
+  return control.id;
+}
+
+/**
+ * Place chrome before a textarea. If the control sits inside a wrapping
+ * `<label>`, lift the caption onto `label[for]` so toolbar buttons are not
+ * labelable descendants (browsers propagate :hover to the first one).
+ */
+function insertBeforeTextarea(textarea: HTMLTextAreaElement, node: HTMLElement): void {
+  const parent = textarea.parentElement;
+  if (parent?.tagName === "LABEL") {
+    const id = ensureControlId(textarea);
+    const wrap = el("div", {
+      class: parent.className ? `${parent.className} labeled-field` : "labeled-field",
+    });
+    const caption = el("label", { for: id });
+    const preamble: ChildNode[] = [];
+    for (let n = parent.firstChild; n && n !== textarea; n = n.nextSibling) {
+      preamble.push(n);
+    }
+    for (const n of preamble) caption.append(n);
+    parent.replaceWith(wrap);
+    wrap.append(caption, node, textarea);
+    return;
+  }
+  textarea.insertAdjacentElement("beforebegin", node);
+}
+
 function enhanceProse(textarea: HTMLTextAreaElement): void {
   if (textarea.dataset.enhanced === "prose") return;
   textarea.dataset.enhanced = "prose";
@@ -80,7 +114,7 @@ function enhanceProse(textarea: HTMLTextAreaElement): void {
     });
     toolbar.append(btn);
   }
-  textarea.insertAdjacentElement("beforebegin", toolbar);
+  insertBeforeTextarea(textarea, toolbar);
 }
 
 function enhanceJson(textarea: HTMLTextAreaElement): void {
@@ -109,7 +143,7 @@ function enhanceJson(textarea: HTMLTextAreaElement): void {
     format();
   });
   bar.append(btn);
-  textarea.insertAdjacentElement("beforebegin", bar);
+  insertBeforeTextarea(textarea, bar);
   textarea.insertAdjacentElement("afterend", status);
 }
 

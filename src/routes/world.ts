@@ -19,6 +19,7 @@ import {
 } from "../access/permissions.js";
 import { apiError, liveSceneIdForUser, page, sceneBackLink, wantsJson } from "../http.js";
 import { prepareJsonTextarea } from "../json-textarea.js";
+import { rateLimit } from "../middleware/rate-limit.js";
 import type { InboxMessage, StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
@@ -50,6 +51,17 @@ import {
 } from "../render/text.js";
 
 export const worldRoutes = new Hono();
+
+const PEER_MESSAGE_MAX = 2000;
+
+const peerMailLimit = rateLimit({
+  name: "peer-mail",
+  bucket: (limits) => limits.peerMail,
+  key: (c) => {
+    const user = c.get("user");
+    return user ? `user:${user.username}` : `ip:unknown`;
+  },
+});
 
 worldRoutes.get("/", (c) => {
   const world = c.get("world");
@@ -361,9 +373,9 @@ worldRoutes.get("/inbox", (c) => {
     return page(
       c,
       401,
-      "Inbox",
-      renderMessageBodyHtml("Inbox", "Log in to view your inbox."),
-      renderMessageText("Inbox", "Authentication required."),
+      "Messages",
+      renderMessageBodyHtml("Messages", "Log in to view your messages."),
+      renderMessageText("Messages", "Authentication required."),
     );
   }
 
@@ -371,18 +383,92 @@ worldRoutes.get("/inbox", (c) => {
     ? "Exit confirmed."
     : c.req.query("deleted")
       ? "Message deleted."
-      : undefined;
+      : c.req.query("sent")
+        ? "Message sent."
+        : undefined;
+  const peerMessagingEnabled = world.isPeerMessagingEnabled();
   const messages = world.listInboxFor(user.username);
   const back = sceneBackLink(user, world);
+  const composeTo = String(c.req.query("to") ?? "").trim();
   if (wantsJson(c)) {
-    return c.json({ messages });
+    return c.json({ messages, peerMessagingEnabled });
   }
-  return page(c, 200, inboxPageView({ messages, message: flash, back }));
+  return page(
+    c,
+    200,
+    inboxPageView({
+      messages,
+      message: flash,
+      back,
+      peerMessagingEnabled,
+      composeTo: composeTo || undefined,
+    }),
+  );
 });
 
+worldRoutes.post("/inbox/send", peerMailLimit, async (c) => sendPeerMessage(c));
 worldRoutes.post("/inbox/:id/confirm", async (c) => confirmInboxMessage(c));
 worldRoutes.post("/inbox/:id/delete", async (c) => deleteInboxMessage(c));
 worldRoutes.delete("/inbox/:id", async (c) => deleteInboxMessage(c));
+
+async function sendPeerMessage(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const body = await readBody(c);
+  const toRaw = String(body.uid ?? "").trim();
+  const text = typeof body.body === "string" ? body.body : String(body.body ?? "");
+  const trimmed = text.trim();
+
+  const fail = (status: 400 | 403 | 404, error: string) => {
+    if (wantsJson(c) || negotiateFormat(c) === "text") {
+      return apiError(c, status, error);
+    }
+    const back = sceneBackLink(user, world);
+    return page(
+      c,
+      status,
+      inboxPageView({
+        messages: world.listInboxFor(user.username),
+        error,
+        back,
+        peerMessagingEnabled: world.isPeerMessagingEnabled(),
+        composeTo: toRaw,
+        composeBody: text,
+      }),
+    );
+  };
+
+  if (!world.isPeerMessagingEnabled()) {
+    return fail(403, "Peer messaging is disabled.");
+  }
+  if (!toRaw) return fail(400, "Choose a recipient.");
+  if (toRaw === user.username) return fail(400, "You cannot message yourself.");
+  if (!world.getUser(toRaw)) return fail(404, `User not found: ${toRaw}`);
+  if (!trimmed) return fail(400, "Message is required.");
+
+  const bodyText =
+    trimmed.length > PEER_MESSAGE_MAX ? trimmed.slice(0, PEER_MESSAGE_MAX) : trimmed;
+  const subject = `Personal message from ${user.username}`;
+
+  try {
+    const message = await world.createInboxMessage({
+      type: "message",
+      toUser: toRaw,
+      fromUser: user.username,
+      subject,
+      body: bodyText,
+    });
+    if (wantsJson(c)) return c.json({ ok: true, message }, 201);
+    if (negotiateFormat(c) === "text") {
+      return c.text(renderMessageText("Messages", `Message sent to ${toRaw}.`), 201);
+    }
+    return c.redirect(`${c.get("assetBase")}/inbox?sent=1`);
+  } catch (err) {
+    return fail(400, err instanceof Error ? err.message : "Could not send message");
+  }
+}
 
 async function confirmInboxMessage(c: Context) {
   const world = c.get("world");
@@ -1452,15 +1538,82 @@ worldRoutes.get("/msg", (c) => {
     return apiError(c, user ? 403 : 401, "Manager role required");
   }
   const usernames = world.listUsers().map((u) => u.username);
-  const notice = msgSentNotice(c.req.query("sent"), c.req.query("n"));
+  const peerMessagingEnabled = world.isPeerMessagingEnabled();
+  const notice =
+    msgSentNotice(c.req.query("sent"), c.req.query("n")) ??
+    msgPeerNotice(c.req.query("peer")) ??
+    msgPurgeNotice(c.req.query("purged"), c.req.query("from"), c.req.query("n"));
   if (wantsJson(c)) {
-    return c.json({ users: usernames, all: "*", ...(notice ? { notice } : {}) });
+    return c.json({
+      users: usernames,
+      all: "*",
+      peerMessagingEnabled,
+      ...(notice ? { notice } : {}),
+    });
   }
   const back = sceneBackLink(user!, world);
-  return page(c, 200, msgPageView({ usernames, notice, back }));
+  return page(c, 200, msgPageView({ usernames, notice, back, peerMessagingEnabled }));
 });
 
+worldRoutes.post("/msg/peer-messaging", async (c) => setPeerMessaging(c));
+worldRoutes.post("/msg/purge-from", async (c) => purgeInboxFromUser(c));
 worldRoutes.post("/msg", async (c) => sendManagerMessage(c));
+
+async function setPeerMessaging(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!isManager(user, world)) {
+    return apiError(c, user ? 403 : 401, "Manager role required");
+  }
+  const body = await readBody(c);
+  const raw = body.enabled ?? body.peerMessagingEnabled;
+  const enabled =
+    raw === true ||
+    raw === 1 ||
+    String(raw).toLowerCase() === "true" ||
+    String(raw) === "1" ||
+    String(raw).toLowerCase() === "on";
+  const settings = await world.setPeerMessagingEnabled(enabled);
+  if (wantsJson(c)) {
+    return c.json({ ok: true, peerMessagingEnabled: settings.peerMessagingEnabled });
+  }
+  return c.redirect(
+    `${c.get("assetBase")}/msg?peer=${settings.peerMessagingEnabled ? "on" : "off"}`,
+  );
+}
+
+async function purgeInboxFromUser(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!isManager(user, world)) {
+    return apiError(c, user ? 403 : 401, "Manager role required");
+  }
+  const body = await readBody(c);
+  const uid = String(body.uid ?? "").trim();
+  const usernames = world.listUsers().map((u) => u.username);
+  const peerMessagingEnabled = world.isPeerMessagingEnabled();
+
+  const fail = (error: string) => {
+    if (wantsJson(c) || negotiateFormat(c) === "text") {
+      return apiError(c, 400, error);
+    }
+    const back = sceneBackLink(user!, world);
+    return page(
+      c,
+      400,
+      msgPageView({ usernames, error, back, peerMessagingEnabled }),
+    );
+  };
+
+  if (!uid) return fail("Username is required.");
+  const deleted = await world.deleteInboxFromUser(uid);
+  if (wantsJson(c)) {
+    return c.json({ ok: true, uid, deleted });
+  }
+  return c.redirect(
+    `${c.get("assetBase")}/msg?purged=1&from=${encodeURIComponent(uid)}&n=${deleted}`,
+  );
+}
 
 async function sendManagerMessage(c: Context) {
   const world = c.get("world");
@@ -1482,7 +1635,14 @@ async function sendManagerMessage(c: Context) {
     return page(
       c,
       400,
-      msgPageView({ usernames, selected: toRaw, body: text, error, back }),
+      msgPageView({
+        usernames,
+        selected: toRaw,
+        body: text,
+        error,
+        back,
+        peerMessagingEnabled: world.isPeerMessagingEnabled(),
+      }),
     );
   };
 
@@ -1500,7 +1660,7 @@ async function sendManagerMessage(c: Context) {
     recipients = [toRaw];
   }
 
-  const subject = `Message from ${user!.username}`;
+  const subject = `Manager message from ${user!.username}`;
   const sentTo: string[] = [];
   const messages: InboxMessage[] = [];
   try {
@@ -1544,6 +1704,20 @@ function msgSentNotice(sent?: string, nRaw?: string): string | undefined {
     return `Message sent to all ${count} ${count === 1 ? "user" : "users"}.`;
   }
   return `Message sent to ${sent}.`;
+}
+
+function msgPeerNotice(peer?: string): string | undefined {
+  if (peer === "on") return "Peer messaging enabled.";
+  if (peer === "off") return "Peer messaging disabled.";
+  return undefined;
+}
+
+function msgPurgeNotice(purged?: string, from?: string, nRaw?: string): string | undefined {
+  if (!purged) return undefined;
+  const n = Number(nRaw);
+  const count = Number.isFinite(n) && n >= 0 ? n : 0;
+  const who = from?.trim() || "user";
+  return `Deleted ${count} ${count === 1 ? "message" : "messages"} from ${who}.`;
 }
 
 function msgDeliveredSummary(all: boolean, sentTo: string[]): string {

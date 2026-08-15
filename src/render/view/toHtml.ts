@@ -23,7 +23,15 @@ export function userLink(username: string): string {
   return `<a href="${userPath(username)}">${escapeHtml(username)}</a>`;
 }
 
-function renderControl(control: Control): string {
+let fieldIdSeq = 0;
+
+function nextFieldId(name: string): string {
+  fieldIdSeq += 1;
+  return `f-${name}-${fieldIdSeq}`;
+}
+
+function renderControl(control: Control, id?: string): string {
+  const idAttr = id ? ` id="${escapeAttr(id)}"` : "";
   switch (control.type) {
     case "text":
     case "number":
@@ -35,6 +43,7 @@ function renderControl(control: Control): string {
       const attrs = [
         `name="${escapeAttr(control.name)}"`,
         `type="${control.type}"`,
+        idAttr,
         value,
         control.required ? "required" : "",
         "min" in control && control.min !== undefined ? `min="${escapeAttr(control.min)}"` : "",
@@ -67,7 +76,7 @@ function renderControl(control: Control): string {
           return `<option value="${escapeAttr(o.value)}"${sel}${dis}>${escapeHtml(o.label)}</option>`;
         })
         .join("");
-      return `<select name="${escapeAttr(control.name)}"${control.required ? " required" : ""}>${options}</select>`;
+      return `<select name="${escapeAttr(control.name)}"${idAttr}${control.required ? " required" : ""}>${options}</select>`;
     }
     case "textarea": {
       const value =
@@ -78,7 +87,7 @@ function renderControl(control: Control): string {
         control.editor && control.editor !== "plain"
           ? ` data-editor="${escapeAttr(control.editor)}"`
           : "";
-      return `<textarea name="${escapeAttr(control.name)}" rows="${control.rows ?? 8}"${control.required ? " required" : ""}${editor}>${escapeHtml(value)}</textarea>`;
+      return `<textarea name="${escapeAttr(control.name)}"${idAttr} rows="${control.rows ?? 8}"${control.required ? " required" : ""}${editor}>${escapeHtml(value)}</textarea>`;
     }
     case "button": {
       const cls = control.class ? ` class="${escapeAttr(control.class)}"` : "";
@@ -182,7 +191,6 @@ function renderNode(node: Node): string {
       return `<form method="${escapeAttr(method)}" action="${escapeAttr(node.action)}"${cls}${id}>${renderNodes(node.children)}</form>`;
     }
     case "field": {
-      const cls = node.class ? ` class="${escapeAttr(node.class)}"` : "";
       if (node.control.type === "textarea" && node.control.editor === "json") {
         return renderJsonField({
           type: "jsonField",
@@ -200,7 +208,11 @@ function renderNode(node: Node): string {
       if (node.control.type === "hidden" || !node.label) {
         return renderControl(node.control);
       }
-      return `<label${cls}>${escapeHtml(node.label)} ${renderControl(node.control)}</label>`;
+      // Div + label[for]: toolbars must not sit inside a wrapping <label>
+      // (browsers propagate :hover to the first labelable control).
+      const id = nextFieldId(node.control.name);
+      const classes = ["labeled-field", node.class].filter(Boolean).join(" ");
+      return `<div class="${escapeAttr(classes)}"><label for="${escapeAttr(id)}">${escapeHtml(node.label)}</label> ${renderControl(node.control, id)}</div>`;
     }
     case "jsonField":
       return renderJsonField(node);

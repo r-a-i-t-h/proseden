@@ -93,13 +93,22 @@ Public junctions let other writers attach outbound edges *from* a shared hub wit
 
 When you can read a scene but cannot add exits from it, Edit → Exits offers **Request exit** instead of Add. That posts `POST /s/:id/exit-requests` with a nickname, a destination scene you own, and an optional note.
 
-The request is delivered only to the **owner** of the origin scene (not manage grantees). Their header **Inbox** link shows the total message count. Inbox is a short queue — every message’s subject and body are listed in full, with no read/unread state. Delete clears a message; for an exit request, **Confirm** adds the exit (same rights checks as `POST /s/:id/exits`), removes the request, and places a confirmation notice in the requester’s inbox.
+The request is delivered only to the **owner** of the origin scene (not manage grantees). Their header **Messages** link shows the total message count. The Messages page (`/inbox`) is a short queue — every message’s subject and body are listed in full, with no read/unread state. Delete clears a message; for an exit request, **Confirm** adds the exit (same rights checks as `POST /s/:id/exits`), removes the request, and places a confirmation notice in the requester’s inbox.
 
-This is a world-building aid, not personal messaging.
+Exit requests and view invites remain world-building aids. Peer free-text notes are separate (`type: message`) when peer messaging is enabled.
+
+## Peer messages
+
+When peer messaging is enabled (default), a signed-in user can compose on the Messages page (`POST /inbox/send` with `uid` and `body`, max 2000 characters; subject is always `Personal message from <sender>`). Recipients see a `message` entry and may Reply (prefills To) or Delete. Manager notices from `/msg` use subject `Manager message from <manager>`. There is no content filter; rate limits curb API spam. Managers can disable peer messaging or purge all inbox rows from a username on `/msg`.
 
 ## Manager messages
 
 Staff managers may send a free-text notice to one registered user or everyone. The Edit toolbar **Msg** link (managers only) opens `/msg`. The form posts `POST /msg` with `to` (a username or `*` / `ALL users`) and `body`. The body keeps line breaks and the same prose adornments as scene text: `_emphasis_`, `*bold*`, `~strike~`, `---` (horizontal rule), and `[label](https://…)`. Each recipient gets a `notice` in their inbox. Success and failure are reported on the Msg page (or as JSON `{ ok, to, messages }` / `{ error }`).
+
+The Msg page also exposes:
+
+- **Peer messaging** — `POST /msg/peer-messaging` with `enabled` true/false (persisted in `data/settings.json`)
+- **Purge inbox from user** — `POST /msg/purge-from` with `uid` (username); deletes every inbox message that user sent
 
 ## View invites
 
@@ -127,11 +136,14 @@ Assume entrance group “Wing”: entrance = scene `2` (private, Bob may read), 
 | `POST` | `/s/:id/exits` | Add exit |
 | `POST` | `/s/:id/exit-requests` | Request exit (owner inbox) |
 | `POST` | `/s/:id/view-invites` | Invite a user to view this scene |
-| `GET` | `/inbox` | Inbox |
+| `GET` | `/inbox` | Messages page (auth) |
+| `POST` | `/inbox/send` | Peer free-text message (auth; when enabled) |
 | `POST` | `/inbox/:id/confirm` | Confirm exit request |
 | `POST` | `/inbox/:id/delete` | Delete inbox message |
-| `GET` | `/msg` | Compose a manager message (manager) |
+| `GET` | `/msg` | Manager notices + peer-messaging controls (manager) |
 | `POST` | `/msg` | Send to one user or all (manager) |
+| `POST` | `/msg/peer-messaging` | Enable/disable peer messaging (manager) |
+| `POST` | `/msg/purge-from` | Delete all inbox messages from a user (manager) |
 | `POST` | `/eg` | Create entrance group |
 | `POST` | `/s/:id/entrance-group` | Assign/clear entrance group on a scene |
 
