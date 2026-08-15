@@ -259,14 +259,17 @@ describe("scene subscriptions", () => {
     const html = await res.text();
     expect(html).toContain(">Subscribe</button>");
     expect(html).toContain(`action="s/1/subscribe"`);
+    expect(html).toContain("0 subscribers");
 
     await world.subscribeScene(1, "bob");
+    await world.subscribeScene(1, "carol");
     const again = await app.request("/s/1", {
       headers: { Authorization: `Bearer ${tokens.bob}`, Accept: "text/html" },
     });
     const html2 = await again.text();
     expect(html2).toContain(">Unsubscribe</button>");
     expect(html2).toContain(`action="s/1/subscribe/drop"`);
+    expect(html2).toContain("2 subscribers");
   });
 
   it("renders scene_update in the inbox", async () => {

@@ -13,7 +13,7 @@ See [SPEC.md](SPEC.md) for the product rules; this document describes the v1 HTT
 
 Exits are stored per origin scene (`scenes/<id>.exits.json`) with an incremental `exitId`, a `nickname`, and `toSceneId`. `:exit` may be the numeric id or the nickname (case-insensitive).
 
-HTML scene pages list exits under **Exits**, offer **Subscribe** / **Unsubscribe** (signed-in readers), and expose an **Actions** section: teleport to a typed scene id (sending `?from=<current>`), and invite a signed-in user to view the current scene.
+HTML scene pages list exits under **Exits**, offer **Subscribe** / **Unsubscribe** with a subscriber count (signed-in readers), and expose an **Actions** section: teleport to a typed scene id (sending `?from=<current>`), and invite a signed-in user to view the current scene.
 
 Text clients get the same go URLs plus action hints:
 
@@ -117,7 +117,7 @@ From any scene you can read, **Actions** → Invite posts `POST /s/:id/view-invi
 
 ## Scene subscriptions
 
-Signed-in readers who can reach a scene may **Subscribe** (`POST /s/:id/subscribe`) or **Unsubscribe** (`POST /s/:id/subscribe/drop`). Subscribers are stored in `scenes/<id>.subs.json`. When title, description, details, or artefacts at that scene change, each subscriber (except the editor) gets a `scene_update` inbox notice with merged change kinds and a link to the scene. Repeated edits coalesce into one undeleted notice per recipient. Exits and ACL changes do not notify. Recipients who no longer can read the scene are skipped and pruned from the list.
+Signed-in readers who can reach a scene may **Subscribe** (`POST /s/:id/subscribe`) or **Unsubscribe** (`POST /s/:id/subscribe/drop`). The scene page shows the current subscriber count beside that control. Subscribers are stored in `scenes/<id>.subs.json`. When title, description, details, or artefacts at that scene change, each subscriber (except the editor) gets a `scene_update` inbox notice with merged change kinds and a link to the scene. Repeated edits coalesce into one undeleted notice per recipient. Exits and ACL changes do not notify. Recipients who no longer can read the scene are skipped and pruned from the list.
 
 ## Worked examples
 

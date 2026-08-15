@@ -150,6 +150,8 @@ worldRoutes.get("/s/:id", (c) => {
 
   if (user) c.get("locations").noteVisit(user.username, scene.id);
 
+  const subscriberCount = world.getSubscribers(id).length;
+
   return page(
     c,
     200,
@@ -161,6 +163,7 @@ worldRoutes.get("/s/:id", (c) => {
       isEntrance,
       accessSummary,
       subscribed: user ? world.isSubscribed(id, user.username) : undefined,
+      subscriberCount: user ? subscriberCount : undefined,
     }),
     {
       kind: "scene",

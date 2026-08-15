@@ -5,6 +5,7 @@ import type {
 } from "../../../model/types.js";
 import { entityKindLabel, entityPath } from "../../entity.js";
 import {
+  box,
   button,
   byline,
   crumb,
@@ -15,6 +16,7 @@ import {
   htmlOnly,
   linkList,
   meta,
+  muted,
   nodes,
   pageView,
   prose,
@@ -111,6 +113,8 @@ export function scenePageView(opts: {
   accessSummary?: string;
   /** When set (signed-in), show subscribe/unsubscribe like artefact Collect. */
   subscribed?: boolean;
+  /** Subscriber count shown beside the subscribe control (likes-style). */
+  subscriberCount?: number;
 }): PageView {
   const { scene, exits, artefacts, detail, isEntrance } = opts;
   const title = scene.title ?? `Scene ${scene.id}`;
@@ -159,30 +163,30 @@ export function scenePageView(opts: {
       )
     : undefined;
 
+  const subscriberCount = opts.subscriberCount ?? 0;
+  const subscriberLabel =
+    subscriberCount === 1 ? "1 subscriber" : `${subscriberCount} subscribers`;
   const subscribe =
     opts.subscribed === undefined
       ? undefined
-      : opts.subscribed
-        ? htmlOnly(
-            form(
-              {
-                method: "post",
-                action: `s/${scene.id}/subscribe/drop`,
-                class: "reader-action",
-              },
-              button("Unsubscribe"),
+      : fragment(
+          htmlOnly(
+            box(
+              "reader-action",
+              form(
+                {
+                  method: "post",
+                  action: opts.subscribed
+                    ? `s/${scene.id}/subscribe/drop`
+                    : `s/${scene.id}/subscribe`,
+                },
+                button(opts.subscribed ? "Unsubscribe" : "Subscribe"),
+              ),
+              muted(subscriberLabel),
             ),
-          )
-        : htmlOnly(
-            form(
-              {
-                method: "post",
-                action: `s/${scene.id}/subscribe`,
-                class: "reader-action",
-              },
-              button("Subscribe"),
-            ),
-          );
+          ),
+          textOnly(rawText([subscriberLabel])),
+        );
 
   const textRecipes = [
     `Teleport: GET {base}/s/<id>?from=${scene.id}`,
