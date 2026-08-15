@@ -11,6 +11,7 @@ import { renderMessageBodyHtml } from "../render/html.js";
 import { renderMessageText } from "../render/text.js";
 import type { UserRecord } from "../model/types.js";
 import type { WorldStore } from "../store/world.js";
+import { triggerQuestEval } from "../logic/trigger.js";
 
 export const authRoutes = new Hono();
 
@@ -65,18 +66,20 @@ authRoutes.post("/register", authAttemptLimit, async (c) => {
   });
   dropGuestPresence(c);
 
+  await triggerQuestEval(c, user, resumeSceneId(world, user));
+
   if (body.json) {
     return c.json(
       {
         ok: true,
         username: user.username,
         token: session.token,
-        lastSceneId: resumeSceneId(world, user) ?? null,
+        lastSceneId: resumeSceneId(world, c.get("user") ?? user) ?? null,
       },
       201,
     );
   }
-  return c.redirect(resumeRedirect(c, user));
+  return c.redirect(resumeRedirect(c, c.get("user") ?? user));
 });
 
 authRoutes.post("/login", authAttemptLimit, async (c) => {
@@ -100,15 +103,16 @@ authRoutes.post("/login", authAttemptLimit, async (c) => {
     secure: cookieSecure(),
   });
   dropGuestPresence(c);
+  await triggerQuestEval(c, user, resumeSceneId(world, user));
   if (body.json) {
     return c.json({
       ok: true,
       username: user.username,
       token: session.token,
-      lastSceneId: resumeSceneId(world, user) ?? null,
+      lastSceneId: resumeSceneId(world, c.get("user") ?? user) ?? null,
     });
   }
-  return c.redirect(resumeRedirect(c, user));
+  return c.redirect(resumeRedirect(c, c.get("user") ?? user));
 });
 
 authRoutes.post("/password", authPasswordLimit, async (c) => {

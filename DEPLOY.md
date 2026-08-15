@@ -184,7 +184,7 @@ The updater:
 - **First** archives this instance’s `data/` to `backup/YYYY-MM-DDTHHMMSSZ.tar.gz` (aborts if that fails)
 - Downloads that release into `releases/<tag>/` for **that instance only**
 - Flips `current`
-- Runs `deploy/post-update.sh`, which applies `deploy/migrations/NNN-*.sh` where `NNN` is greater than `schemaVersion` in `data/meta.json` (missing or non-numeric = **0**). `001` stamps `schemaVersion: 1`. `002` rewrites `pedia:`/`srch:`/`media:` link prefixes in scene and artefact prose (including history snapshots) and stamps `2`. A failed hook aborts before restart.
+- Runs `deploy/post-update.sh`, which applies `deploy/migrations/NNN-*.sh` where `NNN` is greater than `schemaVersion` in `data/meta.json` (missing or non-numeric = **0**). `001` stamps `schemaVersion: 1`. `002` rewrites `pedia:`/`srch:`/`media:` link prefixes in scene and artefact prose (including history snapshots) and stamps `2`. `003` creates `quests/` and `alchemy/` if needed, copies default seed quests `builders` and `proseden` (and empty alchemy recipes) when those files are absent, and stamps `3`. Existing quest/recipe files are left alone. A failed hook aborts before restart.
 - Restarts `proseden-<name>`
 - Does **not** delete or re-seed `data/`, and does **not** rewrite `env`
 - Keeps one previous release folder so you can roll back by pointing `current` back and restarting

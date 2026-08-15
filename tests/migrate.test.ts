@@ -83,7 +83,7 @@ describe("schema migrate runner", () => {
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  it("001 then 002 stamp schemaVersion 2 and keep other meta keys", async () => {
+  it("001 then 002 then 003 stamp schemaVersion 3 and keep other meta keys", async () => {
     await writeMeta(dataDir, {
       nextSceneId: 4,
       nextArtefactId: 2,
@@ -97,14 +97,19 @@ describe("schema migrate runner", () => {
     expect(first.code).toBe(0);
     expect(first.stdout).toMatch(/applying 001-schema-version\.sh/);
     expect(first.stdout).toMatch(/applying 002-rewrite-link-schemes\.sh/);
+    expect(first.stdout).toMatch(/applying 003-default-quests\.sh/);
 
     const meta = await readMeta(dataDir);
-    expect(meta.schemaVersion).toBe(2);
+    expect(meta.schemaVersion).toBe(3);
     expect(meta.nextSceneId).toBe(4);
     expect(meta.nextArtefactId).toBe(2);
     expect(meta.nextGroupId).toBe(2);
     expect(meta.entranceSceneId).toBe(1);
     expect(meta.extra).toBe("keep-me");
+
+    expect(await readFile(join(dataDir, "quests", "builders.json"), "utf8")).toMatch(/"name": "builders"/);
+    expect(await readFile(join(dataDir, "quests", "proseden.json"), "utf8")).toMatch(/"name": "proseden"/);
+    expect(await readFile(join(dataDir, "alchemy", "recipes.json"), "utf8")).toMatch(/^\s*\[\s*\]\s*$/);
   });
 
   it("second run is a no-op", async () => {
@@ -121,9 +126,34 @@ describe("schema migrate runner", () => {
 
     const second = await runMigrate(dataDir);
     expect(second.code).toBe(0);
-    expect(second.stdout).toMatch(/already at schema 2/);
+    expect(second.stdout).toMatch(/already at schema 3/);
     expect(second.stdout).not.toMatch(/applying/);
     expect(await readFile(join(dataDir, "meta.json"), "utf8")).toBe(afterFirst);
+  });
+
+  it("003 does not overwrite an existing builders quest", async () => {
+    await writeMeta(dataDir, {
+      nextSceneId: 4,
+      nextArtefactId: 2,
+      nextGroupId: 2,
+      nextEntranceGroupId: 2,
+      entranceSceneId: 1,
+      schemaVersion: 2,
+    });
+    await mkdir(join(dataDir, "quests"), { recursive: true });
+    await writeFile(
+      join(dataDir, "quests", "builders.json"),
+      `${JSON.stringify({ name: "builders", rules: [], description: "custom" }, null, 2)}\n`,
+    );
+
+    const result = await runMigrate(dataDir);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toMatch(/applying 003-default-quests\.sh/);
+    const builders = JSON.parse(
+      await readFile(join(dataDir, "quests", "builders.json"), "utf8"),
+    ) as { description?: string };
+    expect(builders.description).toBe("custom");
+    expect(await readMeta(dataDir)).toMatchObject({ schemaVersion: 3 });
   });
 
   it("applies 001 then 002 in order from v0", async () => {
@@ -211,6 +241,7 @@ Inline code \`[x](pedia:y)\` stays put.
     expect(result.code).toBe(0);
     expect(result.stdout).not.toMatch(/001-schema-version/);
     expect(result.stdout).toMatch(/applying 002-rewrite-link-schemes\.sh/);
+    expect(result.stdout).toMatch(/applying 003-default-quests\.sh/);
     expect(result.stdout).toMatch(/rewrote 3 file\(s\)/);
 
     expect(await readFile(join(dataDir, "scenes", "1.md"), "utf8")).toBe(`---
@@ -227,7 +258,7 @@ Inline code \`[x](pedia:y)\` stays put.
       "A [clipping](search:deckle edge).\n",
     );
     expect(await readFile(join(dataDir, "scenes", "1.exits.json"), "utf8")).toBe("[]\n");
-    expect((await readMeta(dataDir)).schemaVersion).toBe(2);
+    expect((await readMeta(dataDir)).schemaVersion).toBe(3);
   });
 
   it("upgrades a sample scene file without mangling the rest", async () => {

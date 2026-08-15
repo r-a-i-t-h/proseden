@@ -11,6 +11,7 @@ import {
 import { negotiateFormat } from "../render/format.js";
 import {
   escapeHtml,
+  renderJsonFieldHtml,
   renderMessageBodyHtml,
   renderPageBackCrumb,
   type PageBackLink,
@@ -23,6 +24,9 @@ import {
   listBackups,
   type BackupInfo,
 } from "../store/backup.js";
+import { formatJsonTextarea, prepareJsonTextarea } from "../json-textarea.js";
+import { parseAlchemyRecipes, parseQuestFile, QuestValidationError } from "../logic/quests.js";
+import { ALCHEMY_EXAMPLE, ALCHEMY_HELP } from "../render/view/examples.js";
 
 export const adminRoutes = new Hono();
 
@@ -33,6 +37,16 @@ adminRoutes.get("/", async (c) => {
   const backups = await listBackups(c.get("backupDir"));
   const notice = adminNotice(c.req.query("backed-up"), c.req.query("deleted"));
   const endpoints = [
+    {
+      method: "GET",
+      path: "/data/quests",
+      description: "List and edit quest JSON files",
+    },
+    {
+      method: "GET",
+      path: "/data/alchemy",
+      description: "Edit alchemy recipes.json",
+    },
     {
       method: "POST",
       path: "/data/backup",
@@ -162,6 +176,167 @@ adminRoutes.post("/reload", async (c) => {
   );
 });
 
+adminRoutes.get("/quests", async (c) => {
+  const denied = requireManager(c);
+  if (denied) return denied;
+  const world = c.get("world");
+  const quests = world.listQuests();
+  const back = sceneBackLink(c.get("user")!, world);
+  const notice = c.req.query("saved")
+    ? "Quest saved."
+    : c.req.query("deleted")
+      ? "Quest deleted."
+      : "";
+  if (wantsJson(c)) return c.json({ quests: quests.map((q) => q.name) });
+  const links = quests.length
+    ? `<ul class="link-list">${quests
+        .map((q) => `<li><a href="data/quests/${encodeURIComponent(q.name)}">${escapeHtml(q.name)}</a></li>`)
+        .join("")}</ul>`
+    : `<p class="muted">No quests yet.</p>`;
+  return page(
+    c,
+    200,
+    "Quests",
+    `${renderPageBackCrumb(back)}<h1>Quests</h1>
+      ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
+      ${links}
+      <h2>New quest</h2>
+      <form method="post" action="data/quests" class="stack">
+        <label>Name <input name="name" pattern="[A-Za-z][A-Za-z0-9_-]*" required /></label>
+        <button type="submit">Create</button>
+      </form>
+      <p class="crumb"><a href="data">← Data</a></p>`,
+    renderMessageText("Quests", quests.map((q) => q.name).join("\n") || "(none)"),
+  );
+});
+
+adminRoutes.post("/quests", async (c) => {
+  const denied = requireManager(c);
+  if (denied) return denied;
+  const world = c.get("world");
+  const body = await c.req.parseBody();
+  const name = String(body.name ?? "").trim();
+  try {
+    const quest = parseQuestFile({
+      name,
+      rules: [],
+      description: "New quest",
+    });
+    if (world.getQuest(name)) return apiError(c, 400, "Quest already exists");
+    await world.saveQuest(quest);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Invalid quest");
+  }
+  return c.redirect(`${c.get("assetBase")}/data/quests/${encodeURIComponent(name)}?saved=1`);
+});
+
+adminRoutes.get("/quests/:name", async (c) => {
+  const denied = requireManager(c);
+  if (denied) return denied;
+  const world = c.get("world");
+  const name = c.req.param("name");
+  const quest = world.getQuest(name);
+  if (!quest) return apiError(c, 404, "Quest not found");
+  const back = sceneBackLink(c.get("user")!, world);
+  const notice = c.req.query("saved") ? "Saved." : "";
+  const json = formatJsonTextarea(quest);
+  return page(
+    c,
+    200,
+    `Quest ${name}`,
+    `${renderPageBackCrumb(back)}<h1>Quest <code>${escapeHtml(name)}</code></h1>
+      ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
+      <form method="post" action="data/quests/${encodeURIComponent(name)}" class="stack">
+        <label>JSON
+          <textarea name="json" rows="28" data-editor="json">${escapeHtml(json)}</textarea>
+        </label>
+        <button type="submit">Save</button>
+      </form>
+      <form method="post" action="data/quests/${encodeURIComponent(name)}/delete" class="stack"
+        onsubmit="return confirm('Delete quest ${escapeHtml(name)}?');">
+        <button type="submit">Delete quest</button>
+      </form>
+      <p class="crumb"><a href="data/quests">← Quests</a></p>`,
+    renderMessageText(`Quest ${name}`, json),
+  );
+});
+
+adminRoutes.post("/quests/:name", async (c) => {
+  const denied = requireManager(c);
+  if (denied) return denied;
+  const world = c.get("world");
+  const name = c.req.param("name");
+  const body = await c.req.parseBody();
+  try {
+    const prepared = prepareJsonTextarea(String(body.json ?? ""));
+    const parsed = parseQuestFile(JSON.parse(prepared));
+    if (parsed.name !== name) {
+      return apiError(c, 400, `JSON name must remain "${name}"`);
+    }
+    await world.saveQuest(parsed);
+  } catch (err) {
+    const msg =
+      err instanceof QuestValidationError || err instanceof SyntaxError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : "Save failed";
+    return apiError(c, 400, msg);
+  }
+  return c.redirect(`${c.get("assetBase")}/data/quests/${encodeURIComponent(name)}?saved=1`);
+});
+
+adminRoutes.post("/quests/:name/delete", async (c) => {
+  const denied = requireManager(c);
+  if (denied) return denied;
+  await c.get("world").deleteQuest(c.req.param("name"));
+  return c.redirect(`${c.get("assetBase")}/data/quests?deleted=1`);
+});
+
+adminRoutes.get("/alchemy", async (c) => {
+  const denied = requireManager(c);
+  if (denied) return denied;
+  const world = c.get("world");
+  const back = sceneBackLink(c.get("user")!, world);
+  const notice = c.req.query("saved") ? "Recipes saved." : "";
+  const field = renderJsonFieldHtml(
+    "Recipes",
+    "recipesJson",
+    24,
+    world.alchemyRecipes,
+    ALCHEMY_EXAMPLE,
+    ALCHEMY_HELP,
+  );
+  return page(
+    c,
+    200,
+    "Alchemy",
+    `${renderPageBackCrumb(back)}<h1>Alchemy recipes</h1>
+      ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
+      <form method="post" action="data/alchemy" class="stack">
+        ${field}
+        <button type="submit">Save</button>
+      </form>
+      <p class="crumb"><a href="data">← Data</a></p>`,
+    renderMessageText("Alchemy", JSON.stringify(world.alchemyRecipes, null, 2)),
+  );
+});
+
+adminRoutes.post("/alchemy", async (c) => {
+  const denied = requireManager(c);
+  if (denied) return denied;
+  const world = c.get("world");
+  const body = await c.req.parseBody();
+  try {
+    const prepared = prepareJsonTextarea(String(body.recipesJson ?? body.json ?? ""));
+    const recipes = parseAlchemyRecipes(JSON.parse(prepared));
+    await world.saveAlchemyRecipes(recipes);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Save failed");
+  }
+  return c.redirect(`${c.get("assetBase")}/data/alchemy?saved=1`);
+});
+
 function requireManager(c: Context) {
   const world = c.get("world");
   const user = c.get("user");
@@ -224,6 +399,7 @@ function renderAdminHtml(
   const flash = notice ? `<p class="notice" role="status">${escapeHtml(notice)}</p>` : "";
   return `${renderPageBackCrumb(back)}<h1>Data</h1>
     ${flash}
+    <p class="muted"><a href="data/quests">Quests</a> · <a href="data/alchemy">Alchemy recipes</a></p>
     <ul class="link-list">${list}</ul>
     <h2>Data backups</h2>
     <p class="muted">Archives <code>data/</code> only (not the app). Updates also write one here first.</p>

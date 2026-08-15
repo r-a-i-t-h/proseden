@@ -54,6 +54,7 @@ const FIELD_NAME_TO_KIND: Record<string, string> = {
   detailsJson: "details",
   grantsJson: "grants",
   deniesJson: "denies",
+  recipesJson: "alchemy",
 };
 
 export function jsonKindFromFieldName(name: string): string | undefined {
@@ -181,6 +182,124 @@ registerJsonTableSchema({
   ],
   toRows: (parsed) => aclToRows(parsed, "Denies"),
   fromRows: deniesFromRows,
+});
+
+function formatAlchemyInput(inp: unknown): string {
+  if (typeof inp === "number" && Number.isFinite(inp)) return String(inp);
+  if (inp && typeof inp === "object" && "tag" in inp) {
+    return String((inp as { tag: unknown }).tag ?? "").trim();
+  }
+  return String(inp ?? "").trim();
+}
+
+function parseAlchemyInputToken(raw: string): number | { tag: string } | null {
+  const s = raw.trim();
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return Number(s);
+  const tagMatch = s.match(/^tag:\s*(.+)$/i);
+  if (tagMatch) return { tag: tagMatch[1]!.trim() };
+  return { tag: s };
+}
+
+function alchemyInputsToText(inputs: unknown): string {
+  if (!Array.isArray(inputs)) return "";
+  return inputs.map(formatAlchemyInput).filter(Boolean).join(", ");
+}
+
+function alchemyGivesToText(gives: unknown): string {
+  if (Array.isArray(gives)) return gives.map(String).join(", ");
+  if (gives === undefined || gives === null) return "";
+  return String(gives);
+}
+
+function alchemyToRows(parsed: unknown): JsonTableRowsResult {
+  if (!Array.isArray(parsed)) {
+    return { ok: false, error: "Alchemy recipes must be a JSON array." };
+  }
+  const rows: JsonTableRow[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return { ok: false, error: "Each recipe must be an object." };
+    }
+    const o = item as Record<string, unknown>;
+    rows.push({
+      id: String(o.id ?? ""),
+      inputs: alchemyInputsToText(o.inputs),
+      gives: alchemyGivesToText(o.gives),
+      ok: String(o.ok ?? ""),
+    });
+  }
+  return { ok: true, rows };
+}
+
+function alchemyFromRows(rows: JsonTableRow[]): JsonTableResult {
+  const out: Array<{
+    id: string;
+    inputs: Array<number | { tag: string }>;
+    gives: number | number[];
+    ok?: string;
+  }> = [];
+
+  for (const row of rows) {
+    const id = String(row.id ?? "").trim();
+    const inputsText = String(row.inputs ?? "").trim();
+    const givesText = String(row.gives ?? "").trim();
+    const ok = String(row.ok ?? "").trim();
+    if (!id && !inputsText && !givesText && !ok) continue;
+    if (!id) return { ok: false, error: "Each recipe needs an id." };
+    if (!inputsText) return { ok: false, error: `Recipe ${id}: inputs required (2+).` };
+    if (!givesText) return { ok: false, error: `Recipe ${id}: gives required.` };
+
+    const inputs: Array<number | { tag: string }> = [];
+    for (const part of inputsText.split(",")) {
+      const token = parseAlchemyInputToken(part);
+      if (!token) continue;
+      if (typeof token === "object" && !token.tag) {
+        return { ok: false, error: `Recipe ${id}: empty tag in inputs.` };
+      }
+      inputs.push(token);
+    }
+    if (inputs.length < 2) {
+      return { ok: false, error: `Recipe ${id}: inputs need at least two entries.` };
+    }
+
+    const giveParts = givesText
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const giveIds = giveParts.map(Number);
+    if (!giveIds.length || giveIds.some((n) => !Number.isFinite(n))) {
+      return { ok: false, error: `Recipe ${id}: gives must be artefact id number(s).` };
+    }
+
+    const recipe: (typeof out)[number] = {
+      id,
+      inputs,
+      gives: giveIds.length === 1 ? giveIds[0]! : giveIds,
+    };
+    if (ok) recipe.ok = ok;
+    out.push(recipe);
+  }
+  return { ok: true, value: out };
+}
+
+registerJsonTableSchema({
+  kind: "alchemy",
+  title: "Alchemy recipes",
+  emptyValue: [],
+  columns: [
+    { key: "id", label: "Id", type: "text", placeholder: "sunset-cocktail" },
+    {
+      key: "inputs",
+      label: "Inputs",
+      type: "text",
+      placeholder: "12, spirit, 44",
+    },
+    { key: "gives", label: "Gives", type: "text", placeholder: "120" },
+    { key: "ok", label: "Ok prose", type: "prose", rows: 2 },
+  ],
+  toRows: alchemyToRows,
+  fromRows: alchemyFromRows,
 });
 
 export { ALL_RIGHTS };

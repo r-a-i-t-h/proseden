@@ -12,6 +12,7 @@ describe("jsonKindFromFieldName", () => {
     expect(jsonKindFromFieldName("detailsJson")).toBe("details");
     expect(jsonKindFromFieldName("grantsJson")).toBe("grants");
     expect(jsonKindFromFieldName("deniesJson")).toBe("denies");
+    expect(jsonKindFromFieldName("recipesJson")).toBe("alchemy");
     expect(jsonKindFromFieldName("other")).toBeUndefined();
   });
 
@@ -104,9 +105,63 @@ describe("denies schema", () => {
   });
 });
 
+describe("alchemy schema", () => {
+  const schema = getJsonTableSchema("alchemy")!;
+
+  it("round-trips ids, tags, and multi gives", () => {
+    const loaded = schema.toRows([
+      {
+        id: "mix",
+        inputs: [1, { tag: "citrus" }, 3],
+        gives: [9, 10],
+        ok: "Nice.",
+      },
+    ]);
+    expect(loaded).toEqual({
+      ok: true,
+      rows: [
+        {
+          id: "mix",
+          inputs: "1, citrus, 3",
+          gives: "9, 10",
+          ok: "Nice.",
+        },
+      ],
+    });
+    expect(
+      schema.fromRows([
+        {
+          id: "mix",
+          inputs: "1, citrus, 3",
+          gives: "9, 10",
+          ok: "Nice.",
+        },
+      ]),
+    ).toEqual({
+      ok: true,
+      value: [
+        {
+          id: "mix",
+          inputs: [1, { tag: "citrus" }, 3],
+          gives: [9, 10],
+          ok: "Nice.",
+        },
+      ],
+    });
+  });
+
+  it("rejects fewer than two inputs", () => {
+    expect(
+      schema.fromRows([{ id: "x", inputs: "1", gives: "2", ok: "" }]),
+    ).toMatchObject({ ok: false });
+  });
+});
+
 describe("schema registry", () => {
   it("lists built-in kinds and accepts new schemas", () => {
-    expect(listJsonTableKinds()).toEqual(expect.arrayContaining(["details", "grants", "denies"]));
+    expect(listJsonTableKinds()).toEqual(
+      expect.arrayContaining(["details", "grants", "denies", "alchemy"]),
+    );
     registerJsonTableSchema({
       kind: "widgets",
       title: "Widgets",

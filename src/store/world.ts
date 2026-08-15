@@ -2,6 +2,14 @@ import { cp, mkdir, readdir, access, rename, rm, unlink } from "node:fs/promises
 import { join } from "node:path";
 import { canRead, type AccessWorld } from "../access/permissions.js";
 import { normalizeDenies, normalizeGrants, stripLegacyInvites } from "../access/acl.js";
+import type { AlchemyRecipe, FlagValue, QuestFile } from "../model/logic.js";
+import {
+  badgeDefsById,
+  evaluateQuests,
+  parseAlchemyRecipes,
+  parseQuestFile,
+} from "../logic/quests.js";
+import { assertFlagOnlyPred } from "../logic/quests.js";
 import type {
   ArtefactMeta,
   ArtefactRecord,
@@ -29,6 +37,8 @@ import type {
 } from "../model/types.js";
 import { appendLineAtomic, readJson, readText, writeJsonAtomic, writeTextAtomic } from "./fs.js";
 import { parseProseDocument, serializeProseDocument } from "./markdown.js";
+import { parseOptionalPred } from "../logic/world-view.js";
+import { logQuestFault } from "../logic/log.js";
 
 export class WorldStore implements AccessWorld {
   readonly dataDir: string;
@@ -51,6 +61,12 @@ export class WorldStore implements AccessWorld {
   inbox = new Map<number, InboxMessage>();
   staff: StaffFile = { roles: {} };
   settings: SettingsFile = { peerMessagingEnabled: true };
+  /** username → flags */
+  userFlags = new Map<string, Record<string, FlagValue>>();
+  /** username → badge ids */
+  userBadges = new Map<string, string[]>();
+  quests: QuestFile[] = [];
+  alchemyRecipes: AlchemyRecipe[] = [];
 
   constructor(dataDir: string) {
     this.dataDir = dataDir;
@@ -76,6 +92,10 @@ export class WorldStore implements AccessWorld {
     this.groups.clear();
     this.entranceGroups.clear();
     this.inbox.clear();
+    this.userFlags.clear();
+    this.userBadges.clear();
+    this.quests = [];
+    this.alchemyRecipes = [];
     await this.load();
   }
 
@@ -95,6 +115,8 @@ export class WorldStore implements AccessWorld {
     await mkdir(join(this.dataDir, "groups"), { recursive: true });
     await mkdir(join(this.dataDir, "entrance-groups"), { recursive: true });
     await mkdir(join(this.dataDir, "inbox"), { recursive: true });
+    await mkdir(join(this.dataDir, "quests"), { recursive: true });
+    await mkdir(join(this.dataDir, "alchemy"), { recursive: true });
 
     if (await exists(metaPath)) {
       this.meta = normalizeMeta(await readJson<Record<string, unknown>>(metaPath));
@@ -113,10 +135,28 @@ export class WorldStore implements AccessWorld {
     }
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".json")) {
+      if (file.endsWith(".flags.json") || file.endsWith(".badges.json")) continue;
       const raw = await readJson<Record<string, unknown>>(join(this.dataDir, "users", file));
       const user = normalizeUser(raw);
       this.users.set(user.username, user);
     }
+
+    for (const file of await listFiles(join(this.dataDir, "users"), ".flags.json")) {
+      const username = file.replace(/\.flags\.json$/, "");
+      const raw = await readJson<Record<string, FlagValue>>(join(this.dataDir, "users", file));
+      this.userFlags.set(username, raw && typeof raw === "object" ? raw : {});
+    }
+
+    for (const file of await listFiles(join(this.dataDir, "users"), ".badges.json")) {
+      const username = file.replace(/\.badges\.json$/, "");
+      const raw = await readJson<unknown>(join(this.dataDir, "users", file));
+      this.userBadges.set(
+        username,
+        Array.isArray(raw) ? raw.map(String) : [],
+      );
+    }
+
+    await this.loadLogicFiles();
 
     const bootstrapped = this.applyManagerBootstrap();
     if (bootstrapped || !(await exists(staffPath))) {
@@ -240,6 +280,126 @@ export class WorldStore implements AccessWorld {
     };
     this.users.set(toSave.username, toSave);
     await writeJsonAtomic(join(this.dataDir, "users", `${toSave.username}.json`), toSave);
+  }
+
+  getUserFlags(username: string): Record<string, FlagValue> {
+    return { ...(this.userFlags.get(username) ?? {}) };
+  }
+
+  getUserBadges(username: string): string[] {
+    return [...(this.userBadges.get(username) ?? [])];
+  }
+
+  async saveUserFlags(username: string, flags: Record<string, FlagValue>): Promise<void> {
+    this.userFlags.set(username, flags);
+    await writeJsonAtomic(join(this.dataDir, "users", `${username}.flags.json`), flags);
+  }
+
+  async saveUserBadges(username: string, badges: string[]): Promise<void> {
+    this.userBadges.set(username, badges);
+    await writeJsonAtomic(join(this.dataDir, "users", `${username}.badges.json`), badges);
+  }
+
+  listQuests(): QuestFile[] {
+    return [...this.quests];
+  }
+
+  getQuest(name: string): QuestFile | undefined {
+    return this.quests.find((q) => q.name === name);
+  }
+
+  badgeTitle(id: string): string {
+    return badgeDefsById(this.quests).get(id)?.title ?? id;
+  }
+
+  async loadLogicFiles(): Promise<void> {
+    const quests: QuestFile[] = [];
+    for (const file of await listFiles(join(this.dataDir, "quests"), ".json")) {
+      try {
+        const raw = await readJson<unknown>(join(this.dataDir, "quests", file));
+        quests.push(parseQuestFile(raw));
+      } catch (err) {
+        logQuestFault(`load quest ${file}`, err);
+      }
+    }
+    this.quests = quests.sort((a, b) => a.name.localeCompare(b.name));
+
+    const recipesPath = join(this.dataDir, "alchemy", "recipes.json");
+    if (await exists(recipesPath)) {
+      try {
+        this.alchemyRecipes = parseAlchemyRecipes(await readJson<unknown>(recipesPath));
+      } catch (err) {
+        logQuestFault("load alchemy recipes", err);
+        this.alchemyRecipes = [];
+      }
+    } else {
+      this.alchemyRecipes = [];
+      await writeJsonAtomic(recipesPath, []);
+    }
+  }
+
+  async saveQuest(quest: QuestFile): Promise<void> {
+    parseQuestFile(quest);
+    await writeJsonAtomic(join(this.dataDir, "quests", `${quest.name}.json`), quest);
+    await this.loadLogicFiles();
+  }
+
+  async deleteQuest(name: string): Promise<void> {
+    const path = join(this.dataDir, "quests", `${name}.json`);
+    if (await exists(path)) await unlink(path);
+    await this.loadLogicFiles();
+  }
+
+  async saveAlchemyRecipes(recipes: AlchemyRecipe[]): Promise<void> {
+    const parsed = parseAlchemyRecipes(recipes);
+    await writeJsonAtomic(join(this.dataDir, "alchemy", "recipes.json"), parsed);
+    this.alchemyRecipes = parsed;
+  }
+
+  predContextFor(username: string, atSceneId?: number) {
+    const user = this.getUser(username);
+    const inventoryIds = new Set((user?.inventory ?? []).map((i) => i.artefactId));
+    const artefactTags = new Map<number, readonly string[]>();
+    for (const a of this.artefacts.values()) artefactTags.set(a.id, a.tags);
+    let scenesOwned = 0;
+    for (const s of this.scenes.values()) {
+      if (s.owner === username) scenesOwned += 1;
+    }
+    return { inventoryIds, artefactTags, atSceneId, scenesOwned };
+  }
+
+  /**
+   * Run quest evaluation for a user (cascade). Persists flags/badges and grants artefacts.
+   * Never throws to callers — faults are logged for operators.
+   */
+  async evaluateQuestsForUser(username: string, atSceneId?: number): Promise<UserRecord | undefined> {
+    const user = this.getUser(username);
+    if (!user) return undefined;
+    try {
+      const sceneId = atSceneId ?? user.lastSceneId;
+      const result = evaluateQuests({
+        quests: this.quests,
+        flags: this.getUserFlags(username),
+        badges: this.getUserBadges(username),
+        predContext: this.predContextFor(username, sceneId),
+      });
+      await this.saveUserFlags(username, result.flags);
+      await this.saveUserBadges(username, result.badges);
+      let updated = user;
+      for (const artefactId of result.grantedArtefactIds) {
+        try {
+          if (!this.getArtefact(artefactId)) continue;
+          if (updated.inventory.some((i) => i.artefactId === artefactId)) continue;
+          updated = await this.collectArtefact(username, artefactId);
+        } catch (err) {
+          logQuestFault(`giveArtefact ${artefactId} to ${username}`, err);
+        }
+      }
+      return this.getUser(username) ?? updated;
+    } catch (err) {
+      logQuestFault(`evaluateQuestsForUser ${username}`, err);
+      return user;
+    }
   }
 
   async saveScene(scene: SceneRecord): Promise<void> {
@@ -1453,6 +1613,19 @@ function normalizeSceneMeta(raw: Record<string, unknown>, id: number): SceneMeta
         ? String(raw.entranceGroupId)
         : null,
     isJunction: Boolean(raw.isJunction),
+    detailWhen:
+      raw.detailWhen && typeof raw.detailWhen === "object"
+        ? (raw.detailWhen as SceneMeta["detailWhen"])
+        : undefined,
+    detailSwap:
+      raw.detailSwap && typeof raw.detailSwap === "object"
+        ? Object.fromEntries(
+            Object.entries(raw.detailSwap as Record<string, unknown>).map(([k, v]) => [
+              k,
+              Array.isArray(v) ? v.map(String) : [],
+            ]),
+          )
+        : undefined,
   };
 }
 
@@ -1556,16 +1729,28 @@ function normalizeStaff(raw: Record<string, unknown>): StaffFile {
 
 function normalizeExit(raw: Record<string, unknown>): ExitRecord {
   const toSceneId = Number(raw.toSceneId ?? raw.toNodeId);
+  const when = parseOptionalPred(raw.when);
+  if (when) {
+    try {
+      assertFlagOnlyPred(when, "exit.when");
+    } catch {
+      // keep but evaluateFlagPred will treat non-flag-only as false
+    }
+  }
   return {
     exitId: Number(raw.exitId),
     nickname: String(raw.nickname ?? ""),
     toSceneId,
     createdAt: String(raw.createdAt ?? nowIso()),
+    when,
+    whenDenied: raw.whenDenied !== undefined ? String(raw.whenDenied) : undefined,
+    hidden: raw.hidden !== undefined ? Boolean(raw.hidden) : undefined,
   };
 }
 
 function normalizeArtefactMeta(raw: Record<string, unknown>): ArtefactMeta {
   const homeSceneId = Number(raw.homeSceneId ?? raw.homeNodeId);
+  const when = parseOptionalPred(raw.when);
   return {
     id: Number(raw.id),
     owner: String(raw.owner ?? ""),
@@ -1574,6 +1759,7 @@ function normalizeArtefactMeta(raw: Record<string, unknown>): ArtefactMeta {
     tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
     createdAt: String(raw.createdAt ?? nowIso()),
     modifiedAt: Array.isArray(raw.modifiedAt) ? raw.modifiedAt.map(String) : [],
+    when,
   };
 }
 

@@ -195,4 +195,24 @@ function wireAuthPanelFocus(): void {
 }
 
 wireAuthPanelFocus();
+wireAlchemyPanel();
 bootPanel();
+
+const ALCHEMY_OPEN_KEY = "proseden-alchemy-open";
+
+/** Persist Inventory Alchemy <details> open state across combine redirects. */
+function wireAlchemyPanel(): void {
+  const panel = document.querySelector<HTMLDetailsElement>("details[data-alchemy-panel]");
+  if (!panel) return;
+
+  if (panel.open) {
+    localStorage.setItem(ALCHEMY_OPEN_KEY, "1");
+  } else if (localStorage.getItem(ALCHEMY_OPEN_KEY) === "1") {
+    panel.open = true;
+  }
+
+  panel.addEventListener("toggle", () => {
+    if (panel.open) localStorage.setItem(ALCHEMY_OPEN_KEY, "1");
+    else localStorage.removeItem(ALCHEMY_OPEN_KEY);
+  });
+}

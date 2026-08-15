@@ -112,6 +112,7 @@ export function renderUserProfileText(opts: {
   ownedScenes?: number;
   ownedArtefacts?: number;
   lastSeenAt?: string;
+  badges?: Array<{ id: string; title: string }>;
   basePath?: string;
   back?: { href: string; label: string };
 }): string {
@@ -135,6 +136,12 @@ export function renderUserProfileText(opts: {
     lines.push("");
     lines.push(opts.description.trim() || "(No description yet.)");
     lines.push("");
+    const badges = opts.badges ?? [];
+    if (badges.length) {
+      lines.push("Badges:");
+      for (const b of badges) lines.push(`  - ${b.title} (${b.id})`);
+      lines.push("");
+    }
     const detailNames = Object.keys(opts.details);
     if (detailNames.length) {
       lines.push("Details:");

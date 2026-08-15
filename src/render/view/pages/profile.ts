@@ -66,9 +66,11 @@ export function profilePageView(opts: {
   denies?: Deny[];
   back?: PageBackLink;
   openSection?: "appearance" | "password" | "sharing";
+  badges?: Array<{ id: string; title: string }>;
 }): PageView {
   const open = opts.openSection ?? "appearance";
   const accessAction = `u/${encodeURIComponent(opts.username)}/access`;
+  const badges = opts.badges ?? [];
 
   const detailNames = Object.keys(opts.details ?? {});
   const textLines: string[] = ["[Profile]", ""];
@@ -78,6 +80,11 @@ export function profilePageView(opts: {
   textLines.push(`Signed in as ${opts.username}`, "");
   if (opts.message) {
     textLines.push(opts.message, "");
+  }
+  if (badges.length) {
+    textLines.push("Badges:");
+    for (const b of badges) textLines.push(`  - ${b.title} (${b.id})`);
+    textLines.push("", "  POST {base}/profile/badges/:id/drop", "");
   }
   textLines.push("Appearance:");
   if (opts.description?.trim()) {
@@ -103,6 +110,21 @@ export function profilePageView(opts: {
     formatAccessSummary(opts.grants, opts.denies),
   );
 
+  const badgeNodes =
+    badges.length === 0
+      ? [muted("No badges yet.")]
+      : badges.map((b) =>
+          form(
+            {
+              method: "post",
+              action: `profile/badges/${encodeURIComponent(b.id)}/drop`,
+              class: "badge-row",
+            },
+            muted(`${b.title} (${b.id})`),
+            button("drop"),
+          ),
+        );
+
   return pageView(
     "Profile",
     nodes(
@@ -112,6 +134,10 @@ export function profilePageView(opts: {
           heading(1, "Profile"),
           byline(opts.username),
           opts.message ? notice(opts.message) : undefined,
+          detailsSection("Badges", badgeNodes, {
+            open: true,
+            class: "profile-section",
+          }),
           detailsSection(
             "Appearance",
             [

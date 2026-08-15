@@ -88,6 +88,44 @@ a:hover {
   align-items: end;
 }
 
+.alchemy-pick-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+}
+
+.alchemy-pick-list li {
+  margin: 0.35rem 0;
+}
+
+.alchemy-form label.alchemy-pick {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  color: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.alchemy-form label.alchemy-pick input {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.badge-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.35rem 0;
+}
+
+.badge-row button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .login form input[name="username"],
 .login form input[name="password"],
 .register form input[name="username"],
@@ -538,8 +576,18 @@ button:hover:not(.editor-tool):not(.mode-switch-btn):not(.linkish):not(.edit-too
   align-self: start;
 }
 
+/* Section-scale collapsibles (not the tiny JSON format "i" tip) */
+details.alchemy-panel,
+details.profile-section,
+details.messages-compose,
+details.login,
+details.register,
+details.live-online-wrap {
+  margin-top: 2rem;
+}
+
 .profile-section {
-  margin: 1.25rem 0 0;
+  margin-bottom: 0;
 }
 
 .profile-section > summary {
@@ -709,7 +757,7 @@ button:hover:not(.editor-tool):not(.mode-switch-btn):not(.linkish):not(.edit-too
 }
 
 .messages-compose {
-  margin: 0 0 1.5rem;
+  margin-bottom: 1.5rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--line);
 }

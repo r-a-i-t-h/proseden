@@ -367,6 +367,7 @@ export function renderUserProfileBodyHtml(opts: {
   ownedScenes?: number;
   ownedArtefacts?: number;
   lastSeenAt?: string;
+  badges?: Array<{ id: string; title: string }>;
   back?: PageBackLink;
 }): string {
   const path = userPath(opts.username);
@@ -381,9 +382,21 @@ export function renderUserProfileBodyHtml(opts: {
     ? formatProse(opts.description)
     : `<p class="muted">No description yet.</p>`;
   const meta = renderUserProfileMetaHtml(opts);
+  const badges = opts.badges ?? [];
+  const badgeBlock =
+    badges.length === 0
+      ? ""
+      : `<h2>Badges</h2>
+    <ul class="link-list">${badges
+      .map(
+        (b) =>
+          `<li>${escapeHtml(b.title)} <span class="muted">(${escapeHtml(b.id)})</span></li>`,
+      )
+      .join("")}</ul>`;
   return `${back}<h1>${escapeHtml(opts.username)}</h1>
     ${meta}
     <div class="desc">${desc}</div>
+    ${badgeBlock}
     ${renderNamedDetailsHtml(path, opts.details)}`;
 }
 
@@ -490,21 +503,53 @@ export function renderGroupBodyHtml(opts: {
 export function renderInventoryBodyHtml(
   items: ArtefactRecord[],
   back?: PageBackLink,
+  alchemy?: { alchemyOk?: string; alchemyError?: string },
 ): string {
   const crumb = renderPageBackCrumb(back);
-  if (!items.length) {
-    return `${crumb}<h1>Inventory</h1><p class="muted">Empty — collect artefacts you love.</p>`;
-  }
-  const list = items
-    .map((artefact) => {
-      const label = artefact.title ?? `Artefact ${artefact.id}`;
-      const tags = artefact.tags.length
-        ? ` <span class="muted">(${escapeHtml(artefact.tags.join(", "))})</span>`
-        : "";
-      return `<li><a href="a/${artefact.id}">${escapeHtml(label)}</a>${tags}</li>`;
-    })
-    .join("");
-  return `${crumb}<h1>Inventory</h1><ul class="link-list">${list}</ul>`;
+  const list =
+    items.length === 0
+      ? `<p class="muted">Empty — collect artefacts you love.</p>`
+      : `<ul class="link-list">${items
+          .map((artefact) => {
+            const label = artefact.title ?? `Artefact ${artefact.id}`;
+            const tags = artefact.tags.length
+              ? ` <span class="muted">(${escapeHtml(artefact.tags.join(", "))})</span>`
+              : "";
+            return `<li><a href="a/${artefact.id}">${escapeHtml(label)}</a>${tags}</li>`;
+          })
+          .join("")}</ul>`;
+
+  const alchemyChecks =
+    items.length < 2
+      ? `<p class="muted">Collect at least two artefacts to attempt alchemy.</p>`
+      : `<form method="post" action="alchemy/combine" class="alchemy-form">
+      <ul class="alchemy-pick-list">
+        ${items
+          .map((a) => {
+            const label = a.title ?? `Artefact ${a.id}`;
+            return `<li><label class="alchemy-pick"><input type="checkbox" name="artefactId" value="${a.id}" /> <span>${escapeHtml(label)}</span></label></li>`;
+          })
+          .join("")}
+      </ul>
+      <button type="submit">Combine selected</button>
+    </form>`;
+
+  const notice = alchemy?.alchemyOk
+    ? `<p class="notice">${escapeHtml(alchemy.alchemyOk)}</p>`
+    : alchemy?.alchemyError
+      ? `<p class="error">${escapeHtml(alchemy.alchemyError)}</p>`
+      : "";
+
+  const alchemyOpen =
+    Boolean(alchemy?.alchemyOk || alchemy?.alchemyError) || undefined;
+
+  return `${crumb}<h1>Inventory</h1>${list}
+    <details class="alchemy-panel"${alchemyOpen ? " open" : ""} data-alchemy-panel>
+      <summary>Alchemy</summary>
+      ${notice}
+      <p class="muted">Select two or more holdings and combine them. Recipes are world-defined.</p>
+      ${alchemyChecks}
+    </details>`;
 }
 
 export function renderInboxBodyHtml(opts: {
@@ -626,6 +671,8 @@ function renderJsonFieldHtml(
       <textarea name="${escapeAttr(name)}" rows="${rows}" data-editor="json"${dataJsonKindAttr(name)}>${escapeHtml(formatJsonTextarea(value))}</textarea>
     </div>`;
 }
+
+export { renderJsonFieldHtml };
 
 function bylineHtml(owner: string): string {
   return owner ? `<p class="byline">by ${userLinkHtml(owner)}</p>` : "";

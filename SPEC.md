@@ -28,7 +28,11 @@ Navigation and interaction will be very simple, in the style of the oldest
 adventure games. E.g. simple "verb noun" constructs.
 
 Despite being an adventure around a described world, including collecting
-artefacts, there is no mission.
+artefacts, there is no mission. Quests (see [PUZZLES.md](PUZZLES.md)) are
+named logic bundles that set per-reader flags — not assignments the reader
+is “on.”
+
+Badges may mark public achievements on a profile; flags stay invisible.
 
 The "reader" plays no character.
 

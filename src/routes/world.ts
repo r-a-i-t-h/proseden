@@ -19,6 +19,15 @@ import {
 } from "../access/permissions.js";
 import { apiError, liveSceneIdForUser, page, sceneBackLink, wantsJson } from "../http.js";
 import { prepareJsonTextarea } from "../json-textarea.js";
+import { triggerQuestEval } from "../logic/trigger.js";
+import {
+  artefactVisible,
+  exitAllowed,
+  resolveSceneDetails,
+  visibleArtefacts,
+  visibleExits,
+} from "../logic/world-view.js";
+import { matchAlchemyRecipe } from "../logic/quests.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import type { InboxMessage, StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
@@ -123,8 +132,13 @@ worldRoutes.get("/s/:id", (c) => {
   }
 
   const detail = queryDetailName(c);
-  const exits = world.getExits(id);
-  const artefacts = world.artefactsAt(id);
+  const flags = user ? world.getUserFlags(user.username) : {};
+  const exits = visibleExits(world.getExits(id), flags);
+  const artefacts = visibleArtefacts(world.artefactsAt(id), flags);
+  const readerScene = {
+    ...scene,
+    details: resolveSceneDetails(scene, flags),
+  };
   const manage = canManage(user, scene, world);
   const accessSummary = manage
     ? formatAccessSummary(scene.grants, scene.denies)
@@ -156,7 +170,7 @@ worldRoutes.get("/s/:id", (c) => {
     c,
     200,
     scenePageView({
-      scene,
+      scene: readerScene,
       exits,
       artefacts,
       detail,
@@ -186,7 +200,7 @@ worldRoutes.get("/s/:id", (c) => {
   );
 });
 
-worldRoutes.get("/s/:id/go/:exit", (c) => {
+worldRoutes.get("/s/:id/go/:exit", async (c) => {
   const world = c.get("world");
   const user = c.get("user");
   const fromId = Number(c.req.param("id"));
@@ -199,10 +213,19 @@ worldRoutes.get("/s/:id/go/:exit", (c) => {
   const exit = world.findExit(fromId, exitKey);
   if (!exit) return apiError(c, 404, `No exit matching "${exitKey}"`);
 
+  const flags = user ? world.getUserFlags(user.username) : {};
+  if (!exitAllowed(exit, flags)) {
+    const msg = exit.whenDenied?.trim() || "That way is closed.";
+    return apiError(c, 403, msg);
+  }
+
   const resolved = world.resolveTeleportTarget(exit.toSceneId, fromId);
   const dest = world.getScene(resolved.sceneId);
   if (!dest || !canRead(user, dest, world)) {
     return apiError(c, user ? 403 : 401, "Destination is not reachable");
+  }
+  if (user) {
+    await triggerQuestEval(c, user, resolved.sceneId);
   }
   return c.redirect(`${c.get("assetBase")}/s/${resolved.sceneId}?from=${fromId}`);
 });
@@ -232,8 +255,19 @@ worldRoutes.get("/a/:id", (c) => {
     );
   }
 
-  const detail = queryDetailName(c);
+  const flags = user ? world.getUserFlags(user.username) : {};
   const collected = !!user?.inventory.some((i) => i.artefactId === id);
+  if (!collected && !artefactVisible(artefact, flags)) {
+    return page(
+      c,
+      404,
+      "Not found",
+      renderMessageBodyHtml("Not found", `No artefact ${id}.`),
+      renderMessageText("Not found", `No artefact ${id}.`),
+    );
+  }
+
+  const detail = queryDetailName(c);
 
   // Stay present in the artefact's home scene while examining it.
   if (user) c.get("locations").noteVisit(user.username, artefact.homeSceneId);
@@ -279,7 +313,9 @@ worldRoutes.get("/profile", (c) => {
       ? "Share-all saved."
       : c.req.query("appearance")
         ? "Appearance saved."
-        : undefined;
+        : c.req.query("badge-dropped")
+          ? "Badge removed."
+          : undefined;
   const openSection = c.req.query("updated")
     ? "password"
     : c.req.query("shared")
@@ -287,6 +323,10 @@ worldRoutes.get("/profile", (c) => {
       : "appearance";
   const world = c.get("world");
   const back = sceneBackLink(user, world);
+  const badges = world.getUserBadges(user.username).map((id) => ({
+    id,
+    title: world.badgeTitle(id),
+  }));
   return page(
     c,
     200,
@@ -299,8 +339,21 @@ worldRoutes.get("/profile", (c) => {
       denies: user.denies,
       back,
       openSection,
+      badges,
     }),
   );
+});
+
+worldRoutes.post("/profile/badges/:id/drop", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const badgeId = decodeURIComponent(c.req.param("id"));
+  const next = world.getUserBadges(user.username).filter((b) => b !== badgeId);
+  await world.saveUserBadges(user.username, next);
+  await triggerQuestEval(c, user, user.lastSceneId);
+  if (wantsJson(c)) return c.json({ ok: true, badges: next });
+  return c.redirect(`${c.get("assetBase")}/profile?badge-dropped=1`);
 });
 
 worldRoutes.put("/profile", async (c) => updateProfileAppearance(c));
@@ -353,13 +406,18 @@ worldRoutes.get("/inv", (c) => {
     .map((item) => world.getArtefact(item.artefactId))
     .filter((a): a is NonNullable<typeof a> => !!a);
 
+  const alchemyNotice = c.req.query("alchemy");
+  const alchemyError = c.req.query("alchemy-error");
   const assetBase = c.get("assetBase");
   const back = sceneBackLink(user, world);
   return page(
     c,
     200,
     "Inventory",
-    renderInventoryBodyHtml(items, back),
+    renderInventoryBodyHtml(items, back, {
+      alchemyOk: alchemyNotice ? decodeURIComponent(alchemyNotice) : undefined,
+      alchemyError: alchemyError ? decodeURIComponent(alchemyError) : undefined,
+    }),
     renderInventoryText(items, assetBase, back),
     {
       kind: "inventory",
@@ -367,6 +425,85 @@ worldRoutes.get("/inv", (c) => {
     },
   );
 });
+
+worldRoutes.post("/alchemy/combine", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const body = await readBody(c);
+  let ids: number[] = [];
+  if (Array.isArray(body.artefactIds)) {
+    ids = body.artefactIds.map(Number).filter(Number.isFinite);
+  } else if (typeof body.artefactIds === "string") {
+    ids = body.artefactIds
+      .split(/[\s,]+/)
+      .map(Number)
+      .filter(Number.isFinite);
+  } else if (body.ids !== undefined) {
+    const raw = Array.isArray(body.ids) ? body.ids : String(body.ids).split(/[\s,]+/);
+    ids = raw.map(Number).filter(Number.isFinite);
+  }
+  // HTML checkboxes: artefactId repeated
+  if (!ids.length && body.artefactId !== undefined) {
+    const raw = body.artefactId;
+    ids = (Array.isArray(raw) ? raw : [raw]).map(Number).filter(Number.isFinite);
+  }
+
+  ids = [...new Set(ids)];
+  if (ids.length < 2) {
+    return alchemyFail(c, "Select at least two artefacts to combine.");
+  }
+  for (const id of ids) {
+    if (!user.inventory.some((i) => i.artefactId === id)) {
+      return alchemyFail(c, "All ingredients must be in your inventory.");
+    }
+  }
+
+  const tags = new Map<number, readonly string[]>();
+  for (const a of world.artefacts.values()) tags.set(a.id, a.tags);
+  const recipe = matchAlchemyRecipe(world.alchemyRecipes, ids, tags);
+  if (!recipe) {
+    return alchemyFail(c, "Those artefacts do not combine.");
+  }
+
+  const gives = Array.isArray(recipe.gives) ? recipe.gives : [recipe.gives];
+  let updated = user;
+  const already = gives.every((gid) => updated.inventory.some((i) => i.artefactId === gid));
+  if (already) {
+    return alchemyFail(c, "You already hold the result.");
+  }
+  for (const gid of gives) {
+    if (!world.getArtefact(gid)) {
+      return alchemyFail(c, `Result artefact ${gid} is missing from the world.`);
+    }
+    if (!updated.inventory.some((i) => i.artefactId === gid)) {
+      updated = await world.collectArtefact(updated.username, gid);
+    }
+  }
+  c.set("user", updated);
+  await triggerQuestEval(c, updated, updated.lastSceneId);
+  const ok = recipe.ok ?? "Something new settles into your keeping.";
+  if (wantsJson(c)) {
+    return c.json({
+      ok: true,
+      message: ok,
+      recipeId: recipe.id,
+      gives,
+      inventory: c.get("user")!.inventory,
+    });
+  }
+  return c.redirect(
+    `${c.get("assetBase")}/inv?alchemy=${encodeURIComponent(ok)}`,
+  );
+});
+
+function alchemyFail(c: Context, message: string) {
+  if (wantsJson(c)) return apiError(c, 400, message);
+  return c.redirect(
+    `${c.get("assetBase")}/inv?alchemy-error=${encodeURIComponent(message)}`,
+  );
+}
 
 const EXIT_REQUEST_NOTE_MAX = 500;
 
@@ -730,12 +867,17 @@ worldRoutes.get("/u/:username", (c) => {
   const ownedScenes = world.listScenesOwnedBy(target.username).length;
   const ownedArtefacts = world.listArtefactsOwnedBy(target.username).length;
   const lastSeenAt = target.lastSeenAt;
+  const badges = world.getUserBadges(target.username).map((id) => ({
+    id,
+    title: world.badgeTitle(id),
+  }));
   const payload = {
     username: target.username,
     description,
     details,
     ownedScenes,
     ownedArtefacts,
+    badges,
     ...(lastSeenAt ? { lastSeenAt } : {}),
   };
   if (wantsJson(c)) {
@@ -764,6 +906,7 @@ worldRoutes.get("/u/:username", (c) => {
       ownedScenes,
       ownedArtefacts,
       lastSeenAt,
+      badges,
       back,
     }),
     renderUserProfileText({
@@ -774,6 +917,7 @@ worldRoutes.get("/u/:username", (c) => {
       ownedScenes,
       ownedArtefacts,
       lastSeenAt,
+      badges,
       basePath: c.get("assetBase"),
       back,
     }),
@@ -1506,10 +1650,15 @@ worldRoutes.post("/a/:id/collect", async (c) => {
   if (!home || !canReadArtefact(user, artefact, home, world)) {
     return apiError(c, 403, "Cannot collect a prohibited artefact");
   }
+  const flags = world.getUserFlags(user.username);
+  if (!artefactVisible(artefact, flags)) {
+    return apiError(c, 403, "That artefact is not available to collect.");
+  }
 
   const updated = await world.collectArtefact(user.username, id);
   c.set("user", updated);
-  if (wantsJson(c)) return c.json({ ok: true, inventory: updated.inventory });
+  await triggerQuestEval(c, updated, home.id);
+  if (wantsJson(c)) return c.json({ ok: true, inventory: c.get("user")!.inventory });
   return c.redirect(`${c.get("assetBase")}/a/${id}`);
 });
 
@@ -1523,7 +1672,8 @@ async function dropCollect(c: Context) {
   const id = Number(c.req.param("id"));
   const updated = await world.dropArtefact(user.username, id);
   c.set("user", updated);
-  if (wantsJson(c)) return c.json({ ok: true, inventory: updated.inventory });
+  await triggerQuestEval(c, updated, updated.lastSceneId);
+  if (wantsJson(c)) return c.json({ ok: true, inventory: c.get("user")!.inventory });
   return c.redirect(`${c.get("assetBase")}/a/${id}`);
 }
 
@@ -2021,7 +2171,7 @@ async function readBody(c: Context): Promise<Record<string, unknown>> {
     if (Array.isArray(v)) {
       const strings = v.filter((item): item is string => typeof item === "string");
       // Multi-select fields keep every value; hidden+checkbox pairs keep the last.
-      if (k === "exitId" || k === "exitIds" || k === "exit") {
+      if (k === "exitId" || k === "exitIds" || k === "exit" || k === "artefactId" || k === "artefactIds") {
         out[k] = strings.length <= 1 ? (strings[0] ?? "") : strings;
       } else {
         out[k] = strings.at(-1) ?? String(v.at(-1));

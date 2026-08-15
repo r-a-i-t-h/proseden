@@ -401,6 +401,7 @@ describe("profile and password change", () => {
       details: { coat: "Patched at the elbow." },
       ownedScenes: 1,
       ownedArtefacts: 1,
+      badges: [],
       lastSeenAt,
     });
   });
