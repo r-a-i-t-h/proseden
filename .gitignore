@@ -7,3 +7,6 @@ public/assets/
 .env
 /data/
 /backup/
+# Accidental tsc emit beside test sources (source is *.ts; imports use .js specifiers)
+tests/**/*.js
+tests/**/*.js.map
