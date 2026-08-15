@@ -396,8 +396,8 @@ export function renderUserProfileBodyHtml(opts: {
   return `${back}<h1>${escapeHtml(opts.username)}</h1>
     ${meta}
     <div class="desc">${desc}</div>
-    ${badgeBlock}
-    ${renderNamedDetailsHtml(path, opts.details)}`;
+    ${renderNamedDetailsHtml(path, opts.details)}
+    ${badgeBlock}`;
 }
 
 function renderUserProfileMetaHtml(opts: {

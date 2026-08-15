@@ -136,18 +136,18 @@ export function renderUserProfileText(opts: {
     lines.push("");
     lines.push(opts.description.trim() || "(No description yet.)");
     lines.push("");
-    const badges = opts.badges ?? [];
-    if (badges.length) {
-      lines.push("Badges:");
-      for (const b of badges) lines.push(`  - ${b.title} (${b.id})`);
-      lines.push("");
-    }
     const detailNames = Object.keys(opts.details);
     if (detailNames.length) {
       lines.push("Details:");
       for (const name of detailNames) {
         lines.push(`  - ${name}  ${path}?${encodeURIComponent(name)}`);
       }
+      lines.push("");
+    }
+    const badges = opts.badges ?? [];
+    if (badges.length) {
+      lines.push("Badges:");
+      for (const b of badges) lines.push(`  - ${b.title} (${b.id})`);
       lines.push("");
     }
   }
