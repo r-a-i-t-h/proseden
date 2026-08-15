@@ -40,10 +40,10 @@ const SCENE_ACTION_SCRIPT = `(function () {
         if (invite) {
           invite.addEventListener("submit", function (ev) {
             ev.preventDefault();
-            var username = invite.querySelector('input[name="username"]').value.trim();
-            if (!username) return;
+            var userid = invite.querySelector('input[name="userid"]').value.trim();
+            if (!userid) return;
             var body = new URLSearchParams();
-            body.set("username", username);
+            body.set("userid", userid);
             fetch(invite.action, {
               method: "POST",
               headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
@@ -51,8 +51,8 @@ const SCENE_ACTION_SCRIPT = `(function () {
             }).then(function (r) {
               return r.json().then(function (data) {
                 if (r.ok) {
-                  invite.querySelector('input[name="username"]').value = "";
-                  alert((data.toUser || username) + " has been invited to view this scene");
+                  invite.querySelector('input[name="userid"]').value = "";
+                  alert((data.toUser || userid) + " has been invited to view this scene");
                 } else {
                   alert(data.error || "Invalid username");
                 }
@@ -204,7 +204,8 @@ export function scenePageView(opts: {
             },
             field("Invite to view, user:", {
               type: "text",
-              name: "username",
+              name: "userid",
+              autocomplete: "off",
               required: true,
             }),
             button("Invite"),

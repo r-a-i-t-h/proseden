@@ -1128,7 +1128,7 @@ worldRoutes.post("/s/:id/view-invites", async (c) => {
   }
 
   const body = await readBody(c);
-  const username = String(body.username ?? body.toUser ?? "").trim();
+  const username = String(body.userid ?? body.username ?? body.toUser ?? "").trim();
   if (!username) return apiError(c, 400, "Username is required");
   if (username === user.username) {
     return apiError(c, 400, "You cannot invite yourself");

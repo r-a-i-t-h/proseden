@@ -76,6 +76,8 @@ describe("read-only HTML vs edit bootstrap", () => {
     expect(html).toContain("Teleport to scene id:");
     expect(html).toContain("Invite to view, user:");
     expect(html).toContain('id="invite-form"');
+    expect(html).toContain('name="userid"');
+    expect(html).toContain('autocomplete="off"');
     expect(html).toContain("Invite");
   });
 
