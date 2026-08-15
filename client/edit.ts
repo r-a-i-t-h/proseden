@@ -1,4 +1,10 @@
 import { formatJsonTextarea } from "../src/json-textarea.js";
+import {
+  DENIES_EXAMPLE,
+  DETAILS_EXAMPLE,
+  GRANTS_EXAMPLE,
+} from "../src/render/view/examples.js";
+import { applyEditorPreferences, editorPrefsControls } from "./editors.js";
 
 interface OwnedSceneLink {
   id: number;
@@ -54,22 +60,6 @@ interface EditBootstrap {
 
 const FLASH_KEY = "proseden-edit-flash";
 const OLD_MODE_KEY = "proseden-edit";
-
-const DETAILS_EXAMPLE = `{
-  "card": "Closer look at the mantel card.
-Second paragraph on a new line.",
-  "window": "Rain beads on the glass."
-}`;
-
-const GRANTS_EXAMPLE = `[
-  { "who": "visitor", "rights": ["read"] },
-  { "who": "*", "rights": ["read", "edit"] }
-]`;
-
-const DENIES_EXAMPLE = `[
-  { "who": "bob", "rights": ["edit"] },
-  { "who": "carol" }
-]`;
 
 type ToolId =
   | "page"
@@ -140,7 +130,7 @@ function jsonField(label: string, name: string, rows: number, value: unknown, ex
   const fallback = name === "detailsJson" ? {} : [];
   const textarea = el(
     "textarea",
-    { name, rows: String(rows) },
+    { name, rows: String(rows), "data-editor": "json" },
     formatJsonTextarea(value ?? fallback),
   );
   const help = el(
@@ -151,6 +141,19 @@ function jsonField(label: string, name: string, rows: number, value: unknown, ex
   );
   const wrap = el("div", { class: "json-field" }, el("div", { class: "json-field-label" }, el("span", {}, label), help), textarea);
   return wrap;
+}
+
+function proseTextarea(name: string, rows: number, value: string, required = false): HTMLTextAreaElement {
+  return el(
+    "textarea",
+    {
+      name,
+      rows: String(rows),
+      "data-editor": "prose",
+      ...(required ? { required: true } : {}),
+    },
+    value,
+  );
 }
 
 function setStatus(root: HTMLElement, message: string, kind: "ok" | "err" = "err"): void {
@@ -232,9 +235,10 @@ export function mountEdit(boot: EditBootstrap, pane: HTMLElement): { toolbar: HT
     for (const btn of Array.from(nav.querySelectorAll<HTMLButtonElement>("button[data-tool]"))) {
       btn.classList.toggle("is-active", btn.dataset.tool === active);
     }
+    applyEditorPreferences(panel);
   }
 
-  inspector.append(nav, panel);
+  inspector.append(nav, panel, editorPrefsControls());
   pane.replaceChildren(inspector);
   renderPanel();
   return { toolbar };
@@ -317,7 +321,7 @@ function sceneEditor(manage: ManageContext | undefined, inspector: HTMLElement):
   }
   const form = el("div", { class: "edit-fields" });
   const title = el("input", { name: "title", value: scene.title ?? "" });
-  const body = el("textarea", { name: "body", rows: "10", required: true }, scene.body);
+  const body = proseTextarea("body", 10, scene.body, true);
   form.append(
     field("Title", title),
     field("Body", body),
@@ -386,7 +390,7 @@ function artefactEditor(manage: ManageContext, inspector: HTMLElement): HTMLElem
   const form = el("div", { class: "edit-fields" });
   form.append(
     field("Title", el("input", { name: "title", value: artefact.title ?? "" })),
-    field("Body", el("textarea", { name: "body", rows: "10", required: true }, artefact.body)),
+    field("Body", proseTextarea("body", 10, artefact.body, true)),
     field("Home scene", el("input", { name: "homeSceneId", type: "number", value: String(artefact.homeSceneId) })),
     field("Tags", el("input", { name: "tags", value: artefact.tags.join(", ") })),
     jsonField("Details", "detailsJson", 10, artefact.details, DETAILS_EXAMPLE, "Object of named closer-look texts."),
@@ -428,7 +432,7 @@ function newSceneTool(manage: ManageContext | undefined, inspector: HTMLElement)
   const form = el("div", { class: "edit-fields" });
   form.append(
     field("Title", el("input", { name: "title" })),
-    field("Body", el("textarea", { name: "body", rows: "10", required: true })),
+    field("Body", proseTextarea("body", 10, "", true)),
     el(
       "label",
       { class: "edit-check" },
@@ -494,7 +498,7 @@ function newArtefactTool(manage: ManageContext | undefined, inspector: HTMLEleme
   const form = el("div", { class: "edit-fields" });
   form.append(
     field("Title", el("input", { name: "title" })),
-    field("Body", el("textarea", { name: "body", rows: "10", required: true })),
+    field("Body", proseTextarea("body", 10, "", true)),
     field("Tags", el("input", { name: "tags", placeholder: "comma separated" })),
   );
   const create = el("button", { type: "button" }, "Create artefact");

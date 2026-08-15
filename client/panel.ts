@@ -1,4 +1,5 @@
 import { mountEdit, readBootstrap, OLD_MODE_KEY, type EditBootstrap } from "./edit.js";
+import { applyEditorPreferences, editorPrefsControls } from "./editors.js";
 import { mountLive, type LiveController } from "./live.js";
 
 const PANEL_KEY = "proseden-panel";
@@ -160,6 +161,15 @@ function bootPanel(): void {
   });
 
   applyMode(readMode(boot), false);
+
+  applyEditorPreferences(document);
+  const main = document.querySelector("main.prose");
+  if (
+    main?.querySelector("textarea[data-editor]") &&
+    !main.querySelector(".editor-prefs")
+  ) {
+    main.append(editorPrefsControls());
+  }
 
   document.querySelector<HTMLAnchorElement>('a[data-nav="back"]')?.addEventListener("click", (e) => {
     if (window.history.length > 1) {

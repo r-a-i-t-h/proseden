@@ -10,6 +10,7 @@ import {
   type PageBackLink,
 } from "./render/html.js";
 import { renderMessageText } from "./render/text.js";
+import { isPageView, toHtml, toText, type PageView } from "./render/view/index.js";
 import type { UserRecord } from "./model/types.js";
 import type { WorldStore } from "./store/world.js";
 
@@ -61,6 +62,8 @@ export interface PageShellOverrides {
 /**
  * Negotiate text vs HTML and wrap HTML in the shared site shell
  * (header, edit bootstrap, live scene binding, owned-scene list).
+ *
+ * Pass either a PageView (document model) or legacy htmlBody + textBody strings.
  */
 export function page(
   c: Context,
@@ -70,16 +73,69 @@ export function page(
   textBody: string,
   manage?: ManageContext,
   shell?: PageShellOverrides,
+): Response;
+export function page(
+  c: Context,
+  status: number,
+  view: PageView,
+  manage?: ManageContext,
+  shell?: PageShellOverrides,
+): Response;
+export function page(
+  c: Context,
+  status: number,
+  titleOrView: string | PageView,
+  htmlBodyOrManage?: string | ManageContext,
+  textBodyOrShell?: string | PageShellOverrides,
+  manage?: ManageContext,
+  shell?: PageShellOverrides,
 ) {
+  if (isPageView(titleOrView)) {
+    return pageFromView(
+      c,
+      status,
+      titleOrView,
+      htmlBodyOrManage as ManageContext | undefined,
+      textBodyOrShell as PageShellOverrides | undefined,
+    );
+  }
+
+  const title = titleOrView;
+  const htmlBody = htmlBodyOrManage as string;
+  const textBody = textBodyOrShell as string;
   const format = negotiateFormat(c);
   if (format === "text") {
     return c.text(textBody, status as 200);
   }
+  return htmlPageResponse(c, status, title, htmlBody, manage, shell);
+}
+
+function pageFromView(
+  c: Context,
+  status: number,
+  view: PageView,
+  manage?: ManageContext,
+  shell?: PageShellOverrides,
+) {
+  const format = negotiateFormat(c);
+  const basePath = c.get("assetBase") ?? "";
+  if (format === "text") {
+    return c.text(toText(view.body, { basePath }), status as 200);
+  }
+  return htmlPageResponse(c, status, view.title, toHtml(view.body), manage, shell);
+}
+
+function htmlPageResponse(
+  c: Context,
+  status: number,
+  title: string,
+  bodyHtml: string,
+  manage?: ManageContext,
+  shell?: PageShellOverrides,
+) {
   const user = c.get("user");
   const world = c.get("world");
   const hrefs = editModeHrefs(c.req.url, c.get("assetBase"));
-  // Detail views stay on the scene; artefact pages count as present at home.
-  // Elsewhere (inventory, profile, groups, …) keep Live at the user's last readable scene.
   let liveSceneId =
     manage?.kind === "scene" && manage.scene
       ? manage.scene.id
@@ -92,7 +148,7 @@ export function page(
   return c.html(
     renderHtmlPage({
       title,
-      bodyHtml: htmlBody,
+      bodyHtml,
       user,
       assetBase: c.get("assetBase"),
       manage,

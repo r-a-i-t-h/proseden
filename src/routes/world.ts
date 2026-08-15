@@ -23,31 +23,28 @@ import type { InboxMessage, StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
   escapeHtml,
-  renderArtefactBodyHtml,
   renderEditHistoryBodyHtml,
   renderGroupBodyHtml,
   renderGroupsIndexHtml,
-  renderInboxBodyHtml,
   renderInventoryBodyHtml,
   renderMessageBodyHtml,
-  renderMsgBodyHtml,
-  renderProfileBodyHtml,
-  renderSceneBodyHtml,
   renderSnapshotBodyHtml,
   renderStaffBodyHtml,
   renderUserProfileBodyHtml,
   userLinkHtml,
 } from "../render/html.js";
 import {
-  renderArtefactText,
+  artefactPageView,
+  inboxPageView,
+  msgPageView,
+  profilePageView,
+  scenePageView,
+} from "../render/view/index.js";
+import {
   renderEditHistoryText,
   renderGroupsIndexText,
-  renderInboxText,
   renderInventoryText,
   renderMessageText,
-  renderMsgText,
-  renderProfileText,
-  renderSceneText,
   renderSnapshotText,
   renderUserProfileText,
 } from "../render/text.js";
@@ -116,7 +113,6 @@ worldRoutes.get("/s/:id", (c) => {
   const detail = queryDetailName(c);
   const exits = world.getExits(id);
   const artefacts = world.artefactsAt(id);
-  const assetBase = c.get("assetBase");
   const manage = canManage(user, scene, world);
   const accessSummary = manage
     ? formatAccessSummary(scene.grants, scene.denies)
@@ -145,16 +141,13 @@ worldRoutes.get("/s/:id", (c) => {
   return page(
     c,
     200,
-    scene.title ?? `Scene ${scene.id}`,
-    renderSceneBodyHtml({ scene, exits, artefacts, detail, assetBase, isEntrance }),
-    renderSceneText({
+    scenePageView({
       scene,
       exits,
       artefacts,
       detail,
-      basePath: assetBase,
-      accessSummary,
       isEntrance,
+      accessSummary,
     }),
     {
       kind: "scene",
@@ -224,7 +217,6 @@ worldRoutes.get("/a/:id", (c) => {
   }
 
   const detail = queryDetailName(c);
-  const assetBase = c.get("assetBase");
   const collected = !!user?.inventory.some((i) => i.artefactId === id);
 
   // Stay present in the artefact's home scene while examining it.
@@ -233,14 +225,11 @@ worldRoutes.get("/a/:id", (c) => {
   return page(
     c,
     200,
-    artefact.title ?? `Artefact ${artefact.id}`,
-    renderArtefactBodyHtml({
+    artefactPageView({
       artefact,
       detail,
-      assetBase,
       collected: user ? collected : undefined,
     }),
-    renderArtefactText({ artefact, detail, basePath: assetBase }),
     {
       kind: "artefact",
       artefact,
@@ -285,8 +274,7 @@ worldRoutes.get("/profile", (c) => {
   return page(
     c,
     200,
-    "Profile",
-    renderProfileBodyHtml({
+    profilePageView({
       username: user.username,
       message,
       description: user.description,
@@ -295,16 +283,6 @@ worldRoutes.get("/profile", (c) => {
       denies: user.denies,
       back,
       openSection,
-    }),
-    renderProfileText({
-      username: user.username,
-      message,
-      description: user.description,
-      details: user.details,
-      basePath: c.get("assetBase"),
-      grants: user.grants,
-      denies: user.denies,
-      back,
     }),
   );
 });
@@ -399,13 +377,7 @@ worldRoutes.get("/inbox", (c) => {
   if (wantsJson(c)) {
     return c.json({ messages });
   }
-  return page(
-    c,
-    200,
-    "Inbox",
-    renderInboxBodyHtml({ messages, message: flash, back }),
-    renderInboxText(messages, c.get("assetBase"), back, flash),
-  );
+  return page(c, 200, inboxPageView({ messages, message: flash, back }));
 });
 
 worldRoutes.post("/inbox/:id/confirm", async (c) => confirmInboxMessage(c));
@@ -1485,13 +1457,7 @@ worldRoutes.get("/msg", (c) => {
     return c.json({ users: usernames, all: "*", ...(notice ? { notice } : {}) });
   }
   const back = sceneBackLink(user!, world);
-  return page(
-    c,
-    200,
-    "Msg",
-    renderMsgBodyHtml({ usernames, notice, back }),
-    renderMsgText(usernames, c.get("assetBase"), back, notice),
-  );
+  return page(c, 200, msgPageView({ usernames, notice, back }));
 });
 
 worldRoutes.post("/msg", async (c) => sendManagerMessage(c));
@@ -1516,9 +1482,7 @@ async function sendManagerMessage(c: Context) {
     return page(
       c,
       400,
-      "Msg",
-      renderMsgBodyHtml({ usernames, selected: toRaw, body: text, error, back }),
-      renderMsgText(usernames, c.get("assetBase"), back, error),
+      msgPageView({ usernames, selected: toRaw, body: text, error, back }),
     );
   };
 

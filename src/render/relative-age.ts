@@ -1,3 +1,4 @@
+import { escapeAttr } from "./escape.js";
 import { escapeHtml } from "./prose.js";
 
 /** Coarse relative age for “last seen” (same wording as live admin). */
@@ -21,8 +22,4 @@ export function relativeAgeHtml(iso: string, nowMs = Date.now()): string {
     return `<time datetime="${safeIso}">${escapeHtml(iso)}</time>`;
   }
   return `<time datetime="${safeIso}" title="${safeIso}">${escapeHtml(age)}</time>`;
-}
-
-function escapeAttr(value: string): string {
-  return escapeHtml(value).replace(/'/g, "&#39;");
 }

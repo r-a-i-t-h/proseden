@@ -13,11 +13,29 @@ import type {
   SceneRecord,
   UserRecord,
 } from "../model/types.js";
+import { escapeAttr } from "./escape.js";
+import { entityKindLabel, entityPath, userPath } from "./entity.js";
 import { escapeHtml, formatProse } from "./prose.js";
 import { relativeAgeHtml } from "./relative-age.js";
+import {
+  artefactPageView,
+  DENIES_EXAMPLE,
+  DETAILS_EXAMPLE,
+  entityDetailView,
+  GRANTS_EXAMPLE,
+  inboxPageView,
+  msgPageView,
+  profilePageView,
+  scenePageView,
+  toHtml,
+  userLink,
+  type PageBackLink,
+} from "./view/index.js";
 
 export { escapeHtml } from "./prose.js";
+export { userPath } from "./entity.js";
 export type { EntityKind } from "../model/types.js";
+export type { PageBackLink };
 
 export interface OwnedSceneLink {
   id: number;
@@ -209,16 +227,16 @@ function modeSwitchHtml(opts: { canLive: boolean; canEdit: boolean }): string {
     </div>`;
 }
 
-function entityKindLabel(kind: EntityKind): string {
-  return kind === "scene" ? "Scene" : "Artefact";
-}
-
-function entityPath(kind: EntityKind, id: number): string {
-  return kind === "scene" ? `s/${id}` : `a/${id}`;
-}
-
-function entityDisplayTitle(kind: EntityKind, id: number, title?: string): string {
-  return title?.trim() ? title : `${entityKindLabel(kind)} ${id}`;
+function renderNamedDetailsHtml(path: string, details: Record<string, string>): string {
+  const names = Object.keys(details);
+  if (!names.length) return "";
+  const items = names
+    .map(
+      (name) =>
+        `<li><a href="${path}?${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
+    )
+    .join("");
+  return `<section><h2>Details</h2><ul class="link-list">${items}</ul></section>`;
 }
 
 /** Detail sub-page shared by scenes and artefacts. */
@@ -230,43 +248,52 @@ export function renderEntityDetailHtml(opts: {
   detail: string;
   text?: string;
 }): string {
-  const label = entityDisplayTitle(opts.kind, opts.id, opts.title);
-  const path = entityPath(opts.kind, opts.id);
-  return `<p class="crumb"><a href="${path}">← ${entityKindLabel(opts.kind)} ${opts.id}</a></p>
-    <h1>${escapeHtml(label)} <span class="detail-sub">detail: ${escapeHtml(opts.detail)}</span></h1>
-    ${bylineHtml(opts.owner)}
-    <div class="desc">${formatProse(opts.text ?? `No detail named “${opts.detail}”.`)}</div>`;
+  return toHtml(
+    entityDetailView({
+      kind: opts.kind,
+      id: opts.id,
+      title: opts.title,
+      owner: opts.owner,
+      detail: opts.detail,
+      text: opts.text,
+    }).body,
+  );
 }
 
-function renderEntityHeadingHtml(opts: {
-  kind: EntityKind;
-  id: number;
-  title?: string;
-  owner: string;
+export function renderSceneBodyHtml(opts: {
+  scene: SceneRecord;
+  exits: ExitRecord[];
+  artefacts: ArtefactRecord[];
+  detail?: string;
+  isEntrance?: boolean;
+  /** @deprecated Links are root-relative via <base href>; kept for callers. */
+  assetBase?: string;
 }): string {
-  const label = entityDisplayTitle(opts.kind, opts.id, opts.title);
-  return `<h1>${escapeHtml(label)} <span class="sub">#${opts.id}</span></h1>
-    ${bylineHtml(opts.owner)}`;
+  return toHtml(
+    scenePageView({
+      scene: opts.scene,
+      exits: opts.exits,
+      artefacts: opts.artefacts,
+      detail: opts.detail,
+      isEntrance: opts.isEntrance,
+    }).body,
+  );
 }
 
-function renderDetailsSectionHtml(
-  kind: EntityKind,
-  id: number,
-  details: Record<string, string>,
-): string {
-  return renderNamedDetailsHtml(entityPath(kind, id), details);
-}
-
-function renderNamedDetailsHtml(path: string, details: Record<string, string>): string {
-  const names = Object.keys(details);
-  if (!names.length) return "";
-  const items = names
-    .map(
-      (name) =>
-        `<li><a href="${path}?${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`,
-    )
-    .join("");
-  return `<section><h2>Details</h2><ul class="link-list">${items}</ul></section>`;
+export function renderArtefactBodyHtml(opts: {
+  artefact: ArtefactRecord;
+  detail?: string;
+  /** @deprecated Links are root-relative via <base href>; kept for callers. */
+  assetBase?: string;
+  collected?: boolean;
+}): string {
+  return toHtml(
+    artefactPageView({
+      artefact: opts.artefact,
+      detail: opts.detail,
+      collected: opts.collected,
+    }).body,
+  );
 }
 
 export function renderEditHistoryBodyHtml(opts: {
@@ -311,169 +338,7 @@ export function renderSnapshotBodyHtml(opts: {
     ${restore}`;
 }
 
-export function renderSceneBodyHtml(opts: {
-  scene: SceneRecord;
-  exits: ExitRecord[];
-  artefacts: ArtefactRecord[];
-  detail?: string;
-  /** True when this scene is the landing scene of an entrance group. */
-  isEntrance?: boolean;
-  /** @deprecated Links are root-relative via <base href>; kept for callers. */
-  assetBase?: string;
-}): string {
-  const { scene, exits, artefacts, detail, isEntrance } = opts;
 
-  if (detail) {
-    return renderEntityDetailHtml({
-      kind: "scene",
-      id: scene.id,
-      title: scene.title,
-      owner: scene.owner,
-      detail,
-      text: scene.details[detail],
-    });
-  }
-
-  const artefactLinks = artefacts
-    .map((a) => {
-      const label = a.title ?? `Artefact ${a.id}`;
-      return `<li><a href="a/${a.id}">${escapeHtml(label)}</a></li>`;
-    })
-    .join("");
-
-  const exitLinks = exits
-    .map((e) => {
-      return `<li><a href="s/${scene.id}/go/${e.exitId}">${escapeHtml(e.nickname)}</a></li>`;
-    })
-    .join("");
-
-  const publicJunction = Boolean(scene.isJunction && scene.visibility === "public");
-  const badges = [
-    escapeHtml(scene.visibility),
-    publicJunction ? "junction" : "",
-    isEntrance ? "entrance" : "",
-  ].filter(Boolean);
-
-  return `${renderEntityHeadingHtml({
-      kind: "scene",
-      id: scene.id,
-      title: scene.title,
-      owner: scene.owner,
-    })}
-    <p class="meta">${badges.join(" · ")}</p>
-    <div class="desc">${formatProse(scene.body)}</div>
-    ${renderDetailsSectionHtml("scene", scene.id, scene.details)}
-    ${artefactLinks ? `<section><h2>Artefacts</h2><ul class="link-list">${artefactLinks}</ul></section>` : ""}
-    ${exitLinks ? `<section><h2>Exits</h2><ul class="link-list">${exitLinks}</ul></section>` : ""}
-    <section>
-      <h2>Actions</h2>
-      <form method="get" action="s/" class="action-form" id="travel-form">
-        <label>Teleport to scene id: <input name="to" type="number" min="1" required /></label>
-        <input type="hidden" name="from" value="${scene.id}" />
-        <button type="submit">Go</button>
-      </form>
-      <form method="post" action="s/${scene.id}/view-invites" class="action-form" id="invite-form">
-        <label>Invite to view, user: <input name="username" required /></label>
-        <button type="submit">Invite</button>
-      </form>
-    </section>
-    <script>
-      (function () {
-        var travel = document.getElementById("travel-form");
-        if (travel) {
-          travel.addEventListener("submit", function (ev) {
-            ev.preventDefault();
-            var to = travel.querySelector('input[name="to"]').value;
-            var from = travel.querySelector('input[name="from"]').value;
-            if (!to) return;
-            window.location.href = "s/" + encodeURIComponent(to) + "?from=" + encodeURIComponent(from);
-          });
-        }
-        var invite = document.getElementById("invite-form");
-        if (invite) {
-          invite.addEventListener("submit", function (ev) {
-            ev.preventDefault();
-            var username = invite.querySelector('input[name="username"]').value.trim();
-            if (!username) return;
-            var body = new URLSearchParams();
-            body.set("username", username);
-            fetch(invite.action, {
-              method: "POST",
-              headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-              body: body,
-            }).then(function (r) {
-              return r.json().then(function (data) {
-                if (r.ok) {
-                  invite.querySelector('input[name="username"]').value = "";
-                  alert((data.toUser || username) + " has been invited to view this scene");
-                } else {
-                  alert(data.error || "Invalid username");
-                }
-              });
-            });
-          });
-        }
-      })();
-    </script>`;
-}
-
-export function renderArtefactBodyHtml(opts: {
-  artefact: ArtefactRecord;
-  detail?: string;
-  /** @deprecated Links are root-relative via <base href>; kept for callers. */
-  assetBase?: string;
-  /** When set, show collect / drop as a reader action. */
-  collected?: boolean;
-}): string {
-  const { artefact, detail } = opts;
-
-  if (detail) {
-    return renderEntityDetailHtml({
-      kind: "artefact",
-      id: artefact.id,
-      title: artefact.title,
-      owner: artefact.owner,
-      detail,
-      text: artefact.details[detail],
-    });
-  }
-
-  return `<p class="crumb"><a href="s/${artefact.homeSceneId}?from=${artefact.homeSceneId}">← Scene ${artefact.homeSceneId}</a></p>
-    ${renderEntityHeadingHtml({
-      kind: "artefact",
-      id: artefact.id,
-      title: artefact.title,
-      owner: artefact.owner,
-    })}
-    ${artefact.tags.length ? `<p class="meta">${escapeHtml(artefact.tags.join(", "))}</p>` : ""}
-    <div class="desc">${formatProse(artefact.body)}</div>
-    ${renderDetailsSectionHtml("artefact", artefact.id, artefact.details)}
-    ${
-      opts.collected === undefined
-        ? ""
-        : opts.collected
-          ? `<form method="post" action="a/${artefact.id}/collect/drop" class="reader-action"><button type="submit">Remove from inventory</button></form>`
-          : `<form method="post" action="a/${artefact.id}/collect" class="reader-action"><button type="submit">Collect</button></form>`
-    }`;
-}
-
-const DETAILS_EXAMPLE = `{
-  "card": "Closer look at the mantel card.
-Second paragraph on a new line.",
-  "window": "Rain beads on the glass."
-}`;
-
-const GRANTS_EXAMPLE = `[
-  { "who": "visitor", "rights": ["read"] },
-  { "who": "*", "rights": ["read", "edit"] }
-]`;
-
-const DENIES_EXAMPLE = `[
-  { "who": "bob", "rights": ["edit"] },
-  { "who": "carol" }
-]`;
-
-export type PageBackLink = { href: string; label: string; history?: boolean };
 
 export function renderPageBackCrumb(back?: PageBackLink): string {
   if (!back) return "";
@@ -490,45 +355,7 @@ export function renderProfileBodyHtml(opts: {
   back?: PageBackLink;
   openSection?: "appearance" | "password" | "sharing";
 }): string {
-  const notice = opts.message
-    ? `<p class="notice" role="status">${escapeHtml(opts.message)}</p>`
-    : "";
-  const accessAction = `u/${encodeURIComponent(opts.username)}/access`;
-  const open = opts.openSection ?? "appearance";
-  return `${renderPageBackCrumb(opts.back)}<h1>Profile</h1>
-    ${bylineHtml(opts.username)}
-    ${notice}
-    <details class="profile-section"${open === "appearance" ? " open" : ""}>
-      <summary>Appearance</summary>
-      <form method="post" action="profile" class="profile-form profile-appearance">
-        <label>Description
-          <textarea name="description" rows="8">${escapeHtml(opts.description ?? "")}</textarea>
-        </label>
-        ${renderJsonFieldHtml("Details", "detailsJson", 10, opts.details ?? {}, DETAILS_EXAMPLE, "Object of named closer-look texts.")}
-        <button type="submit">Save appearance</button>
-      </form>
-    </details>
-    <details class="profile-section"${open === "password" ? " open" : ""}>
-      <summary>Password</summary>
-      <form method="post" action="auth/password" class="profile-form">
-        <label>Current password
-          <input name="currentPassword" type="password" autocomplete="current-password" required />
-        </label>
-        <label>New password
-          <input name="newPassword" type="password" autocomplete="new-password" required minlength="6" />
-        </label>
-        <label>Confirm new password
-          <input name="confirmPassword" type="password" autocomplete="new-password" required minlength="6" />
-        </label>
-        <button type="submit">Update password</button>
-      </form>
-    </details>
-    <details class="profile-section"${open === "sharing" ? " open" : ""}>
-      <summary>Sharing</summary>
-      <p class="muted">Applies to every scene and group you own.</p>
-      ${renderAccessFormHtml(accessAction, opts.grants, opts.denies, "Save share-all")}
-    </details>
-`;
+  return toHtml(profilePageView(opts).body);
 }
 
 export function renderUserProfileBodyHtml(opts: {
@@ -684,34 +511,7 @@ export function renderInboxBodyHtml(opts: {
   message?: string;
   back?: PageBackLink;
 }): string {
-  const crumb = renderPageBackCrumb(opts.back);
-  const notice = opts.message ? `<p class="flash">${escapeHtml(opts.message)}</p>` : "";
-  if (!opts.messages.length) {
-    return `${crumb}<h1>Inbox</h1>${notice}<p class="muted">Empty. Deal with messages as they arrive — this is not a mail archive.</p>`;
-  }
-  const items = opts.messages
-    .map((msg) => {
-      const viewLink =
-        msg.type === "invite_to_view"
-          ? `<a href="s/${msg.sceneId}">View scene</a>`
-          : "";
-      const actions =
-        msg.type === "exit_request"
-          ? `<form method="post" action="inbox/${msg.id}/confirm" class="inline"><button type="submit">Confirm</button></form>
-        <form method="post" action="inbox/${msg.id}/delete" class="inline"><button type="submit" class="edit-danger">Delete</button></form>`
-          : `${viewLink}${viewLink ? "\n        " : ""}<form method="post" action="inbox/${msg.id}/delete" class="inline"><button type="submit" class="edit-danger">Delete</button></form>`;
-      return `<article class="inbox-item">
-      <header class="inbox-meta">
-        <time datetime="${escapeAttr(msg.createdAt)}">${escapeHtml(msg.createdAt)}</time>
-        <span>from <strong>${escapeHtml(msg.fromUser)}</strong></span>
-      </header>
-      <h2 class="inbox-subject">${escapeHtml(msg.subject)}</h2>
-      <div class="desc">${formatProse(msg.body)}</div>
-      <div class="inbox-actions">${actions}</div>
-    </article>`;
-    })
-    .join("");
-  return `${crumb}<h1>Inbox</h1>${notice}${items}`;
+  return toHtml(inboxPageView(opts).body);
 }
 
 export function renderMsgBodyHtml(opts: {
@@ -722,32 +522,7 @@ export function renderMsgBodyHtml(opts: {
   error?: string;
   back?: PageBackLink;
 }): string {
-  const flash = opts.error
-    ? `<p class="notice notice-error" role="alert">${escapeHtml(opts.error)}</p>`
-    : opts.notice
-      ? `<p class="notice" role="status">${escapeHtml(opts.notice)}</p>`
-      : "";
-  const selected = opts.selected ?? "";
-  const options = [
-    `<option value="" disabled${selected ? "" : " selected"}>Choose recipient…</option>`,
-    `<option value="*"${selected === "*" ? " selected" : ""}>ALL users</option>`,
-    ...opts.usernames.map((name) => {
-      const sel = selected === name ? " selected" : "";
-      return `<option value="${escapeAttr(name)}"${sel}>${escapeHtml(name)}</option>`;
-    }),
-  ];
-  return `${renderPageBackCrumb(opts.back)}<h1>Msg</h1>
-    <p class="muted">Send a free-text note to one reader or everyone. Line breaks and prose adornments are kept: _emphasis_, *bold*, ~strike~, ---, and [links](https://…).</p>
-    ${flash}
-    <form method="post" action="msg" class="profile-form profile-appearance" id="msg-form">
-      <label>To
-        <select name="to" required>${options.join("")}</select>
-      </label>
-      <label>Message
-        <textarea name="body" rows="12" required>${escapeHtml(opts.body ?? "")}</textarea>
-      </label>
-      <button type="submit">Send</button>
-    </form>`;
+  return toHtml(msgPageView(opts).body);
 }
 
 export function renderStaffBodyHtml(opts: {
@@ -850,12 +625,8 @@ function bylineHtml(owner: string): string {
   return owner ? `<p class="byline">by ${userLinkHtml(owner)}</p>` : "";
 }
 
-export function userPath(username: string): string {
-  return `u/${encodeURIComponent(username)}`;
-}
-
 export function userLinkHtml(username: string): string {
-  return `<a href="${userPath(username)}">${escapeHtml(username)}</a>`;
+  return userLink(username);
 }
 
 function readAppVersion(): string {
@@ -872,10 +643,6 @@ function readAppVersion(): string {
     }
   }
   return "0.0.0";
-}
-
-function escapeAttr(value: string): string {
-  return escapeHtml(value).replace(/'/g, "&#39;");
 }
 
 /** JSON for a script tag: escape `<` so `</script>` in prose cannot break out. */
