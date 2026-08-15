@@ -1777,12 +1777,37 @@ async function setStaff(c: Context) {
     }
   }
   try {
+    const before = world.rolesFor(username);
     const staff = await world.setStaffRoles(username, roles);
-    if (wantsJson(c)) return c.json({ username, roles: staff.roles[username] ?? [] });
+    const after = staff.roles[username] ?? [];
+    if (!sameStaffRoles(before, after)) {
+      await world.createInboxMessage({
+        type: "notice",
+        toUser: username,
+        fromUser: user!.username,
+        subject: `Role change from ${user!.username}`,
+        body: staffRoleChangeBody(user!.username, after),
+      });
+    }
+    if (wantsJson(c)) return c.json({ username, roles: after });
     return c.redirect(`${c.get("assetBase")}/staff`);
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Could not set roles");
   }
+}
+
+function sameStaffRoles(a: StaffRole[], b: StaffRole[]): boolean {
+  if (a.length !== b.length) return false;
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.every((role, i) => role === right[i]);
+}
+
+function staffRoleChangeBody(manager: string, roles: StaffRole[]): string {
+  if (!roles.length) {
+    return `${manager} removed your staff roles.`;
+  }
+  return `${manager} set your staff roles to: ${roles.join(", ")}.`;
 }
 
 worldRoutes.get("/s/:id/history", async (c) => {

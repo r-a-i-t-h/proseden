@@ -419,6 +419,33 @@ describe("HTTP ACL enforcement", () => {
     });
     expect(set.status).toBe(200);
     expect(world.rolesFor("bob")).toEqual(["topographer"]);
+
+    const inbox = world.listInboxFor("bob");
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]!.type).toBe("notice");
+    expect(inbox[0]!.fromUser).toBe("alice");
+    expect(inbox[0]!.subject).toBe("Role change from alice");
+    expect(inbox[0]!.body).toBe("alice set your staff roles to: topographer.");
+
+    const same = await app.request("/staff/bob", {
+      method: "PUT",
+      headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
+      body: JSON.stringify({ roles: ["topographer"] }),
+    });
+    expect(same.status).toBe(200);
+    expect(world.listInboxFor("bob")).toHaveLength(1);
+
+    const clear = await app.request("/staff/bob", {
+      method: "PUT",
+      headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
+      body: JSON.stringify({ roles: [] }),
+    });
+    expect(clear.status).toBe(200);
+    expect(world.rolesFor("bob")).toEqual([]);
+    const cleared = world.listInboxFor("bob");
+    expect(cleared).toHaveLength(2);
+    expect(cleared[0]!.subject).toBe("Role change from alice");
+    expect(cleared[0]!.body).toBe("alice removed your staff roles.");
   });
 
   it("teleports into entrance groups only when the entrance is readable", async () => {
