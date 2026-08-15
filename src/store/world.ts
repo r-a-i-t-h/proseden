@@ -620,7 +620,7 @@ export class WorldStore implements AccessWorld {
   async setStaffRoles(username: string, roles: StaffRole[]): Promise<StaffFile> {
     if (!this.users.has(username)) throw new Error("User not found");
     const cleaned = [...new Set(roles)].filter(
-      (r): r is StaffRole => r === "moderator" || r === "organiser" || r === "manager",
+      (r): r is StaffRole => r === "moderator" || r === "topographer" || r === "manager",
     );
     if (cleaned.length) this.staff.roles[username] = cleaned;
     else delete this.staff.roles[username];
@@ -1318,9 +1318,10 @@ function normalizeStaff(raw: Record<string, unknown>): StaffFile {
     const cleaned: StaffRole[] = [];
     for (const r of list) {
       const s = String(r);
-      if (s === "moderator" || s === "organiser" || s === "manager") cleaned.push(s);
+      if (s === "organiser") cleaned.push("topographer");
+      else if (s === "moderator" || s === "topographer" || s === "manager") cleaned.push(s);
     }
-    if (cleaned.length) roles[username] = cleaned;
+    if (cleaned.length) roles[username] = [...new Set(cleaned)];
   }
   return { roles };
 }

@@ -38,7 +38,7 @@ interface ManageContext {
   canEdit?: boolean;
   canManage?: boolean;
   canAddExit?: boolean;
-  canOrganise?: boolean;
+  isTopographer?: boolean;
   canDelete?: boolean;
   canTransfer?: boolean;
   groups?: Array<{ id: string; title: string }>;
@@ -270,7 +270,7 @@ function availableTools(manage?: ManageContext, user?: { username: string }): To
   if (manage?.kind === "scene" && manage.canEdit) tools.push("artefact");
   if (manage?.kind === "scene" && manage.scene && (manage.canAddExit || user)) tools.push("exits");
   if (manage?.kind === "scene" && manage.canManage) tools.push("access");
-  if (manage?.kind === "scene" && (manage.canManage || manage.canOrganise)) tools.push("organise");
+  if (manage?.kind === "scene" && (manage.canManage || manage.isTopographer)) tools.push("organise");
   if (manage?.canDelete) tools.push("danger");
   return tools;
 }
@@ -730,8 +730,8 @@ function accessTool(manage: ManageContext | undefined, inspector: HTMLElement): 
 
 function organiseTool(manage: ManageContext | undefined, inspector: HTMLElement): HTMLElement {
   const scene = manage?.scene;
-  if (!scene || !(manage?.canManage || manage?.canOrganise)) {
-    return el("p", { class: "muted" }, "Organise rights required.");
+  if (!scene || !(manage?.canManage || manage?.isTopographer)) {
+    return el("p", { class: "muted" }, "Topographer or manage rights required.");
   }
   const wrap = el("div", { class: "stack" });
   if (manage.canManage) {

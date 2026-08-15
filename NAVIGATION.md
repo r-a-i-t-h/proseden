@@ -84,7 +84,7 @@ Movement never bypasses scene ACLs. Public scenes are readable anonymously; priv
 
 When **adding** exits (`POST /s/:id/exits`):
 
-- The caller must manage the origin scene, hold the organiser role, **or** the origin must be a public junction (`isJunction: true` and `visibility: "public"`).
+- The caller must manage the origin scene, hold the topographer role, **or** the origin must be a public junction (`isJunction: true` and `visibility: "public"`).
 - The destination must be readable to the caller (any public scene qualifies; private scenes need a normal read grant).
 
 Public junctions let other writers attach outbound edges *from* a shared hub without managing that hub’s prose or ACL. Linking *to* a public scene never required junction status.

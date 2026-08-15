@@ -8,7 +8,6 @@ import {
   canManageGroup,
   canTransferGroup,
   canTransferScene,
-  canOrganise,
   canRead,
   canReadArtefact,
   canReadGroup,
@@ -16,6 +15,7 @@ import {
   hasRight,
   isManager,
   isModerator,
+  isTopographer,
 } from "../src/access/permissions.js";
 import { artefact, group, scene, user, world } from "./helpers/fixtures.js";
 import type { ExitRecord } from "../src/model/types.js";
@@ -152,29 +152,29 @@ describe("staff roles on scenes", () => {
     expect(canManage(bob, privateScene, w)).toBe(false);
     expect(isModerator(bob, w)).toBe(true);
     expect(isManager(bob, w)).toBe(false);
-    expect(canOrganise(bob, w)).toBe(false);
+    expect(isTopographer(bob, w)).toBe(false);
   });
 
-  it("lets organisers edit and organise but not manage ACL", () => {
-    const w = world({ users: [alice, bob], roles: { bob: ["organiser"] } });
-    expect(canEdit(bob, privateScene, w)).toBe(true);
+  it("lets topographers reshape exits but not edit prose or manage ACL", () => {
+    const w = world({ users: [alice, bob], roles: { bob: ["topographer"] } });
+    expect(canEdit(bob, privateScene, w)).toBe(false);
     expect(canManage(bob, privateScene, w)).toBe(false);
-    expect(canOrganise(bob, w)).toBe(true);
+    expect(isTopographer(bob, w)).toBe(true);
     expect(isModerator(bob, w)).toBe(false);
     expect(isManager(bob, w)).toBe(false);
   });
 
-  it("lets managers manage and organise", () => {
+  it("lets managers manage and topograph", () => {
     const w = world({ users: [alice, bob], roles: { bob: ["manager"] } });
     expect(canManage(bob, privateScene, w)).toBe(true);
-    expect(canOrganise(bob, w)).toBe(true);
+    expect(isTopographer(bob, w)).toBe(true);
     expect(isManager(bob, w)).toBe(true);
     expect(isModerator(bob, w)).toBe(true);
   });
 
   it("returns false for staff helpers without a user", () => {
     const w = world({});
-    expect(canOrganise(undefined, w)).toBe(false);
+    expect(isTopographer(undefined, w)).toBe(false);
     expect(isModerator(undefined, w)).toBe(false);
     expect(isManager(undefined, w)).toBe(false);
   });

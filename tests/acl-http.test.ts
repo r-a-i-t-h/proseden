@@ -275,7 +275,7 @@ describe("HTTP ACL enforcement", () => {
     });
     expect(fromPublicHall.status).toBe(403);
 
-    await world.setStaffRoles("bob", ["organiser"]);
+    await world.setStaffRoles("bob", ["topographer"]);
     const organise = await app.request("/s/2/exits", {
       method: "POST",
       headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
@@ -415,10 +415,10 @@ describe("HTTP ACL enforcement", () => {
     const set = await app.request("/staff/bob", {
       method: "PUT",
       headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
-      body: JSON.stringify({ roles: ["organiser", "not-a-role"] }),
+      body: JSON.stringify({ roles: ["topographer", "not-a-role"] }),
     });
     expect(set.status).toBe(200);
-    expect(world.rolesFor("bob")).toEqual(["organiser"]);
+    expect(world.rolesFor("bob")).toEqual(["topographer"]);
   });
 
   it("teleports into entrance groups only when the entrance is readable", async () => {

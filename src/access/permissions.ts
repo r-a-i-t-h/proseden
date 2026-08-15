@@ -71,7 +71,7 @@ export function canManage(
 
 /**
  * Add an exit originating at `scene`.
- * Managers/organisers always may; anyone signed in may when the scene is a public junction.
+ * Managers/topographers always may; anyone signed in may when the scene is a public junction.
  */
 export function canAddExit(
   user: UserRecord | undefined,
@@ -79,13 +79,13 @@ export function canAddExit(
   world: AccessWorld,
 ): boolean {
   if (!user) return false;
-  if (canManage(user, scene, world) || canOrganise(user, world)) return true;
+  if (canManage(user, scene, world) || isTopographer(user, world)) return true;
   return Boolean(scene.isJunction && scene.visibility === "public");
 }
 
 /**
  * Remove an exit originating at `fromScene`.
- * Manage/organise may remove any; on a public junction, signed-in users may only
+ * Manage/topographer may remove any; on a public junction, signed-in users may only
  * remove exits that lead to a scene they own.
  */
 export function canRemoveExit(
@@ -95,7 +95,7 @@ export function canRemoveExit(
   world: AccessWorld,
 ): boolean {
   if (!user) return false;
-  if (canManage(user, fromScene, world) || canOrganise(user, world)) return true;
+  if (canManage(user, fromScene, world) || isTopographer(user, world)) return true;
   if (!canAddExit(user, fromScene, world)) return false;
   const dest = world.getScene(exit.toSceneId);
   return !!dest && dest.owner === user.username;
@@ -223,14 +223,14 @@ function isGranted(
 /**
  * Staff roles:
  * - moderator: edit (prose) worldwide; may delete unacceptable content
- * - organiser: graph structure via canOrganise (not full ACL manage / delete)
- * - manager: full manage + personnel APIs
+ * - topographer: graph structure via isTopographer (not prose edit / ACL manage / delete)
+ * - manager: full manage + personnel APIs (superset of moderator + topographer)
  */
 function staffCovers(user: UserRecord, right: Right, world: AccessWorld): boolean {
   const roles = world.rolesFor(user.username) ?? [];
   if (!roles.length) return false;
   if (right === "read" || right === "edit") {
-    if (roles.includes("moderator") || roles.includes("organiser") || roles.includes("manager")) {
+    if (roles.includes("moderator") || roles.includes("manager")) {
       return true;
     }
   }
@@ -240,14 +240,14 @@ function staffCovers(user: UserRecord, right: Right, world: AccessWorld): boolea
   return false;
 }
 
-/** Organisers (and managers) may restructure graph worldwide. */
-export function canOrganise(
+/** Topographers (and managers) may restructure graph worldwide. */
+export function isTopographer(
   user: UserRecord | undefined,
   world: AccessWorld,
 ): boolean {
   if (!user) return false;
   const roles = world.rolesFor(user.username) ?? [];
-  return roles.includes("organiser") || roles.includes("manager");
+  return roles.includes("topographer") || roles.includes("manager");
 }
 
 /** Moderators and managers may remove unacceptable content. */

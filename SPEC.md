@@ -85,7 +85,7 @@ Some admin roles exist:
 
 "Moderators" can edit or even delete anything that is unacceptable.
 
-"Organisers" can change navigational links and groupings, to restructure the
+"Topographers" can change navigational links and groupings, to restructure the
 world.
 
 "Managers" administer personnel and permissions, and may send free-text

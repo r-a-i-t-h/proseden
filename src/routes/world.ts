@@ -9,13 +9,13 @@ import {
   canManageGroup,
   canTransferGroup,
   canTransferScene,
-  canOrganise,
   canRead,
   canReadArtefact,
   canReadGroup,
   canRemoveExit,
   isManager,
   isModerator,
+  isTopographer,
 } from "../access/permissions.js";
 import { apiError, liveSceneIdForUser, page, sceneBackLink, wantsJson } from "../http.js";
 import { prepareJsonTextarea } from "../json-textarea.js";
@@ -124,7 +124,7 @@ worldRoutes.get("/s/:id", (c) => {
         .map((g) => ({ id: g.id, title: g.title }))
     : [];
   const entranceGroups =
-    user && (manage || canOrganise(user, world))
+    user && (manage || isTopographer(user, world))
       ? world.listEntranceGroups().map((g) => ({
           id: g.id,
           title: g.title,
@@ -159,7 +159,7 @@ worldRoutes.get("/s/:id", (c) => {
       canEdit: canEdit(user, scene, world),
       canManage: manage,
       canAddExit: canAddExit(user, scene, world),
-      canOrganise: canOrganise(user, world),
+      isTopographer: isTopographer(user, world),
       canDelete: manage || isModerator(user, world),
       canTransfer: canTransferScene(user, scene, world),
       isManager: isManager(user, world),
@@ -1250,7 +1250,7 @@ worldRoutes.post("/eg", async (c) => {
   if (!Number.isFinite(entranceSceneId)) return apiError(c, 400, "entranceSceneId is required");
   const entrance = world.getScene(entranceSceneId);
   if (!entrance) return apiError(c, 404, "Entrance scene not found");
-  if (!canManage(user, entrance, world) && !canOrganise(user, world)) {
+  if (!canManage(user, entrance, world) && !isTopographer(user, world)) {
     return apiError(c, 403, "Manage rights required on entrance scene");
   }
   try {
@@ -1275,7 +1275,7 @@ worldRoutes.post("/s/:id/entrance-group", async (c) => {
   const sceneId = Number(c.req.param("id"));
   const scene = world.getScene(sceneId);
   if (!scene) return apiError(c, 404, "Scene not found");
-  if (!canManage(user, scene, world) && !canOrganise(user, world)) {
+  if (!canManage(user, scene, world) && !isTopographer(user, world)) {
     return apiError(c, 403, "Manage rights required");
   }
   const body = await readBody(c);

@@ -67,6 +67,22 @@ describe("ACL persistence / bootstrap", () => {
     expect(world.rolesFor("bob")).toEqual(["manager"]);
   });
 
+  it("migrates legacy organiser staff role to topographer on load", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "proseden-organiser-"));
+    await writeFile(
+      join(dataDir, "meta.json"),
+      JSON.stringify({ nextSceneId: 1, nextArtefactId: 1 }),
+    );
+    await writeFile(
+      join(dataDir, "staff.json"),
+      JSON.stringify({ roles: { bob: ["organiser", "moderator"] } }),
+    );
+
+    const world = new WorldStore(dataDir);
+    await world.load();
+    expect(world.rolesFor("bob")).toEqual(["topographer", "moderator"]);
+  });
+
   it("strips legacy invites when saving scene access", async () => {
     dataDir = await mkdtemp(join(tmpdir(), "proseden-strip-"));
     const world = new WorldStore(dataDir);

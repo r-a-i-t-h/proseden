@@ -163,7 +163,7 @@ A **chamber** is a group (or entrance-group) that opts into puzzle rules:
 - Flags used by that chamber should be prefixed with `namespace`
   (`forge.cooled`) to avoid collisions across writers.
 - Exits and artefacts *outside* chambers ignore puzzle fields.
-- Organisers / group managers edit chamber puzzle JSON; ordinary scene edit
+- Topographers / group managers edit chamber puzzle JSON; ordinary scene edit
   does not require touching logic.
 
 Scenes and exits may carry **optional** gate fields even without a chamber;

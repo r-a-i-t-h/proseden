@@ -3,7 +3,7 @@ export type Visibility = "public" | "private";
 /** Hierarchical: manage ⊃ edit ⊃ read */
 export type Right = "read" | "edit" | "manage";
 
-export type StaffRole = "moderator" | "organiser" | "manager";
+export type StaffRole = "moderator" | "topographer" | "manager";
 
 export interface Grant {
   /** Username or `"*"` for everyone (still subject to deny). */

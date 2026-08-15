@@ -17,7 +17,7 @@ Implement the deferred Proseden features in dependency order: richer ACLs (invit
 | ACL | Invite read/edit/manage; deny overrides; user-level share-all; optional public invite |
 | Groups | Non-nested; rights on group; scene in at most one group |
 | Navigation | Go by exit id/nickname; teleport by scene id; public junctions; entrance groups |
-| Roles | Moderator / Organiser / Manager |
+| Roles | Moderator / Topographer / Manager |
 | History | Edit log always; retain/view some snapshots |
 | Polish | Artefact move (API exists; expose clearly in UI); delete exits/scenes |
 
@@ -80,15 +80,15 @@ flowchart TD
 - **Go:** `GET /s/:id/go/:exit` where `:exit` is numeric `exitId` or nickname → redirect to destination (access-checked)
 - **Teleport:** `GET /s/:id` already is teleport; add HTML/text “Travel to id” control; resolve **entrance groups**: if requester is outside the group, redirect to the group’s entrance scene (still require `canRead` on entrance; deny if entrance unreadable)
 - On disk: `data/entrance-groups/<id>.json` `{ id, title, entranceSceneId, sceneIds[] }`; scene `entranceGroupId`
-- **Public junctions:** `isJunction: true` on a public scene; any signed-in writer may `POST` an exit *from* that junction. Non-junction scenes: only managers of the from-scene (or organisers) add exits. Destination must be readable (public scenes are always linkable as destinations).
+- **Public junctions:** `isJunction: true` on a public scene; any signed-in writer may `POST` an exit *from* that junction. Non-junction scenes: only managers of the from-scene (or topographers) add exits. Destination must be readable (public scenes are always linkable as destinations).
 - List exits in text/HTML with go URLs (`/s/1/go/2`, `/s/1/go/reading%20nook`)
 
 ### Phase 5 — Admin roles ✅
 
-- `data/staff.json` (or per-user `roles[]`): `moderator` | `organiser` | `manager`
+- `data/staff.json` (or per-user `roles[]`): `moderator` | `topographer` | `manager`
 - **Moderator:** edit/delete any scene/artefact prose (not necessarily restructure graph)
-- **Organiser:** edit exits, groups, junctions, entrance groups worldwide
-- **Manager:** assign roles + user denies at staff level
+- **Topographer:** edit exits, groups, junctions, entrance groups worldwide (not prose)
+- **Manager:** assign roles + user denies at staff level (superset of moderator + topographer)
 - Bootstrap: first manager via env `PROSEDEN_MANAGERS=gardener` or seed staff file
 - Access helpers consult roles after ownership/grants
 

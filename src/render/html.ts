@@ -71,9 +71,9 @@ export interface ManageContext {
   exits?: Array<ExitRecord & { canRemove?: boolean }>;
   canEdit?: boolean;
   canManage?: boolean;
-  /** Add exit from this scene (manage/organise, or public junction). */
+  /** Add exit from this scene (manage/topographer, or public junction). */
   canAddExit?: boolean;
-  canOrganise?: boolean;
+  isTopographer?: boolean;
   canDelete?: boolean;
   canTransfer?: boolean;
   isManager?: boolean;
@@ -534,7 +534,7 @@ export function renderStaffBodyHtml(opts: {
       <h2>Assign staff role</h2>
       <form method="post" action="staff/" class="stack" id="staff-form">
         <label>Username <input name="username" required /></label>
-        <label>Roles (comma: moderator, organiser, manager) <input name="roles" placeholder="moderator" /></label>
+        <label>Roles (comma: moderator, topographer, manager) <input name="roles" placeholder="moderator" /></label>
         <button type="submit">Save roles</button>
       </form>
       <script>
