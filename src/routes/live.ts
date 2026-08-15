@@ -16,7 +16,7 @@ import {
   userLinkHtml,
   type PageBackLink,
 } from "../render/html.js";
-import { relativeAge } from "../render/relative-age.js";
+import { relativeAge, relativeAgeHtml } from "../render/relative-age.js";
 
 export const liveRoutes = new Hono();
 
@@ -360,7 +360,7 @@ function renderLiveAdminHtml(
 ): string {
   const userRows = users
     .map((u) => {
-      const age = u.lastSeenAt ? relativeAge(u.lastSeenAt) : "—";
+      const age = u.lastSeenAt ? relativeAgeHtml(u.lastSeenAt) : "—";
       const loc =
         u.lastSceneId !== undefined
           ? `${escapeHtml(u.sceneTitle ?? "Untitled")} (#${u.lastSceneId})`
@@ -376,7 +376,7 @@ function renderLiveAdminHtml(
         : "";
       return `<tr>
         <td>${name}${u.live ? ' <span class="muted">live</span>' : ""}</td>
-        <td>${escapeHtml(age)}</td>
+        <td>${age}</td>
         <td>${loc}</td>
         <td>${kick}</td>
       </tr>`;
@@ -391,8 +391,8 @@ function renderLiveAdminHtml(
       return `<tr>
         <td>${label}</td>
         <td>${b.count}</td>
-        <td>${b.oldestAt ? escapeHtml(relativeAge(b.oldestAt)) : "—"}</td>
-        <td>${b.newestAt ? escapeHtml(relativeAge(b.newestAt)) : "—"}</td>
+        <td>${b.oldestAt ? relativeAgeHtml(b.oldestAt) : "—"}</td>
+        <td>${b.newestAt ? relativeAgeHtml(b.newestAt) : "—"}</td>
       </tr>`;
     })
     .join("\n");

@@ -349,7 +349,8 @@ describe("profile and password change", () => {
     const res = await app().request("/u/alice", { headers: { Accept: "text/html" } });
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("1 scene · 2 artefacts · last seen 1m ago");
+    expect(html).toContain("1 scene · 2 artefacts · last seen ");
+    expect(html).toMatch(/last seen <time datetime="[^"]+" title="[^"]+">1m ago<\/time>/);
     expect(html).not.toContain("Bob's rake");
   });
 

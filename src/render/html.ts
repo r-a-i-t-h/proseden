@@ -14,7 +14,7 @@ import type {
   UserRecord,
 } from "../model/types.js";
 import { escapeHtml, formatProse } from "./prose.js";
-import { relativeAge } from "./relative-age.js";
+import { relativeAgeHtml } from "./relative-age.js";
 
 export { escapeHtml } from "./prose.js";
 export type { EntityKind } from "../model/types.js";
@@ -537,16 +537,16 @@ function renderUserProfileMetaHtml(opts: {
 }): string {
   const parts: string[] = [];
   if (opts.ownedScenes !== undefined) {
-    parts.push(pluralCount(opts.ownedScenes, "scene", "scenes"));
+    parts.push(escapeHtml(pluralCount(opts.ownedScenes, "scene", "scenes")));
   }
   if (opts.ownedArtefacts !== undefined) {
-    parts.push(pluralCount(opts.ownedArtefacts, "artefact", "artefacts"));
+    parts.push(escapeHtml(pluralCount(opts.ownedArtefacts, "artefact", "artefacts")));
   }
   if (opts.lastSeenAt) {
-    parts.push(`last seen ${relativeAge(opts.lastSeenAt)}`);
+    parts.push(`last seen ${relativeAgeHtml(opts.lastSeenAt)}`);
   }
   if (!parts.length) return "";
-  return `<p class="meta">${parts.map(escapeHtml).join(" · ")}</p>`;
+  return `<p class="meta">${parts.join(" · ")}</p>`;
 }
 
 function pluralCount(n: number, one: string, many: string): string {

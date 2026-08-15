@@ -1,3 +1,5 @@
+import { escapeHtml } from "./prose.js";
+
 /** Coarse relative age for “last seen” (same wording as live admin). */
 export function relativeAge(iso: string, nowMs = Date.now()): string {
   const ms = nowMs - Date.parse(iso);
@@ -9,4 +11,18 @@ export function relativeAge(iso: string, nowMs = Date.now()): string {
   const hr = Math.floor(min / 60);
   if (hr < 48) return `${hr}h ago`;
   return `${Math.floor(hr / 24)}d ago`;
+}
+
+/** Relative age with hover tooltip showing the absolute ISO timestamp. */
+export function relativeAgeHtml(iso: string, nowMs = Date.now()): string {
+  const age = relativeAge(iso, nowMs);
+  const safeIso = escapeAttr(iso);
+  if (age === iso) {
+    return `<time datetime="${safeIso}">${escapeHtml(iso)}</time>`;
+  }
+  return `<time datetime="${safeIso}" title="${safeIso}">${escapeHtml(age)}</time>`;
+}
+
+function escapeAttr(value: string): string {
+  return escapeHtml(value).replace(/'/g, "&#39;");
 }
