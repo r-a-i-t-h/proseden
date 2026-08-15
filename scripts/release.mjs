@@ -10,9 +10,9 @@ function usage() {
   return `Bump package.json, commit, tag, and push a release.
 
 Usage:
-  npm run release              # patch (default)
-  npm run release -- minor
-  npm run release -- major
+  npm run release -- --patch
+  npm run release -- --minor
+  npm run release -- --major
 `;
 }
 
@@ -22,13 +22,12 @@ function fail(message) {
 }
 
 function parseBump(arg) {
-  if (arg === undefined || arg === "") return "patch";
-  if (arg === "-h" || arg === "--help") {
+  if (arg === undefined || arg === "" || arg === "-h" || arg === "--help") {
     process.stdout.write(usage());
-    process.exit(0);
+    process.exit(arg === "-h" || arg === "--help" ? 0 : 1);
   }
-  if (bumpKinds.has(arg)) return arg;
-  fail(`unknown bump "${arg}" (expected patch, minor, or major)\n\n${usage()}`);
+  if (arg.startsWith("--") && bumpKinds.has(arg.slice(2))) return arg.slice(2);
+  fail(`unknown bump "${arg}" (expected --patch, --minor, or --major)\n\n${usage()}`);
 }
 
 function run(cmd, args) {
