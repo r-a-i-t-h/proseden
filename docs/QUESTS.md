@@ -139,10 +139,9 @@ Combinators nest freely. Example:
 }
 ```
 
-World gates on **exits, scene details, and artefacts** are a different
-surface: they accept only **flag-only** predicates (`flag` / `not` / `all` /
-`any` of flag atoms). They are not part of quest JSON. See
-[PUZZLES.md](PUZZLES.md#world-gates).
+World gates on **exits, scene access, details, and artefacts** are a different
+surface: a **FlagRef** string (`"flag.id"` or `"not.flag.id"`), not quest Pred.
+They are not part of quest JSON. See [PUZZLES.md](PUZZLES.md#world-gates).
 
 ---
 
@@ -331,8 +330,9 @@ collect is enough to catch up.
 
 ### Hold an artefact, then gate the world
 
-Quest JSON only flips flags. An exit or artefact `when` on the **scene /
-artefact** record should test the flag (flag-only), not `holds`.
+Quest JSON only flips flags. An exit, scene access, or artefact `when` on the
+**world record** is a FlagRef string (e.g. `"cellar.unlocked"` or
+`"not.cellar.unlocked"`), not a quest Pred and not `holds`.
 
 ```json
 {
@@ -359,9 +359,10 @@ artefact** record should test the flag (flag-only), not `holds`.
 }
 ```
 
-With that, a scene exit may use `"when": { "flag": "cellar.unlocked" }`.
-Uncollecting the key clears the flag on the next uncollect trigger, so
-the exit can close again. The badge is **not** removed automatically;
+With that, a scene exit and the destination scene may each use
+`"when": "cellar.unlocked"` (set independently). Uncollecting the key clears
+the flag on the next uncollect trigger, so the exit and room can close again.
+The badge is **not** removed automatically;
 the reader may drop it on profile. Re-collecting the key sets the flag
 again and `onTrue` may fire once more.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateFlagPred, evaluatePred, isFlagOnlyPred } from "./pred.js";
+import { evaluateFlagPred, evaluateFlagRef, evaluatePred, isFlagOnlyPred } from "./pred.js";
 import {
   applyFlagEffects,
   evaluateQuests,
@@ -27,12 +27,18 @@ describe("pred", () => {
     expect(evaluatePred({ not: { flag: "q.a" } }, base)).toBe(false);
   });
 
-  it("flag-only detection", () => {
+  it("flag-only detection (quest Pred; world gates use FlagRef)", () => {
     expect(isFlagOnlyPred({ flag: "q.a" })).toBe(true);
     expect(isFlagOnlyPred({ all: [{ flag: "q.a" }, { not: { flag: "q.b" } }] })).toBe(true);
     expect(isFlagOnlyPred({ holds: 1 })).toBe(false);
     expect(evaluateFlagPred({ flag: "q.a" }, { "q.a": true })).toBe(true);
     expect(evaluateFlagPred({ holds: 1 }, {})).toBe(false);
+  });
+
+  it("FlagRef not. invert", () => {
+    expect(evaluateFlagRef("q.a", base.flags)).toBe(true);
+    expect(evaluateFlagRef("not.q.a", base.flags)).toBe(false);
+    expect(evaluateFlagRef("not.q.missing", {})).toBe(true);
   });
 });
 

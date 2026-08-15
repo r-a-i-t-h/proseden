@@ -26,6 +26,9 @@ interface ManageContext {
     entranceGroupId?: string | null;
     grants?: unknown;
     denies?: unknown;
+    when?: string;
+    whenDenied?: string;
+    detailWhen?: Record<string, string>;
   };
   artefact?: {
     id: number;
@@ -34,8 +37,18 @@ interface ManageContext {
     details: Record<string, string>;
     homeSceneId: number;
     tags: string[];
+    when?: string;
+    detailWhen?: Record<string, string>;
   };
-  exits?: Array<{ exitId: number; nickname: string; toSceneId: number; canRemove?: boolean }>;
+  exits?: Array<{
+    exitId: number;
+    nickname: string;
+    toSceneId: number;
+    canRemove?: boolean;
+    when?: string;
+    whenDenied?: string;
+    hidden?: boolean;
+  }>;
   canEdit?: boolean;
   canManage?: boolean;
   canAddExit?: boolean;
@@ -133,7 +146,7 @@ function field(labelText: string, control: HTMLElement): HTMLElement {
 }
 
 function jsonField(label: string, name: string, rows: number, value: unknown, example: string, note: string) {
-  const fallback = name === "detailsJson" ? {} : [];
+  const fallback = name === "detailsJson" || name === "detailWhenJson" ? {} : [];
   const kind = jsonKindFromFieldName(name);
   const textarea = el(
     "textarea",
@@ -153,6 +166,30 @@ function jsonField(label: string, name: string, rows: number, value: unknown, ex
   );
   const wrap = el("div", { class: "json-field" }, el("div", { class: "json-field-label" }, el("span", {}, label), help), textarea);
   return wrap;
+}
+
+const FLAG_REF_PLACEHOLDER = "quest.flag or not.quest.flag";
+
+/** Closed-by-default opt-in for FlagRef gates. */
+function conditionCollapse(summary: string, ...children: Array<Node | string>): HTMLElement {
+  return el(
+    "details",
+    { class: "edit-condition" },
+    el("summary", {}, summary),
+    el("div", { class: "edit-condition-body" }, ...children),
+  );
+}
+
+function flagRefField(name: string, value: string | undefined): HTMLElement {
+  return field(
+    "Flag",
+    el("input", {
+      name,
+      value: value ?? "",
+      placeholder: FLAG_REF_PLACEHOLDER,
+      autocomplete: "off",
+    }),
+  );
 }
 
 function proseTextarea(name: string, rows: number, value: string, required = false): HTMLTextAreaElement {
@@ -338,6 +375,26 @@ function sceneEditor(manage: ManageContext | undefined, inspector: HTMLElement):
     field("Title", title),
     field("Body", body),
     jsonField("Details", "detailsJson", 10, scene.details, DETAILS_EXAMPLE, "Object of named closer-look texts."),
+    conditionCollapse(
+      "Condition",
+      flagRefField("when", scene.when),
+      field(
+        "Denied message",
+        el("input", {
+          name: "whenDenied",
+          value: scene.whenDenied ?? "",
+          placeholder: "You cannot enter here yet.",
+        }),
+      ),
+      jsonField(
+        "Detail conditions",
+        "detailWhenJson",
+        6,
+        scene.detailWhen ?? {},
+        '{\n  "secret": "q.secret",\n  "old door": "not.q.open"\n}',
+        "Map detail name → flag id.",
+      ),
+    ),
     el(
       "label",
       { class: "edit-check" },
@@ -378,6 +435,9 @@ function sceneEditor(manage: ManageContext | undefined, inspector: HTMLElement):
         title: inputValue(form, "title"),
         body: inputValue(form, "body"),
         detailsJson: inputValue(form, "detailsJson"),
+        detailWhenJson: inputValue(form, "detailWhenJson"),
+        when: inputValue(form, "when"),
+        whenDenied: inputValue(form, "whenDenied"),
         visibility: checked(form, "visibility") ? "public" : "private",
         isJunction: checked(form, "isJunction"),
         retainSnapshot: checked(form, "retainSnapshot"),
@@ -406,6 +466,18 @@ function artefactEditor(manage: ManageContext, inspector: HTMLElement): HTMLElem
     field("Home scene", el("input", { name: "homeSceneId", type: "number", value: String(artefact.homeSceneId) })),
     field("Tags", el("input", { name: "tags", value: artefact.tags.join(", ") })),
     jsonField("Details", "detailsJson", 10, artefact.details, DETAILS_EXAMPLE, "Object of named closer-look texts."),
+    conditionCollapse(
+      "Condition",
+      flagRefField("when", artefact.when),
+      jsonField(
+        "Detail conditions",
+        "detailWhenJson",
+        6,
+        artefact.detailWhen ?? {},
+        '{\n  "inscription": "q.read"\n}',
+        "Map detail name → flag id.",
+      ),
+    ),
     el(
       "label",
       { class: "edit-check" },
@@ -422,6 +494,8 @@ function artefactEditor(manage: ManageContext, inspector: HTMLElement): HTMLElem
         homeSceneId: Number(inputValue(form, "homeSceneId")),
         tags: inputValue(form, "tags"),
         detailsJson: inputValue(form, "detailsJson"),
+        detailWhenJson: inputValue(form, "detailWhenJson"),
+        when: inputValue(form, "when"),
         retainSnapshot: checked(form, "retainSnapshot"),
       });
       window.location.reload();
@@ -602,6 +676,20 @@ function exitsTool(
   add.append(
     field("Nickname", el("input", { name: "nickname", required: true })),
     field("To scene id", el("input", { name: "toSceneId", type: "number", min: "1", required: true })),
+    conditionCollapse(
+      "Condition",
+      flagRefField("when", undefined),
+      el(
+        "label",
+        { class: "edit-check" },
+        el("input", { type: "checkbox", name: "hidden" }),
+        " Hide until open",
+      ),
+      field(
+        "Denied message",
+        el("input", { name: "whenDenied", placeholder: "That way is closed." }),
+      ),
+    ),
   );
   const addBtn = el("button", { type: "button" }, "Add exit");
   addBtn.addEventListener("click", async () => {
@@ -612,16 +700,86 @@ function exitsTool(
       return;
     }
     try {
-      await apiJson("POST", `s/${scene.id}/exits`, { nickname, toSceneId });
+      await apiJson("POST", `s/${scene.id}/exits`, {
+        nickname,
+        toSceneId,
+        when: inputValue(add, "when"),
+        whenDenied: inputValue(add, "whenDenied"),
+        hidden: checked(add, "hidden"),
+      });
       window.location.reload();
     } catch (err) {
       setStatus(inspector, err instanceof Error ? err.message : "Could not add exit");
     }
   });
 
-  const removable = (manage.exits ?? []).filter((exit) => exit.canRemove);
+  const editable = (manage.exits ?? []).filter((exit) => exit.canRemove);
+  const editList = el("div", { class: "stack manage-exit-edit" });
+  for (const exit of editable) {
+    const row = el("div", { class: "edit-fields exit-edit-row" });
+    row.append(
+      el("p", { class: "edit-kicker" }, `Exit ${exit.exitId}`),
+      field("Nickname", el("input", { name: "nickname", value: exit.nickname, required: true })),
+      field(
+        "To scene id",
+        el("input", {
+          name: "toSceneId",
+          type: "number",
+          min: "1",
+          value: String(exit.toSceneId),
+          required: true,
+        }),
+      ),
+      conditionCollapse(
+        "Condition",
+        flagRefField("when", exit.when),
+        el(
+          "label",
+          { class: "edit-check" },
+          el("input", {
+            type: "checkbox",
+            name: "hidden",
+            ...(exit.hidden ? { checked: true } : {}),
+          }),
+          " Hide until open",
+        ),
+        field(
+          "Denied message",
+          el("input", {
+            name: "whenDenied",
+            value: exit.whenDenied ?? "",
+            placeholder: "That way is closed.",
+          }),
+        ),
+      ),
+    );
+    const saveBtn = el("button", { type: "button" }, "Save exit");
+    saveBtn.addEventListener("click", async () => {
+      const nickname = inputValue(row, "nickname").trim();
+      const toSceneId = Number(inputValue(row, "toSceneId"));
+      if (!nickname || !Number.isFinite(toSceneId)) {
+        setStatus(inspector, "Nickname and destination are required");
+        return;
+      }
+      try {
+        await apiJson("PUT", `s/${scene.id}/exits/${exit.exitId}`, {
+          nickname,
+          toSceneId,
+          when: inputValue(row, "when"),
+          whenDenied: inputValue(row, "whenDenied"),
+          hidden: checked(row, "hidden"),
+        });
+        window.location.reload();
+      } catch (err) {
+        setStatus(inspector, err instanceof Error ? err.message : "Could not update exit");
+      }
+    });
+    row.append(saveBtn);
+    editList.append(row);
+  }
+
   const list = el("ul", { class: "link-list manage-exit-list" });
-  for (const exit of removable) {
+  for (const exit of editable) {
     list.append(
       el(
         "li",
@@ -632,6 +790,7 @@ function exitsTool(
           el("input", { type: "checkbox", name: "exitId", value: String(exit.exitId) }),
           ` ${exit.nickname} `,
           el("span", { class: "muted" }, `→ ${exit.toSceneId}`),
+          exit.when ? el("span", { class: "muted" }, ` · ${exit.when}`) : "",
         ),
       ),
     );
@@ -655,7 +814,8 @@ function exitsTool(
   });
 
   const wrap = el("div", { class: "stack" }, el("p", { class: "edit-kicker" }, "Add exit"), add, addBtn);
-  if (removable.length) {
+  if (editable.length) {
+    wrap.append(el("p", { class: "edit-kicker" }, "Edit exits"), editList);
     wrap.append(el("p", { class: "edit-kicker" }, "Remove exits"), list, removeBtn);
   }
   return wrap;

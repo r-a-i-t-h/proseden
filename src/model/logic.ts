@@ -2,6 +2,12 @@
 
 export type FlagValue = boolean | number | string;
 
+/**
+ * World-gate flag reference. Require `flags[id] === true`, or invert with a
+ * `not.` prefix (`not.builders.hamlet` is not a stored flag).
+ */
+export type FlagRef = string;
+
 export type Pred =
   | { flag: string; is?: FlagValue }
   | { holds: number }

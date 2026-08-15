@@ -1,7 +1,7 @@
-import type { FlagValue, Pred } from "../model/logic.js";
+import type { FlagRef, FlagValue } from "../model/logic.js";
 import type { ArtefactRecord, ExitRecord, SceneRecord } from "../model/types.js";
 import { logQuestFault } from "./log.js";
-import { evaluateFlagPred } from "./pred.js";
+import { evaluateFlagRef } from "./pred.js";
 
 export function visibleExits(
   exits: ExitRecord[],
@@ -10,7 +10,7 @@ export function visibleExits(
   try {
     return exits.filter((e) => {
       if (!e.when) return true;
-      const ok = evaluateFlagPred(e.when, flags);
+      const ok = evaluateFlagRef(e.when, flags);
       if (ok) return true;
       return !e.hidden;
     });
@@ -23,7 +23,7 @@ export function visibleExits(
 export function exitAllowed(exit: ExitRecord, flags: Record<string, FlagValue>): boolean {
   try {
     if (!exit.when) return true;
-    return evaluateFlagPred(exit.when, flags);
+    return evaluateFlagRef(exit.when, flags);
   } catch (err) {
     logQuestFault("exitAllowed", err);
     return false;
@@ -35,7 +35,7 @@ export function visibleArtefacts(
   flags: Record<string, FlagValue>,
 ): ArtefactRecord[] {
   try {
-    return artefacts.filter((a) => !a.when || evaluateFlagPred(a.when, flags));
+    return artefacts.filter((a) => !a.when || evaluateFlagRef(a.when, flags));
   } catch (err) {
     logQuestFault("visibleArtefacts", err);
     return artefacts.filter((a) => !a.when);
@@ -45,36 +45,61 @@ export function visibleArtefacts(
 export function artefactVisible(artefact: ArtefactRecord, flags: Record<string, FlagValue>): boolean {
   try {
     if (!artefact.when) return true;
-    return evaluateFlagPred(artefact.when, flags);
+    return evaluateFlagRef(artefact.when, flags);
   } catch (err) {
     logQuestFault("artefactVisible", err);
     return false;
   }
 }
 
-/** Resolve which detail names/texts a reader sees (hide / show / swap). */
+/** Scene access gate after ACL (body never gated). */
+export function sceneAllowed(scene: SceneRecord, flags: Record<string, FlagValue>): boolean {
+  try {
+    if (!scene.when) return true;
+    return evaluateFlagRef(scene.when, flags);
+  } catch (err) {
+    logQuestFault("sceneAllowed", err);
+    return false;
+  }
+}
+
+/** Resolve which detail names/texts a reader sees (hide / legacy swap). */
 export function resolveSceneDetails(
   scene: SceneRecord,
   flags: Record<string, FlagValue>,
 ): Record<string, string> {
   try {
-    return resolveSceneDetailsUnsafe(scene, flags);
+    return resolveDetailsUnsafe(scene.details, scene.detailWhen, scene.detailSwap, flags);
   } catch (err) {
     logQuestFault("resolveSceneDetails", err);
     return { ...scene.details };
   }
 }
 
-function resolveSceneDetailsUnsafe(
-  scene: SceneRecord,
+export function resolveArtefactDetails(
+  artefact: ArtefactRecord,
+  flags: Record<string, FlagValue>,
+): Record<string, string> {
+  try {
+    return resolveDetailsUnsafe(artefact.details, artefact.detailWhen, artefact.detailSwap, flags);
+  } catch (err) {
+    logQuestFault("resolveArtefactDetails", err);
+    return { ...artefact.details };
+  }
+}
+
+function resolveDetailsUnsafe(
+  details: Record<string, string>,
+  detailWhen: Record<string, FlagRef> | undefined,
+  detailSwap: Record<string, string[]> | undefined,
   flags: Record<string, FlagValue>,
 ): Record<string, string> {
   const out: Record<string, string> = {};
-  const swaps = scene.detailSwap ?? {};
-  const whens = scene.detailWhen ?? {};
+  const swaps = detailSwap ?? {};
+  const whens = detailWhen ?? {};
   const swapSources = new Set(Object.values(swaps).flat());
   const slotNames = new Set([
-    ...Object.keys(scene.details).filter((k) => !swapSources.has(k) || k in swaps),
+    ...Object.keys(details).filter((k) => !swapSources.has(k) || k in swaps),
     ...Object.keys(swaps),
   ]);
 
@@ -84,24 +109,19 @@ function resolveSceneDetailsUnsafe(
       let chosen: string | undefined;
       for (const key of variantKeys) {
         const gate = whens[key];
-        if (gate && !evaluateFlagPred(gate, flags)) continue;
-        if (scene.details[key] === undefined) continue;
+        if (gate && !evaluateFlagRef(gate, flags)) continue;
+        if (details[key] === undefined) continue;
         chosen = key;
         break;
       }
-      if (chosen !== undefined) out[slot] = scene.details[chosen]!;
+      if (chosen !== undefined) out[slot] = details[chosen]!;
       continue;
     }
-    const text = scene.details[slot];
+    const text = details[slot];
     if (text === undefined) continue;
     const gate = whens[slot];
-    if (gate && !evaluateFlagPred(gate, flags)) continue;
+    if (gate && !evaluateFlagRef(gate, flags)) continue;
     out[slot] = text;
   }
   return out;
-}
-
-export function parseOptionalPred(raw: unknown): Pred | undefined {
-  if (raw === undefined || raw === null) return undefined;
-  return raw as Pred;
 }

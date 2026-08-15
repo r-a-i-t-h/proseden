@@ -66,18 +66,20 @@ Ordinary Travel / `GET /s/:id` do **not** use `asJoin`. Skipping the entrance wh
 ### Teleport HTTP flow
 
 1. Resolve target with `from` / Referer.
-2. If redirected: require `canRead` on the **entrance**; if not readable → `401`/`403` with “Entrance to this area is not reachable.”; if readable → `302` to `/s/<entrance>`.
-3. If not redirected: require `canRead` on the requested scene; missing → `404`; unreadable → `401`/`403`.
+2. If redirected: require `canRead` on the **entrance**; if not readable → `401`/`403` with “Entrance to this area is not reachable.”; if readable and entrance FlagRef gate fails (non-bypass) → `401`/`403` with `whenDenied` or default; if ok → `302` to `/s/<entrance>`.
+3. If not redirected: require `canRead` on the requested scene; missing → `404`; unreadable → `401`/`403`; then FlagRef scene access gate (owner / edit / manage / staff bypass).
 
 ### Go HTTP flow
 
 1. Require `canRead` on the **from** scene (cannot leave an unreadable scene).
 2. Resolve the exit by id or nickname; missing → `404`.
-3. Resolve teleport target with `fromId` = current scene.
-4. Require `canRead` on the **resolved** destination; fail → `401`/`403`.
-5. `302` to `/s/<resolved>?from=<fromId>`.
+3. Require exit FlagRef gate (`exitAllowed`); fail → `403` with `whenDenied` or default.
+4. Resolve teleport target with `fromId` = current scene.
+5. Require `canRead` on the **resolved** destination; fail → `401`/`403`.
+6. Require destination FlagRef scene access gate (same bypass rules as teleport).
+7. `302` to `/s/<resolved>?from=<fromId>`.
 
-So an exit that points at an inner room still delivers an outsider to the group entrance, not past it.
+So an exit that points at an inner room still delivers an outsider to the group entrance, not past it. A locked exit plus a gated destination scene must both be authored explicitly (no auto-pairing).
 
 ## Access and junctions
 

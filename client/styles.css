@@ -524,6 +524,34 @@ button:hover:not(.editor-tool):not(.mode-switch-btn):not(.linkish):not(.edit-too
   width: auto;
 }
 
+details.edit-condition {
+  margin: 0.5rem 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--moss) 18%, transparent);
+  padding-top: 0.5rem;
+}
+
+details.edit-condition > summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--moss);
+}
+
+details.edit-condition > summary:hover {
+  color: var(--leaf);
+}
+
+.edit-condition-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.exit-edit-row {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--moss) 12%, transparent);
+}
+
 .edit-status {
   margin: 0 0 0.65rem;
   padding: 0.4rem 0.5rem;

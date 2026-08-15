@@ -17,16 +17,20 @@ import {
   isModerator,
   isTopographer,
 } from "../access/permissions.js";
+import { bypassesSceneFlagGate } from "../access/scene-gate.js";
 import { apiError, liveSceneIdForUser, page, sceneBackLink, wantsJson } from "../http.js";
 import { prepareJsonTextarea } from "../json-textarea.js";
 import { triggerQuestEval } from "../logic/trigger.js";
 import {
   artefactVisible,
   exitAllowed,
+  resolveArtefactDetails,
   resolveSceneDetails,
+  sceneAllowed,
   visibleArtefacts,
   visibleExits,
 } from "../logic/world-view.js";
+import { parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
 import { matchAlchemyRecipe } from "../logic/quests.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import type { InboxMessage, StaffRole } from "../model/types.js";
@@ -104,6 +108,17 @@ worldRoutes.get("/s/:id", (c) => {
         renderMessageText("Forbidden", msg),
       );
     }
+    const entranceFlags = user ? world.getUserFlags(user.username) : {};
+    if (!bypassesSceneFlagGate(user, entrance, world) && !sceneAllowed(entrance, entranceFlags)) {
+      const msg = entrance.whenDenied?.trim() || "You cannot enter here yet.";
+      return page(
+        c,
+        user ? 403 : 401,
+        "Forbidden",
+        renderMessageBodyHtml("Forbidden", msg),
+        renderMessageText("Forbidden", msg),
+      );
+    }
     const dest = `${c.get("assetBase")}/s/${resolved.sceneId}`;
     return c.redirect(dest);
   }
@@ -131,8 +146,19 @@ worldRoutes.get("/s/:id", (c) => {
     );
   }
 
-  const detail = queryDetailName(c);
   const flags = user ? world.getUserFlags(user.username) : {};
+  if (!bypassesSceneFlagGate(user, scene, world) && !sceneAllowed(scene, flags)) {
+    const msg = scene.whenDenied?.trim() || "You cannot enter here yet.";
+    return page(
+      c,
+      user ? 403 : 401,
+      "Forbidden",
+      renderMessageBodyHtml("Forbidden", msg),
+      renderMessageText("Forbidden", msg),
+    );
+  }
+
+  const detail = queryDetailName(c);
   const exits = visibleExits(world.getExits(id), flags);
   const artefacts = visibleArtefacts(world.artefactsAt(id), flags);
   const readerScene = {
@@ -182,7 +208,7 @@ worldRoutes.get("/s/:id", (c) => {
     {
       kind: "scene",
       scene,
-      exits: exits.map((e) => ({
+      exits: world.getExits(id).map((e) => ({
         ...e,
         canRemove: canRemoveExit(user, scene, e, world),
       })),
@@ -224,6 +250,10 @@ worldRoutes.get("/s/:id/go/:exit", async (c) => {
   if (!dest || !canRead(user, dest, world)) {
     return apiError(c, user ? 403 : 401, "Destination is not reachable");
   }
+  if (!bypassesSceneFlagGate(user, dest, world) && !sceneAllowed(dest, flags)) {
+    const msg = dest.whenDenied?.trim() || "You cannot enter here yet.";
+    return apiError(c, 403, msg);
+  }
   if (user) {
     await triggerQuestEval(c, user, resolved.sceneId);
   }
@@ -256,6 +286,16 @@ worldRoutes.get("/a/:id", (c) => {
   }
 
   const flags = user ? world.getUserFlags(user.username) : {};
+  if (!bypassesSceneFlagGate(user, home, world) && !sceneAllowed(home, flags)) {
+    const msg = home.whenDenied?.trim() || "You cannot enter here yet.";
+    return page(
+      c,
+      user ? 403 : 401,
+      "Forbidden",
+      renderMessageBodyHtml("Forbidden", msg),
+      renderMessageText("Forbidden", msg),
+    );
+  }
   const collected = !!user?.inventory.some((i) => i.artefactId === id);
   if (!collected && !artefactVisible(artefact, flags)) {
     return page(
@@ -268,6 +308,10 @@ worldRoutes.get("/a/:id", (c) => {
   }
 
   const detail = queryDetailName(c);
+  const readerArtefact = {
+    ...artefact,
+    details: resolveArtefactDetails(artefact, flags),
+  };
 
   // Stay present in the artefact's home scene while examining it.
   if (user) c.get("locations").noteVisit(user.username, artefact.homeSceneId);
@@ -276,7 +320,7 @@ worldRoutes.get("/a/:id", (c) => {
     c,
     200,
     artefactPageView({
-      artefact,
+      artefact: readerArtefact,
       detail,
       collected: user ? collected : undefined,
     }),
@@ -762,6 +806,41 @@ async function updateScene(c: Context) {
       body.isJunction === "1";
   }
 
+  const clearGates: Array<"when" | "whenDenied" | "detailWhen"> = [];
+  const gatePatch: {
+    when?: string;
+    whenDenied?: string;
+    detailWhen?: Record<string, string>;
+  } = {};
+
+  if (body.when !== undefined || body.flag !== undefined) {
+    const ref = parseOptionalFlagRef(body.when ?? body.flag);
+    if (ref) gatePatch.when = ref;
+    else clearGates.push("when");
+  }
+  if (body.whenDenied !== undefined) {
+    const msg = String(body.whenDenied).trim();
+    if (msg) gatePatch.whenDenied = msg;
+    else clearGates.push("whenDenied");
+  }
+  if (body.detailWhenJson !== undefined || body.detailWhen !== undefined) {
+    try {
+      const raw =
+        body.detailWhenJson !== undefined
+          ? typeof body.detailWhenJson === "string"
+            ? body.detailWhenJson.trim()
+              ? JSON.parse(body.detailWhenJson as string)
+              : {}
+            : body.detailWhenJson
+          : body.detailWhen;
+      const map = parseDetailWhenMap(raw);
+      if (map) gatePatch.detailWhen = map;
+      else clearGates.push("detailWhen");
+    } catch (err) {
+      return apiError(c, 400, err instanceof Error ? err.message : "Invalid detailWhen JSON");
+    }
+  }
+
   const updated = await world.updateScene(
     id,
     {
@@ -770,10 +849,12 @@ async function updateScene(c: Context) {
       details,
       visibility,
       isJunction,
+      ...gatePatch,
     },
     {
       by: user.username,
       retainSnapshot: isTruthy(body.retainSnapshot) || isTruthy(body.keepVersion),
+      clearGates: clearGates.length ? clearGates : undefined,
     },
   );
 
@@ -1276,7 +1357,7 @@ worldRoutes.post("/s/:id/exits", async (c) => {
   }
 
   try {
-    const exit = await world.addExit(id, nickname, toSceneId);
+    const exit = await world.addExit(id, nickname, toSceneId, parseExitGates(body));
     if (wantsJson(c)) return c.json(exit, 201);
     return c.redirect(`${c.get("assetBase")}/s/${id}`);
   } catch (err) {
@@ -1442,6 +1523,73 @@ async function dropSubscribe(c: Context) {
 worldRoutes.delete("/s/:id/exits/:exit", async (c) => removeExit(c));
 worldRoutes.post("/s/:id/exits/:exit/delete", async (c) => removeExit(c));
 worldRoutes.post("/s/:id/exits/delete", async (c) => removeExits(c));
+
+worldRoutes.put("/s/:id/exits/:exit", async (c) => updateExitRoute(c));
+worldRoutes.post("/s/:id/exits/:exit", async (c) => updateExitRoute(c));
+
+async function updateExitRoute(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const id = Number(c.req.param("id"));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  const exitKey = decodeURIComponent(String(c.req.param("exit") ?? ""));
+  if (exitKey === "delete") return apiError(c, 404, `No exit matching "${exitKey}"`);
+  const existing = world.findExit(id, exitKey);
+  if (!existing) return apiError(c, 404, `No exit matching "${exitKey}"`);
+  if (!canRemoveExit(user, scene, existing, world) && !canManage(user, scene, world)) {
+    return apiError(c, 403, "Not allowed to edit this exit");
+  }
+
+  const body = await readBody(c);
+  const nickname =
+    body.nickname !== undefined ? String(body.nickname).trim() : existing.nickname;
+  if (!nickname) return apiError(c, 400, "Nickname is required");
+  const toSceneId =
+    body.toSceneId !== undefined ? Number(body.toSceneId) : existing.toSceneId;
+  if (!Number.isFinite(toSceneId)) return apiError(c, 400, "toSceneId is required");
+  const dest = world.getScene(toSceneId);
+  if (!dest) return apiError(c, 404, "Destination scene not found");
+  if (!canRead(user, dest, world)) {
+    return apiError(c, 403, "Destination must be reachable");
+  }
+
+  const clearGates: Array<"when" | "whenDenied" | "hidden"> = [];
+  const patch: {
+    nickname: string;
+    toSceneId: number;
+    when?: string;
+    whenDenied?: string;
+    hidden?: boolean;
+  } = { nickname, toSceneId };
+
+  if (body.when !== undefined || body.flag !== undefined) {
+    const ref = parseOptionalFlagRef(body.when ?? body.flag);
+    if (ref) patch.when = ref;
+    else clearGates.push("when");
+  }
+  if (body.whenDenied !== undefined) {
+    const msg = String(body.whenDenied).trim();
+    if (msg) patch.whenDenied = msg;
+    else clearGates.push("whenDenied");
+  }
+  if (body.hidden !== undefined) {
+    if (isTruthy(body.hidden)) patch.hidden = true;
+    else clearGates.push("hidden");
+  }
+
+  try {
+    const exit = await world.updateExit(id, existing.exitId, patch, {
+      clearGates: clearGates.length ? clearGates : undefined,
+    });
+    if (wantsJson(c)) return c.json(exit);
+    return c.redirect(`${c.get("assetBase")}/s/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not update exit");
+  }
+}
 
 async function removeExit(c: Context) {
   const world = c.get("world");
@@ -1617,6 +1765,26 @@ async function updateArtefact(c: Context) {
     if (body.detailsJson !== undefined || body.details !== undefined) {
       details = parseDetails(body.detailsJson ?? body.details);
     }
+    const clearGates: Array<"when" | "detailWhen"> = [];
+    const gatePatch: { when?: string; detailWhen?: Record<string, string> } = {};
+    if (body.when !== undefined || body.flag !== undefined) {
+      const ref = parseOptionalFlagRef(body.when ?? body.flag);
+      if (ref) gatePatch.when = ref;
+      else clearGates.push("when");
+    }
+    if (body.detailWhenJson !== undefined || body.detailWhen !== undefined) {
+      const raw =
+        body.detailWhenJson !== undefined
+          ? typeof body.detailWhenJson === "string"
+            ? body.detailWhenJson.trim()
+              ? JSON.parse(body.detailWhenJson as string)
+              : {}
+            : body.detailWhenJson
+          : body.detailWhen;
+      const map = parseDetailWhenMap(raw);
+      if (map) gatePatch.detailWhen = map;
+      else clearGates.push("detailWhen");
+    }
     const updated = await world.updateArtefact(
       id,
       {
@@ -1625,10 +1793,12 @@ async function updateArtefact(c: Context) {
         details,
         tags: body.tags !== undefined ? parseTags(body.tags) : undefined,
         homeSceneId: body.homeSceneId !== undefined ? Number(body.homeSceneId) : undefined,
+        ...gatePatch,
       },
       {
         by: user.username,
         retainSnapshot: isTruthy(body.retainSnapshot) || isTruthy(body.keepVersion),
+        clearGates: clearGates.length ? clearGates : undefined,
       },
     );
     if (wantsJson(c)) return c.json(updated);
@@ -1651,6 +1821,9 @@ worldRoutes.post("/a/:id/collect", async (c) => {
     return apiError(c, 403, "Cannot collect a prohibited artefact");
   }
   const flags = world.getUserFlags(user.username);
+  if (!bypassesSceneFlagGate(user, home, world) && !sceneAllowed(home, flags)) {
+    return apiError(c, 403, home.whenDenied?.trim() || "You cannot enter here yet.");
+  }
   if (!artefactVisible(artefact, flags)) {
     return apiError(c, 403, "That artefact is not available to collect.");
   }
@@ -2158,6 +2331,20 @@ worldRoutes.post("/a/:id/history/:version/restore", async (c) => {
 
 function isTruthy(value: unknown): boolean {
   return value === true || value === "true" || value === "on" || value === "1";
+}
+
+function parseExitGates(body: Record<string, unknown>): {
+  when?: string;
+  whenDenied?: string;
+  hidden?: boolean;
+} {
+  const gates: { when?: string; whenDenied?: string; hidden?: boolean } = {};
+  const ref = parseOptionalFlagRef(body.when ?? body.flag);
+  if (ref) gates.when = ref;
+  const denied = body.whenDenied !== undefined ? String(body.whenDenied).trim() : "";
+  if (denied) gates.whenDenied = denied;
+  if (isTruthy(body.hidden)) gates.hidden = true;
+  return gates;
 }
 
 async function readBody(c: Context): Promise<Record<string, unknown>> {

@@ -9,7 +9,6 @@ import {
   parseAlchemyRecipes,
   parseQuestFile,
 } from "../logic/quests.js";
-import { assertFlagOnlyPred } from "../logic/quests.js";
 import type {
   ArtefactMeta,
   ArtefactRecord,
@@ -35,9 +34,10 @@ import type {
   StaffRole,
   UserRecord,
 } from "../model/types.js";
+import type { FlagRef } from "../model/logic.js";
 import { appendLineAtomic, readJson, readText, writeJsonAtomic, writeTextAtomic } from "./fs.js";
 import { parseProseDocument, serializeProseDocument } from "./markdown.js";
-import { parseOptionalPred } from "../logic/world-view.js";
+import { parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
 import { logQuestFault } from "../logic/log.js";
 
 export class WorldStore implements AccessWorld {
@@ -1106,9 +1106,19 @@ export class WorldStore implements AccessWorld {
   async updateScene(
     id: number,
     patch: Partial<
-      Pick<SceneRecord, "title" | "body" | "details" | "visibility" | "isJunction">
+      Pick<
+        SceneRecord,
+        | "title"
+        | "body"
+        | "details"
+        | "visibility"
+        | "isJunction"
+        | "when"
+        | "whenDenied"
+        | "detailWhen"
+      >
     >,
-    opts?: { by?: string; retainSnapshot?: boolean },
+    opts?: { by?: string; retainSnapshot?: boolean; clearGates?: Array<"when" | "whenDenied" | "detailWhen"> },
   ): Promise<SceneRecord> {
     const existing = this.scenes.get(id);
     if (!existing) throw new Error("Scene not found");
@@ -1120,6 +1130,10 @@ export class WorldStore implements AccessWorld {
       details: patch.details ?? existing.details,
       modifiedAt: [...existing.modifiedAt, at],
     };
+    for (const key of opts?.clearGates ?? []) {
+      delete updated[key];
+      if (!fields.includes(key)) fields.push(key);
+    }
     await this.saveScene(updated);
 
     const entry: EditLogEntry = {
@@ -1146,8 +1160,10 @@ export class WorldStore implements AccessWorld {
 
   async updateArtefact(
     id: number,
-    patch: Partial<Pick<ArtefactRecord, "title" | "body" | "details" | "tags" | "homeSceneId">>,
-    opts?: { by?: string; retainSnapshot?: boolean },
+    patch: Partial<
+      Pick<ArtefactRecord, "title" | "body" | "details" | "tags" | "homeSceneId" | "when" | "detailWhen">
+    >,
+    opts?: { by?: string; retainSnapshot?: boolean; clearGates?: Array<"when" | "detailWhen"> },
   ): Promise<ArtefactRecord> {
     const existing = this.artefacts.get(id);
     if (!existing) throw new Error("Artefact not found");
@@ -1163,6 +1179,10 @@ export class WorldStore implements AccessWorld {
       tags: patch.tags ?? existing.tags,
       modifiedAt: [...existing.modifiedAt, at],
     };
+    for (const key of opts?.clearGates ?? []) {
+      delete updated[key];
+      if (!fields.includes(key)) fields.push(key);
+    }
     await this.saveArtefact(updated);
 
     const entry: EditLogEntry = {
@@ -1296,6 +1316,7 @@ export class WorldStore implements AccessWorld {
     fromSceneId: number,
     nickname: string,
     toSceneId: number,
+    gates?: { when?: FlagRef; whenDenied?: string; hidden?: boolean },
   ): Promise<ExitRecord> {
     if (!this.scenes.has(fromSceneId)) throw new Error("From scene not found");
     if (!this.scenes.has(toSceneId)) throw new Error("To scene not found");
@@ -1306,10 +1327,39 @@ export class WorldStore implements AccessWorld {
       nickname,
       toSceneId,
       createdAt: nowIso(),
+      when: gates?.when,
+      whenDenied: gates?.whenDenied,
+      hidden: gates?.hidden,
     };
     exits.push(exit);
     await this.saveExits(fromSceneId, exits);
     return exit;
+  }
+
+  async updateExit(
+    fromSceneId: number,
+    exitId: number,
+    patch: Partial<Pick<ExitRecord, "nickname" | "toSceneId" | "when" | "whenDenied" | "hidden">>,
+    opts?: { clearGates?: Array<"when" | "whenDenied" | "hidden"> },
+  ): Promise<ExitRecord> {
+    if (!this.scenes.has(fromSceneId)) throw new Error("From scene not found");
+    const exits = [...this.getExits(fromSceneId)];
+    const idx = exits.findIndex((e) => e.exitId === exitId);
+    if (idx < 0) throw new Error(`No exit ${exitId}`);
+    if (patch.toSceneId !== undefined && !this.scenes.has(patch.toSceneId)) {
+      throw new Error("Destination scene not found");
+    }
+    const existing = exits[idx]!;
+    const updated: ExitRecord = {
+      ...existing,
+      ...definedEntries(patch),
+    };
+    for (const key of opts?.clearGates ?? []) {
+      delete updated[key];
+    }
+    exits[idx] = updated;
+    await this.saveExits(fromSceneId, exits);
+    return updated;
   }
 
   async removeExit(fromSceneId: number, exitKey: string): Promise<ExitRecord> {
@@ -1328,6 +1378,8 @@ export class WorldStore implements AccessWorld {
     body: string;
     details?: Record<string, string>;
     tags?: string[];
+    when?: FlagRef;
+    detailWhen?: Record<string, FlagRef>;
   }): Promise<ArtefactRecord> {
     if (!this.scenes.has(input.homeSceneId)) throw new Error("Home scene not found");
     const id = this.meta.nextArtefactId++;
@@ -1343,6 +1395,8 @@ export class WorldStore implements AccessWorld {
       modifiedAt: [],
       body: input.body,
       details: input.details ?? {},
+      when: input.when,
+      detailWhen: input.detailWhen,
     };
     await this.saveArtefact(artefact);
     await this.notifySceneSubscribers(input.homeSceneId, ["artefacts"], input.owner);
@@ -1613,10 +1667,9 @@ function normalizeSceneMeta(raw: Record<string, unknown>, id: number): SceneMeta
         ? String(raw.entranceGroupId)
         : null,
     isJunction: Boolean(raw.isJunction),
-    detailWhen:
-      raw.detailWhen && typeof raw.detailWhen === "object"
-        ? (raw.detailWhen as SceneMeta["detailWhen"])
-        : undefined,
+    when: parseOptionalFlagRef(raw.when),
+    whenDenied: raw.whenDenied !== undefined ? String(raw.whenDenied) : undefined,
+    detailWhen: parseDetailWhenMap(raw.detailWhen),
     detailSwap:
       raw.detailSwap && typeof raw.detailSwap === "object"
         ? Object.fromEntries(
@@ -1729,20 +1782,12 @@ function normalizeStaff(raw: Record<string, unknown>): StaffFile {
 
 function normalizeExit(raw: Record<string, unknown>): ExitRecord {
   const toSceneId = Number(raw.toSceneId ?? raw.toNodeId);
-  const when = parseOptionalPred(raw.when);
-  if (when) {
-    try {
-      assertFlagOnlyPred(when, "exit.when");
-    } catch {
-      // keep but evaluateFlagPred will treat non-flag-only as false
-    }
-  }
   return {
     exitId: Number(raw.exitId),
     nickname: String(raw.nickname ?? ""),
     toSceneId,
     createdAt: String(raw.createdAt ?? nowIso()),
-    when,
+    when: parseOptionalFlagRef(raw.when),
     whenDenied: raw.whenDenied !== undefined ? String(raw.whenDenied) : undefined,
     hidden: raw.hidden !== undefined ? Boolean(raw.hidden) : undefined,
   };
@@ -1750,7 +1795,6 @@ function normalizeExit(raw: Record<string, unknown>): ExitRecord {
 
 function normalizeArtefactMeta(raw: Record<string, unknown>): ArtefactMeta {
   const homeSceneId = Number(raw.homeSceneId ?? raw.homeNodeId);
-  const when = parseOptionalPred(raw.when);
   return {
     id: Number(raw.id),
     owner: String(raw.owner ?? ""),
@@ -1759,7 +1803,17 @@ function normalizeArtefactMeta(raw: Record<string, unknown>): ArtefactMeta {
     tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
     createdAt: String(raw.createdAt ?? nowIso()),
     modifiedAt: Array.isArray(raw.modifiedAt) ? raw.modifiedAt.map(String) : [],
-    when,
+    when: parseOptionalFlagRef(raw.when),
+    detailWhen: parseDetailWhenMap(raw.detailWhen),
+    detailSwap:
+      raw.detailSwap && typeof raw.detailSwap === "object"
+        ? Object.fromEntries(
+            Object.entries(raw.detailSwap as Record<string, unknown>).map(([k, v]) => [
+              k,
+              Array.isArray(v) ? v.map(String) : [],
+            ]),
+          )
+        : undefined,
   };
 }
 

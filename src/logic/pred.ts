@@ -1,5 +1,57 @@
-import type { FlagValue, Pred } from "../model/logic.js";
+import type { FlagRef, FlagValue, Pred } from "../model/logic.js";
 import { logQuestFault } from "./log.js";
+
+const NOT_PREFIX = "not.";
+
+/** True when `flags[id] === true`. Empty / whitespace ref is treated as ungated by callers. */
+export function flagIsTrue(flags: Record<string, FlagValue>, flagId: string): boolean {
+  return flags[flagId] === true;
+}
+
+/**
+ * Evaluate a world-gate FlagRef. `not.foo` inverts `foo` (not a stored flag).
+ * Empty string is ungated (true).
+ */
+export function evaluateFlagRef(
+  ref: FlagRef | undefined | null,
+  flags: Record<string, FlagValue>,
+): boolean {
+  if (ref === undefined || ref === null) return true;
+  const trimmed = String(ref).trim();
+  if (!trimmed) return true;
+  try {
+    if (trimmed.startsWith(NOT_PREFIX)) {
+      const id = trimmed.slice(NOT_PREFIX.length).trim();
+      if (!id) return false;
+      return !flagIsTrue(flags, id);
+    }
+    return flagIsTrue(flags, trimmed);
+  } catch (err) {
+    logQuestFault("evaluateFlagRef", err);
+    return false;
+  }
+}
+
+/** Normalize / validate a FlagRef from input; empty → undefined. */
+export function parseOptionalFlagRef(raw: unknown): FlagRef | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const s = String(raw).trim();
+  if (!s) return undefined;
+  if (s.startsWith(NOT_PREFIX) && !s.slice(NOT_PREFIX.length).trim()) {
+    return undefined;
+  }
+  return s;
+}
+
+export function parseDetailWhenMap(raw: unknown): Record<string, FlagRef> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: Record<string, FlagRef> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const ref = parseOptionalFlagRef(v);
+    if (ref) out[k] = ref;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 export interface PredContext {
   flags: Record<string, FlagValue>;

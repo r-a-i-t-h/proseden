@@ -35,8 +35,8 @@ Rewards are prose (artefacts) and public badges — not a win screen.
 |---|---|
 | Quests (`data/quests/<name>.json`) | Scenes, artefacts, exits |
 | Flags (`data/users/<name>.flags.json`) — invisible | Scene **body** — never conditional |
-| Badges (`data/users/<name>.badges.json`) — profile | **Details** — hide / show / swap by flag |
-| Alchemy recipes (`data/alchemy/recipes.json`) | Inventory links |
+| Badges (`data/users/<name>.badges.json`) — profile | **Details** — hide by FlagRef |
+| Alchemy recipes (`data/alchemy/recipes.json`) | Scene **access** — FlagRef (teleport bypass lock) |
 
 ---
 
@@ -50,13 +50,14 @@ When a flag’s stored value **actually changes**, declared `onFlag` knock-ons
 run once for that transition (`grantBadge`, `giveArtefact`).
 
 The prose world and badge shelf do **not** read inventory or rich facts
-directly for gates: exits, details, and scene artefacts use **flag-only**
-predicates. **Missing flag == false.**
+directly for gates: exits, scene access, details, and artefacts use a
+**FlagRef** string (`not.` to invert). **Missing flag == false** for a
+positive ref.
 
 ```
 rich when  →  setFlag/clearFlag  →  onChange knock-ons
                  ↓
-         world when (flag levels)
+         world FlagRef (flag true / not.)
 ```
 
 Same-value set is a no-op (no knock-on). Dropping a badge or uncollecting a
@@ -82,8 +83,8 @@ type Pred =
   | { any: Pred[] };
 ```
 
-**Flag-only** (exits, details, artefacts on scenes): `flag` / `not` / `all` /
-`any` of the above flag atoms only. Invalid shapes rejected at load/validate.
+**World gates** use FlagRef strings on world objects (see World gates below),
+not Pred trees.
 
 ---
 
@@ -152,20 +153,37 @@ Alchemy recipes remain first-match-wins on combine.
 
 ## World gates
 
+World objects use a **FlagRef** string — not quest Pred trees. Empty = ungated.
+Require `flags[id] === true`, or invert with a `not.` prefix (`not.builders.hamlet`
+is not a stored flag).
+
 ```ts
+type FlagRef = string; // "quest.local" | "not.quest.local"
+
 // ExitRecord
-when?: Pred;           // flag-only
+when?: FlagRef;
 whenDenied?: string;
-hidden?: boolean;      // omit from lists until when true; default show+deny
+hidden?: boolean;      // omit from lists until when passes; default show+deny
 
-// ArtefactMeta — optional presence on home scene listing / collect
-when?: Pred;           // flag-only
+// SceneMeta — access only (body never gated)
+when?: FlagRef;
+whenDenied?: string;
 
-// Details — structured variants (body never gated)
-// Exact on-disk shape: see implementation; support hide/show/swap by flag
+// ArtefactMeta — listing / collect / direct /a/:id when not held
+when?: FlagRef;
+
+// Details — hide by name (body never gated)
+detailWhen?: Record<string, FlagRef>;
+// detailSwap — load-only legacy; prefer inverse FlagRef pairs instead
 ```
 
-Anonymous readers: empty flags → all flag preds false.
+Authors usually set the **same** FlagRef on an inbound exit and the destination
+scene so teleport cannot bypass a locked door — never auto-copied.
+
+Edit UI: optional **Condition** (or **Conditions** for detail maps) disclosure,
+closed by default. Quests still flip flags via manager JSON.
+
+Anonymous readers: empty flags → positive FlagRefs fail; `not.*` succeeds.
 
 ---
 
