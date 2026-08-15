@@ -164,7 +164,7 @@ button:not(.mode-switch-btn):not(.linkish):not(.edit-tool-tab) {
   min-height: 1.85rem;
 }
 
-button:hover {
+button:hover:not(.editor-tool):not(.mode-switch-btn):not(.linkish):not(.edit-tool-tab) {
   background: var(--leaf);
 }
 
@@ -910,6 +910,16 @@ button.linkish {
   background: var(--fog);
   border: 1px solid var(--line);
   color: var(--ink);
+}
+
+.editor-tool:hover {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: var(--moss);
+}
+
+.editor-tool:focus-visible {
+  outline: 2px solid var(--leaf);
+  outline-offset: 1px;
 }
 
 .editor-prefs {

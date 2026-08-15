@@ -3,6 +3,8 @@
  * Default is plain — upgrades only when the user opts in.
  */
 
+import { formatJsonTextarea, prepareJsonTextarea } from "../src/json-textarea.js";
+
 export type EditorPref = "plain" | "enhanced";
 
 const PROSE_KEY = "proseden-editor-prose";
@@ -69,7 +71,9 @@ function enhanceProse(textarea: HTMLTextAreaElement): void {
     ["link", "[ ]( )", () => wrapSelection(textarea, "[", "](https://)")],
   ];
   for (const [label, title, action] of buttons) {
-    const btn = el("button", { type: "button", class: "editor-tool", title }, label);
+    const btn = el("button", { type: "button", class: "editor-tool", title, tabindex: "-1" }, label);
+    // Keep the textarea selection when clicking the toolbar.
+    btn.addEventListener("mousedown", (ev) => ev.preventDefault());
     btn.addEventListener("click", (ev) => {
       ev.preventDefault();
       action();
@@ -85,8 +89,8 @@ function enhanceJson(textarea: HTMLTextAreaElement): void {
   const status = el("p", { class: "editor-json-status muted", hidden: true });
   const format = (): void => {
     try {
-      const parsed = JSON.parse(textarea.value);
-      textarea.value = JSON.stringify(parsed, null, 2);
+      const parsed = JSON.parse(prepareJsonTextarea(textarea.value));
+      textarea.value = formatJsonTextarea(parsed);
       status.hidden = true;
       status.textContent = "";
       status.dataset.kind = "";
@@ -98,7 +102,8 @@ function enhanceJson(textarea: HTMLTextAreaElement): void {
   };
   textarea.addEventListener("blur", format);
   const bar = el("div", { class: "editor-toolbar", role: "toolbar", "aria-label": "JSON tools" });
-  const btn = el("button", { type: "button", class: "editor-tool", title: "Format JSON" }, "format");
+  const btn = el("button", { type: "button", class: "editor-tool", title: "Format JSON", tabindex: "-1" }, "format");
+  btn.addEventListener("mousedown", (ev) => ev.preventDefault());
   btn.addEventListener("click", (ev) => {
     ev.preventDefault();
     format();
