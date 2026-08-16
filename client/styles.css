@@ -604,12 +604,11 @@ details.edit-condition > summary:hover {
   align-self: start;
 }
 
-/* Section-scale collapsibles (not the tiny JSON format "i" tip) */
+/* Section-scale collapsibles (not the tiny JSON format "i" tip).
+   Login/Register stay flush in the panel chrome — no section gap. */
 details.alchemy-panel,
 details.profile-section,
 details.messages-compose,
-details.login,
-details.register,
 details.live-online-wrap {
   margin-top: 2rem;
 }
