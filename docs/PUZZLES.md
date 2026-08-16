@@ -36,7 +36,7 @@ Rewards are prose (artefacts) and public badges — not a win screen.
 | Quests (`data/quests/<name>.json`) | Scenes, artefacts, exits |
 | Flags (`data/users/<name>.flags.json`) — invisible | Scene **body** — never conditional |
 | Badges (`data/users/<name>.badges.json`) — profile | **Details** — hide by FlagRef |
-| Alchemy recipes (`data/alchemy/recipes.json`) | Scene **access** — FlagRef (teleport bypass lock) |
+| Alchemy recipes (`data/alchemy/recipes.json` + `alchemy/users/*.json`) | Scene **access** — FlagRef (teleport bypass lock) |
 
 ---
 
@@ -196,8 +196,16 @@ Public; listed and dropped **only on profile**. Granted only via flag
 
 ## Alchemy (separate)
 
-`data/alchemy/recipes.json` — ordered list. Manager textarea. Inventory UI:
-collapsible **Alchemy** panel on `/inv`.
+Master file `data/alchemy/recipes.json` (managers via **Data → Alchemy**) plus
+per-user files `data/alchemy/users/<username>.json` (every signed-in user via
+Edit toolbar **Alchemy**). Editors load and save **file content**, not the
+merged in-memory list; a successful save rebuilds the merge immediately.
+
+Alchemy files are **per-user / master**, not ACL-shared: friends with scene
+manage rights cannot edit your recipe file. Scene `canManage` only limits which
+artefacts a **user** recipe may `gives`.
+
+Inventory UI: collapsible **Alchemy** panel on `/inv`.
 
 ```ts
 interface AlchemyRecipe {
@@ -205,8 +213,15 @@ interface AlchemyRecipe {
   inputs: Array<number | { tag: string }>; // length >= 2
   gives: number | number[];
   ok?: string;
+  // author?: string — in-memory only for user recipes
 }
 ```
+
+Combine uses master recipes first, then user files (sorted by username). User
+recipe ids are namespaced as `<username>/<id>`. Malformed user files are
+skipped. User recipes whose `gives` are not allowed for the author (missing
+artefact or no manage on home) are omitted from the merge and skipped again at
+combine time.
 
 `POST /alchemy/combine` with 2+ artefact ids from inventory. First matching
 recipe wins. Gives result if not already held; inputs stay. Uncollect result
@@ -222,6 +237,7 @@ Quests may later notice results via `holds` → `setFlag`.
 ```
 data/quests/<name>.json
 data/alchemy/recipes.json
+data/alchemy/users/<username>.json
 data/users/<name>.flags.json
 data/users/<name>.badges.json
 ```
@@ -248,7 +264,7 @@ mission journal, per-quest private flag stores, shared mutable world flags.
 
 ## Success criterion
 
-Managers edit quest and alchemy JSON. Readers see flag-gated prose, use
-Inventory Alchemy, earn/drop badges on profile, and never see flags. Quest
-logic wakes on agreed events and cascades when flags change — without a
-mission to start.
+Managers edit quest JSON and the master alchemy file; every signed-in user may
+edit their own alchemy file. Readers see flag-gated prose, use Inventory
+Alchemy, earn/drop badges on profile, and never see flags. Quest logic wakes on
+agreed events and cascades when flags change — without a mission to start.

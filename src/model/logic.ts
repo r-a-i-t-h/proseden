@@ -51,6 +51,11 @@ export interface AlchemyRecipe {
   inputs: Array<number | { tag: string }>;
   gives: number | number[];
   ok?: string;
+  /**
+   * In-memory only: set when loaded from `alchemy/users/<author>.json`.
+   * Absent on master recipes. Never persisted to disk.
+   */
+  author?: string;
 }
 
 export const QUEST_EVAL_MAX_ITERATIONS = 16;

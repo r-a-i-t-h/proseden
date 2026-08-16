@@ -31,7 +31,7 @@ import {
   visibleExits,
 } from "../logic/world-view.js";
 import { parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
-import { matchAlchemyRecipe } from "../logic/quests.js";
+import { matchAlchemyRecipe, parseAlchemyRecipes } from "../logic/quests.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import type { InboxMessage, StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
@@ -41,12 +41,15 @@ import {
   renderGroupBodyHtml,
   renderGroupsIndexHtml,
   renderInventoryBodyHtml,
+  renderJsonFieldHtml,
   renderMessageBodyHtml,
+  renderPageBackCrumb,
   renderSnapshotBodyHtml,
   renderStaffBodyHtml,
   renderUserProfileBodyHtml,
   userLinkHtml,
 } from "../render/html.js";
+import { ALCHEMY_EXAMPLE, ALCHEMY_HELP } from "../render/view/examples.js";
 import {
   artefactPageView,
   inboxPageView,
@@ -470,6 +473,64 @@ worldRoutes.get("/inv", (c) => {
   );
 });
 
+worldRoutes.get("/alchemy", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) {
+    return page(
+      c,
+      401,
+      "Alchemy",
+      renderMessageBodyHtml("Alchemy", "Log in to edit your alchemy recipes."),
+      "Authentication required.",
+    );
+  }
+  const recipes = world.getUserAlchemyRecipes(user.username);
+  const back = sceneBackLink(user, world);
+  const notice = c.req.query("saved") ? "Recipes saved." : "";
+  const help = `${ALCHEMY_HELP} You may only give artefacts homed in scenes you own or manage. This file is yours alone — not shared via scene ACL.`;
+  const field = renderJsonFieldHtml(
+    "Recipes",
+    "recipesJson",
+    24,
+    recipes,
+    ALCHEMY_EXAMPLE,
+    help,
+  );
+  return page(
+    c,
+    200,
+    "Alchemy",
+    `${renderPageBackCrumb(back)}<h1>Your alchemy</h1>
+      <p class="muted">Recipes in <code>alchemy/users/${escapeHtml(user.username)}.json</code>. Combined after the manager master list.</p>
+      ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
+      <form method="post" action="alchemy" class="stack">
+        ${field}
+        <button type="submit">Save</button>
+      </form>`,
+    JSON.stringify(recipes, null, 2),
+    {
+      kind: "inventory",
+      isManager: isManager(user, world),
+    },
+  );
+});
+
+worldRoutes.post("/alchemy", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const body = await c.req.parseBody();
+  try {
+    const prepared = prepareJsonTextarea(String(body.recipesJson ?? body.json ?? ""));
+    const recipes = parseAlchemyRecipes(JSON.parse(prepared));
+    await world.saveUserAlchemy(user.username, recipes);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Save failed");
+  }
+  return c.redirect(`${c.get("assetBase")}/alchemy?saved=1`);
+});
+
 worldRoutes.post("/alchemy/combine", async (c) => {
   const world = c.get("world");
   const user = c.get("user");
@@ -506,7 +567,12 @@ worldRoutes.post("/alchemy/combine", async (c) => {
 
   const tags = new Map<number, readonly string[]>();
   for (const a of world.artefacts.values()) tags.set(a.id, a.tags);
-  const recipe = matchAlchemyRecipe(world.alchemyRecipes, ids, tags);
+  const recipe = matchAlchemyRecipe(
+    world.alchemyRecipes,
+    ids,
+    tags,
+    (r) => world.alchemyRecipeGrantsAllowed(r),
+  );
   if (!recipe) {
     return alchemyFail(c, "Those artefacts do not combine.");
   }

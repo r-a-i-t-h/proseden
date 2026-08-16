@@ -246,7 +246,10 @@ export function mountEdit(boot: EditBootstrap, pane: HTMLElement): { toolbar: HT
   sceneTools.append(sceneSwitcher(boot.ownedScenes, manage));
 
   const links = el("div", { class: "edit-toolbar-links" });
-  links.append(el("a", { class: "edit-tool-link", href: "g" }, "Groups"));
+  links.append(
+    el("a", { class: "edit-tool-link", href: "g" }, "Groups"),
+    el("a", { class: "edit-tool-link", href: "alchemy" }, "Alchemy"),
+  );
   if (boot.isModerator) {
     links.append(el("a", { class: "edit-tool-link", href: "live/admin" }, "Live Admin"));
   }

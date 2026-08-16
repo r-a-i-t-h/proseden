@@ -318,14 +318,28 @@ function evaluateQuestsUnsafe(opts: {
   return { flags, badges, grantedArtefactIds, iterations };
 }
 
+export function alchemyGivesIds(recipe: AlchemyRecipe): number[] {
+  return Array.isArray(recipe.gives) ? recipe.gives : [recipe.gives];
+}
+
+/** Strip in-memory-only fields before writing a recipe file. */
+export function alchemyRecipesForDisk(recipes: AlchemyRecipe[]): AlchemyRecipe[] {
+  return recipes.map(({ id, inputs, gives, ok }) =>
+    ok !== undefined ? { id, inputs, gives, ok } : { id, inputs, gives },
+  );
+}
+
 export function matchAlchemyRecipe(
   recipes: AlchemyRecipe[],
   selectedIds: number[],
   artefactTags: ReadonlyMap<number, readonly string[]>,
+  /** When false, skip this recipe (e.g. grant ACL revoked). Default: allow all. */
+  recipeAllowed?: (recipe: AlchemyRecipe) => boolean,
 ): AlchemyRecipe | undefined {
   if (selectedIds.length < 2) return undefined;
   const selected = [...selectedIds];
   for (const recipe of recipes) {
+    if (recipeAllowed && !recipeAllowed(recipe)) continue;
     if (recipe.inputs.length !== selected.length) continue;
     if (multisetMatches(recipe.inputs, selected, artefactTags)) return recipe;
   }

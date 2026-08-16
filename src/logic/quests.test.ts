@@ -140,4 +140,22 @@ describe("alchemy match", () => {
     expect(matchAlchemyRecipe([recipe], [3, 1, 2], tags)?.id).toBe("mix");
     expect(matchAlchemyRecipe([recipe], [1, 2], tags)).toBeUndefined();
   });
+
+  it("skips recipes rejected by recipeAllowed", () => {
+    const blocked = {
+      id: "blocked",
+      inputs: [1, 2] as Array<number | { tag: string }>,
+      gives: 9,
+      author: "bob",
+    };
+    const ok = {
+      id: "ok",
+      inputs: [1, 2] as Array<number | { tag: string }>,
+      gives: 10,
+    };
+    const tags = new Map<number, readonly string[]>();
+    expect(
+      matchAlchemyRecipe([blocked, ok], [1, 2], tags, (r) => !r.author)?.id,
+    ).toBe("ok");
+  });
 });

@@ -32,4 +32,4 @@ export const ALCHEMY_EXAMPLE = `[
 ]`;
 
 export const ALCHEMY_HELP =
-  "Ordered recipes. Each needs id, inputs (2+ artefact ids and/or tags), and gives (artefact id or ids). First matching combine wins. Optional ok prose on success.";
+  "Ordered recipes. Each needs id, inputs (2+ artefact ids and/or tags), and gives (artefact id or ids). First matching combine wins. Optional ok prose on success. Master recipes are checked before user recipes.";

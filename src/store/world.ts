@@ -1,13 +1,16 @@
 import { cp, mkdir, readdir, access, rename, rm, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { canRead, type AccessWorld } from "../access/permissions.js";
+import { canManage, canRead, type AccessWorld } from "../access/permissions.js";
 import { normalizeDenies, normalizeGrants, stripLegacyInvites } from "../access/acl.js";
 import type { AlchemyRecipe, FlagValue, QuestFile } from "../model/logic.js";
 import {
+  alchemyGivesIds,
+  alchemyRecipesForDisk,
   badgeDefsById,
   evaluateQuests,
   parseAlchemyRecipes,
   parseQuestFile,
+  QuestValidationError,
 } from "../logic/quests.js";
 import type {
   ArtefactMeta,
@@ -66,6 +69,11 @@ export class WorldStore implements AccessWorld {
   /** username → badge ids */
   userBadges = new Map<string, string[]>();
   quests: QuestFile[] = [];
+  /** Master `alchemy/recipes.json` (file content; unrestricted gives). */
+  masterAlchemyRecipes: AlchemyRecipe[] = [];
+  /** Per-user `alchemy/users/<name>.json` file contents (no author / id prefix). */
+  userAlchemyFiles = new Map<string, AlchemyRecipe[]>();
+  /** Merged master-first + users for combine (user recipes have author + prefixed id). */
   alchemyRecipes: AlchemyRecipe[] = [];
 
   constructor(dataDir: string) {
@@ -95,6 +103,8 @@ export class WorldStore implements AccessWorld {
     this.userFlags.clear();
     this.userBadges.clear();
     this.quests = [];
+    this.masterAlchemyRecipes = [];
+    this.userAlchemyFiles.clear();
     this.alchemyRecipes = [];
     await this.load();
   }
@@ -117,6 +127,7 @@ export class WorldStore implements AccessWorld {
     await mkdir(join(this.dataDir, "inbox"), { recursive: true });
     await mkdir(join(this.dataDir, "quests"), { recursive: true });
     await mkdir(join(this.dataDir, "alchemy"), { recursive: true });
+    await mkdir(join(this.dataDir, "alchemy", "users"), { recursive: true });
 
     if (await exists(metaPath)) {
       this.meta = normalizeMeta(await readJson<Record<string, unknown>>(metaPath));
@@ -324,18 +335,102 @@ export class WorldStore implements AccessWorld {
     }
     this.quests = quests.sort((a, b) => a.name.localeCompare(b.name));
 
+    await this.loadAlchemyFiles();
+  }
+
+  async loadAlchemyFiles(): Promise<void> {
+    await mkdir(join(this.dataDir, "alchemy"), { recursive: true });
+    await mkdir(join(this.dataDir, "alchemy", "users"), { recursive: true });
+
     const recipesPath = join(this.dataDir, "alchemy", "recipes.json");
+    let master: AlchemyRecipe[] = [];
     if (await exists(recipesPath)) {
       try {
-        this.alchemyRecipes = parseAlchemyRecipes(await readJson<unknown>(recipesPath));
+        master = parseAlchemyRecipes(await readJson<unknown>(recipesPath));
       } catch (err) {
-        logQuestFault("load alchemy recipes", err);
-        this.alchemyRecipes = [];
+        logQuestFault("load alchemy recipes.json", err);
+        master = [];
       }
     } else {
-      this.alchemyRecipes = [];
       await writeJsonAtomic(recipesPath, []);
+      master = [];
     }
+    this.masterAlchemyRecipes = master;
+
+    const userFiles = new Map<string, AlchemyRecipe[]>();
+    const merged: AlchemyRecipe[] = [...master];
+    const usersDir = join(this.dataDir, "alchemy", "users");
+    for (const file of await listFiles(usersDir, ".json")) {
+      const username = file.replace(/\.json$/, "");
+      try {
+        const parsed = parseAlchemyRecipes(await readJson<unknown>(join(usersDir, file)));
+        userFiles.set(username, parsed);
+        for (const recipe of parsed) {
+          if (!this.userAlchemyRecipeGrantsAllowed(username, recipe)) {
+            logQuestFault(
+              `alchemy user ${username} recipe ${recipe.id}: grant not allowed`,
+              new Error("canManage required on home scene for each gives artefact"),
+            );
+            continue;
+          }
+          merged.push({
+            ...recipe,
+            id: `${username}/${recipe.id}`,
+            author: username,
+          });
+        }
+      } catch (err) {
+        logQuestFault(`load alchemy users/${file}`, err);
+      }
+    }
+    // Stable order among users (listFiles is sorted); master already first.
+    this.userAlchemyFiles = userFiles;
+    this.alchemyRecipes = merged;
+  }
+
+  /** True when a (possibly user-authored) recipe may grant its results right now. */
+  alchemyRecipeGrantsAllowed(recipe: AlchemyRecipe): boolean {
+    if (!recipe.author) return true;
+    return this.userAlchemyRecipeGrantsAllowed(recipe.author, recipe);
+  }
+
+  userAlchemyRecipeGrantsAllowed(username: string, recipe: AlchemyRecipe): boolean {
+    const author = this.getUser(username);
+    if (!author) return false;
+    for (const gid of alchemyGivesIds(recipe)) {
+      const artefact = this.getArtefact(gid);
+      if (!artefact) return false;
+      const home = this.getScene(artefact.homeSceneId);
+      if (!home || !canManage(author, home, this)) return false;
+    }
+    return true;
+  }
+
+  assertUserAlchemyGrants(username: string, recipes: AlchemyRecipe[]): void {
+    const author = this.getUser(username);
+    if (!author) {
+      throw new QuestValidationError(`Unknown user ${username}`);
+    }
+    for (const recipe of recipes) {
+      for (const gid of alchemyGivesIds(recipe)) {
+        const artefact = this.getArtefact(gid);
+        if (!artefact) {
+          throw new QuestValidationError(
+            `Recipe ${recipe.id}: gives artefact ${gid} does not exist`,
+          );
+        }
+        const home = this.getScene(artefact.homeSceneId);
+        if (!home || !canManage(author, home, this)) {
+          throw new QuestValidationError(
+            `Recipe ${recipe.id}: can only give artefact ${gid} if you own or manage its home scene`,
+          );
+        }
+      }
+    }
+  }
+
+  getUserAlchemyRecipes(username: string): AlchemyRecipe[] {
+    return this.userAlchemyFiles.get(username) ?? [];
   }
 
   async saveQuest(quest: QuestFile): Promise<void> {
@@ -350,10 +445,20 @@ export class WorldStore implements AccessWorld {
     await this.loadLogicFiles();
   }
 
+  /** Persist master alchemy file and rebuild the in-memory merge. */
   async saveAlchemyRecipes(recipes: AlchemyRecipe[]): Promise<void> {
-    const parsed = parseAlchemyRecipes(recipes);
+    const parsed = alchemyRecipesForDisk(parseAlchemyRecipes(recipes));
     await writeJsonAtomic(join(this.dataDir, "alchemy", "recipes.json"), parsed);
-    this.alchemyRecipes = parsed;
+    await this.loadAlchemyFiles();
+  }
+
+  /** Persist one user's alchemy file (ACL-checked) and rebuild the in-memory merge. */
+  async saveUserAlchemy(username: string, recipes: AlchemyRecipe[]): Promise<void> {
+    const parsed = alchemyRecipesForDisk(parseAlchemyRecipes(recipes));
+    this.assertUserAlchemyGrants(username, parsed);
+    await mkdir(join(this.dataDir, "alchemy", "users"), { recursive: true });
+    await writeJsonAtomic(join(this.dataDir, "alchemy", "users", `${username}.json`), parsed);
+    await this.loadAlchemyFiles();
   }
 
   predContextFor(username: string, atSceneId?: number) {

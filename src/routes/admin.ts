@@ -303,7 +303,7 @@ adminRoutes.get("/alchemy", async (c) => {
     "Recipes",
     "recipesJson",
     24,
-    world.alchemyRecipes,
+    world.masterAlchemyRecipes,
     ALCHEMY_EXAMPLE,
     ALCHEMY_HELP,
   );
@@ -312,13 +312,14 @@ adminRoutes.get("/alchemy", async (c) => {
     200,
     "Alchemy",
     `${renderPageBackCrumb(back)}<h1>Alchemy recipes</h1>
+      <p class="muted">Master recipes (manager). Unrestricted gives. Checked before user recipes on combine.</p>
       ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
       <form method="post" action="data/alchemy" class="stack">
         ${field}
         <button type="submit">Save</button>
       </form>
       <p class="crumb"><a href="data">← Data</a></p>`,
-    renderMessageText("Alchemy", JSON.stringify(world.alchemyRecipes, null, 2)),
+    renderMessageText("Alchemy", JSON.stringify(world.masterAlchemyRecipes, null, 2)),
   );
 });
 
