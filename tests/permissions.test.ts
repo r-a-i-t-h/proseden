@@ -15,6 +15,7 @@ import {
   hasRight,
   isManager,
   isModerator,
+  isQuestor,
   isTopographer,
 } from "../src/access/permissions.js";
 import { artefact, group, scene, user, world } from "./helpers/fixtures.js";
@@ -170,6 +171,16 @@ describe("staff roles on scenes", () => {
     expect(isTopographer(bob, w)).toBe(true);
     expect(isManager(bob, w)).toBe(true);
     expect(isModerator(bob, w)).toBe(true);
+    expect(isQuestor(bob, w)).toBe(true);
+  });
+
+  it("lets questors edit personal quests but not manage scenes", () => {
+    const w = world({ users: [alice, bob], roles: { bob: ["questor"] } });
+    expect(canEdit(bob, privateScene, w)).toBe(false);
+    expect(canManage(bob, privateScene, w)).toBe(false);
+    expect(isQuestor(bob, w)).toBe(true);
+    expect(isManager(bob, w)).toBe(false);
+    expect(isModerator(bob, w)).toBe(false);
   });
 
   it("returns false for staff helpers without a user", () => {
@@ -177,6 +188,7 @@ describe("staff roles on scenes", () => {
     expect(isTopographer(undefined, w)).toBe(false);
     expect(isModerator(undefined, w)).toBe(false);
     expect(isManager(undefined, w)).toBe(false);
+    expect(isQuestor(undefined, w)).toBe(false);
   });
 });
 

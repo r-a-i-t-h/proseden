@@ -123,6 +123,8 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `DELETE`/`POST` | `/a/:id/delete` | Delete artefact (owner/manage/moderator) |
 | `GET` | `/staff` | List staff roles (manager) |
 | `PUT`/`POST` | `/staff/:username` | Set roles (manager) |
+| `GET`/`POST` | `/alchemy` | Edit own alchemy recipes (signed-in) |
+| `GET`/`POST` | `/quests` | Edit own personal quest file (questor or manager) |
 | `GET` | `/data` | Data: backups list + endpoint index (manager) |
 | `POST` | `/data/backup` | Archive `data/` into `backup/` (manager) |
 | `GET` | `/data/backup/:name` | Download a data archive (manager) |
@@ -146,6 +148,10 @@ data/
   meta.json
   staff.json
   users/<username>.json
+  quests/<name>.json
+  quests/users/<username>.json
+  alchemy/recipes.json
+  alchemy/users/<username>.json
   groups/<id>.json
   entrance-groups/<id>.json
   inbox/<id>.json
@@ -158,6 +164,8 @@ backup/
 ```
 
 Managers can create, download, and delete archives from **Data**. `proseden-update` writes one snapshot before it touches the app. See [DEPLOY.md](DEPLOY.md) for the SSH one-liner and restore notes.
+
+Staff roles: `moderator`, `topographer`, `manager`, `questor`. Questors edit personal quest JSON under `quests/users/`; managers register official named quests under Data → Quests.
 
 Prose files use YAML frontmatter plus `## detail:<slug>` sections. Hash-leading lines in body/detail text are saved escaped (`\#`, `\##`) so they cannot be mistaken for section markers.
 

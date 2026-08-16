@@ -66,6 +66,7 @@ interface EditBootstrap {
   ownedScenes: OwnedSceneLink[];
   isManager: boolean;
   isModerator?: boolean;
+  isQuestor?: boolean;
   editHref: string;
   readHref: string;
   liveSceneId?: number;
@@ -250,6 +251,9 @@ export function mountEdit(boot: EditBootstrap, pane: HTMLElement): { toolbar: HT
     el("a", { class: "edit-tool-link", href: "g" }, "Groups"),
     el("a", { class: "edit-tool-link", href: "alchemy" }, "Alchemy"),
   );
+  if (boot.isQuestor) {
+    links.append(el("a", { class: "edit-tool-link", href: "quests" }, "Quests"));
+  }
   if (boot.isModerator) {
     links.append(el("a", { class: "edit-tool-link", href: "live/admin" }, "Live Admin"));
   }

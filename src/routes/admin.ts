@@ -180,7 +180,7 @@ adminRoutes.get("/quests", async (c) => {
   const denied = requireManager(c);
   if (denied) return denied;
   const world = c.get("world");
-  const quests = world.listQuests();
+  const quests = world.listMasterQuests();
   const back = sceneBackLink(c.get("user")!, world);
   const notice = c.req.query("saved")
     ? "Quest saved."
@@ -198,6 +198,7 @@ adminRoutes.get("/quests", async (c) => {
     200,
     "Quests",
     `${renderPageBackCrumb(back)}<h1>Quests</h1>
+      <p class="muted">Manager quest files in <code>quests/&lt;name&gt;.json</code>. Evaluated before questor personal files.</p>
       ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
       ${links}
       <h2>New quest</h2>
@@ -222,7 +223,7 @@ adminRoutes.post("/quests", async (c) => {
       rules: [],
       description: "New quest",
     });
-    if (world.getQuest(name)) return apiError(c, 400, "Quest already exists");
+    if (world.getMasterQuest(name)) return apiError(c, 400, "Quest already exists");
     await world.saveQuest(quest);
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Invalid quest");
@@ -235,7 +236,7 @@ adminRoutes.get("/quests/:name", async (c) => {
   if (denied) return denied;
   const world = c.get("world");
   const name = c.req.param("name");
-  const quest = world.getQuest(name);
+  const quest = world.getMasterQuest(name);
   if (!quest) return apiError(c, 404, "Quest not found");
   const back = sceneBackLink(c.get("user")!, world);
   const notice = c.req.query("saved") ? "Saved." : "";

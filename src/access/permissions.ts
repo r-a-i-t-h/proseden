@@ -224,7 +224,8 @@ function isGranted(
  * Staff roles:
  * - moderator: edit (prose) worldwide; may delete unacceptable content
  * - topographer: graph structure via isTopographer (not prose edit / ACL manage / delete)
- * - manager: full manage + personnel APIs (superset of moderator + topographer)
+ * - questor: edit own `quests/users/<username>.json` (personal flag/badge namespace)
+ * - manager: full manage + personnel APIs (superset of moderator + topographer + questor)
  */
 function staffCovers(user: UserRecord, right: Right, world: AccessWorld): boolean {
   const roles = world.rolesFor(user.username) ?? [];
@@ -266,4 +267,14 @@ export function isManager(
 ): boolean {
   if (!user) return false;
   return world.rolesFor(user.username).includes("manager");
+}
+
+/** Questors (and managers) may edit their personal quest file. */
+export function isQuestor(
+  user: UserRecord | undefined,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  const roles = world.rolesFor(user.username) ?? [];
+  return roles.includes("questor") || roles.includes("manager");
 }

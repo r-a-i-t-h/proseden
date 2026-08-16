@@ -15,6 +15,7 @@ import {
   canRemoveExit,
   isManager,
   isModerator,
+  isQuestor,
   isTopographer,
 } from "../access/permissions.js";
 import { bypassesSceneFlagGate } from "../access/scene-gate.js";
@@ -31,7 +32,7 @@ import {
   visibleExits,
 } from "../logic/world-view.js";
 import { parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
-import { matchAlchemyRecipe, parseAlchemyRecipes } from "../logic/quests.js";
+import { matchAlchemyRecipe, parseAlchemyRecipes, parseQuestFile, QuestValidationError } from "../logic/quests.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import type { InboxMessage, StaffRole } from "../model/types.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
@@ -49,7 +50,7 @@ import {
   renderUserProfileBodyHtml,
   userLinkHtml,
 } from "../render/html.js";
-import { ALCHEMY_EXAMPLE, ALCHEMY_HELP } from "../render/view/examples.js";
+import { ALCHEMY_EXAMPLE, ALCHEMY_HELP, QUEST_EXAMPLE, QUEST_HELP } from "../render/view/examples.js";
 import {
   artefactPageView,
   inboxPageView,
@@ -529,6 +530,68 @@ worldRoutes.post("/alchemy", async (c) => {
     return apiError(c, 400, err instanceof Error ? err.message : "Save failed");
   }
   return c.redirect(`${c.get("assetBase")}/alchemy?saved=1`);
+});
+
+worldRoutes.get("/quests", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) {
+    return page(
+      c,
+      401,
+      "Quests",
+      renderMessageBodyHtml("Quests", "Log in to edit your personal quests."),
+      "Authentication required.",
+    );
+  }
+  if (!isQuestor(user, world)) {
+    return apiError(c, 403, "Questor role required");
+  }
+  const quest = world.getUserQuest(user.username) ?? world.emptyUserQuest(user.username);
+  const back = sceneBackLink(user, world);
+  const notice = c.req.query("saved") ? "Quest saved." : "";
+  const example = QUEST_EXAMPLE.replaceAll("YOUR_USERNAME", user.username);
+  const help = `${QUEST_HELP} This file is yours alone — not shared via scene ACL.`;
+  const field = renderJsonFieldHtml("Quest JSON", "questJson", 28, quest, example, help);
+  return page(
+    c,
+    200,
+    "Quests",
+    `${renderPageBackCrumb(back)}<h1>Your quests</h1>
+      <p class="muted">Personal file <code>quests/users/${escapeHtml(user.username)}.json</code>. Namespace is <code>${escapeHtml(user.username)}.*</code>. Evaluated after manager quests.</p>
+      ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
+      <form method="post" action="quests" class="stack">
+        ${field}
+        <button type="submit">Save</button>
+      </form>`,
+    JSON.stringify(quest, null, 2),
+    {
+      kind: "inventory",
+      isManager: isManager(user, world),
+    },
+  );
+});
+
+worldRoutes.post("/quests", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  if (!isQuestor(user, world)) return apiError(c, 403, "Questor role required");
+  const body = await c.req.parseBody();
+  try {
+    const prepared = prepareJsonTextarea(String(body.questJson ?? body.json ?? ""));
+    const quest = parseQuestFile(JSON.parse(prepared));
+    await world.saveUserQuest(user.username, quest);
+  } catch (err) {
+    const msg =
+      err instanceof QuestValidationError || err instanceof SyntaxError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : "Save failed";
+    return apiError(c, 400, msg);
+  }
+  return c.redirect(`${c.get("assetBase")}/quests?saved=1`);
 });
 
 worldRoutes.post("/alchemy/combine", async (c) => {

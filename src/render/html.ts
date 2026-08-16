@@ -55,6 +55,8 @@ export interface HtmlShellOptions {
   isManager?: boolean;
   /** Moderator or manager — live admin / purge. */
   isModerator?: boolean;
+  /** Questor or manager — personal quests editor. */
+  isQuestor?: boolean;
   /** Scene id for live SSE when viewing a scene page. */
   liveSceneId?: number;
   /** Relative href that adds `?edit` (signed-in Edit control). */
@@ -90,6 +92,7 @@ export interface EditBootstrap {
   ownedScenes: OwnedSceneLink[];
   isManager: boolean;
   isModerator: boolean;
+  isQuestor: boolean;
   editHref: string;
   readHref: string;
   /** Present on scene pages — enables Live panel + SSE. */
@@ -140,6 +143,7 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
     ownedScenes: opts.ownedScenes ?? [],
     isManager: opts.isManager ?? opts.manage?.isManager ?? false,
     isModerator: opts.isModerator ?? false,
+    isQuestor: opts.isQuestor ?? false,
     editHref,
     readHref,
     liveSceneId,
@@ -585,7 +589,7 @@ export function renderStaffBodyHtml(opts: {
       <h2>Assign staff role</h2>
       <form method="post" action="staff/" class="stack" id="staff-form">
         <label>Username <input name="username" required /></label>
-        <label>Roles (comma: moderator, topographer, manager) <input name="roles" placeholder="moderator" /></label>
+        <label>Roles (comma: moderator, topographer, manager, questor) <input name="roles" placeholder="questor" /></label>
         <button type="submit">Save roles</button>
       </form>
       <script>

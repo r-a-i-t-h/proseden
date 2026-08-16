@@ -44,6 +44,11 @@ export interface QuestFile {
   rules: QuestRule[];
   onFlag?: Record<string, { onTrue?: KnockOn[]; onFalse?: KnockOn[] }>;
   badges?: BadgeDef[];
+  /**
+   * In-memory only: set when loaded from `quests/users/<author>.json`.
+   * Absent on manager quests. Never persisted to disk.
+   */
+  author?: string;
 }
 
 export interface AlchemyRecipe {

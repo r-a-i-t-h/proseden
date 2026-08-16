@@ -235,6 +235,7 @@ export interface EvalResult {
 /**
  * Evaluate all quest rules with cascade. Knock-ons run when flags change.
  * giveArtefact ids are returned for the caller to apply to inventory.
+ * Quests are processed in the order given (manager files first, then users).
  * Never throws: bad rules are skipped and logged.
  */
 export function evaluateQuests(opts: {
@@ -266,7 +267,7 @@ function evaluateQuestsUnsafe(opts: {
   let badges = [...opts.badges];
   const badgeSet = () => new Set(badges);
   const grantedArtefactIds: number[] = [];
-  const quests = [...opts.quests].sort((a, b) => a.name.localeCompare(b.name));
+  const quests = [...opts.quests];
 
   let iterations = 0;
   while (iterations < QUEST_EVAL_MAX_ITERATIONS) {
@@ -320,6 +321,25 @@ function evaluateQuestsUnsafe(opts: {
 
 export function alchemyGivesIds(recipe: AlchemyRecipe): number[] {
   return Array.isArray(recipe.gives) ? recipe.gives : [recipe.gives];
+}
+
+/** Artefact ids a quest may grant via onFlag knock-ons. */
+export function questGiveArtefactIds(quest: QuestFile): number[] {
+  const ids: number[] = [];
+  for (const handlers of Object.values(quest.onFlag ?? {})) {
+    for (const list of [handlers.onTrue, handlers.onFalse]) {
+      for (const k of list ?? []) {
+        if ("giveArtefact" in k) ids.push(k.giveArtefact);
+      }
+    }
+  }
+  return ids;
+}
+
+/** Strip in-memory-only fields before writing a quest file. */
+export function questFileForDisk(quest: QuestFile): QuestFile {
+  const { author: _author, ...rest } = quest;
+  return rest;
 }
 
 /** Strip in-memory-only fields before writing a recipe file. */

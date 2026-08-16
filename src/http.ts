@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { canRead, isManager, isModerator } from "./access/permissions.js";
+import { canRead, isManager, isModerator, isQuestor } from "./access/permissions.js";
 import { negotiateFormat } from "./render/format.js";
 import {
   editModeHrefs,
@@ -57,6 +57,7 @@ export function sceneBackLink(user: UserRecord, world: WorldStore): PageBackLink
 export interface PageShellOverrides {
   isManager?: boolean;
   isModerator?: boolean;
+  isQuestor?: boolean;
 }
 
 /**
@@ -155,6 +156,7 @@ function htmlPageResponse(
       ownedScenes: ownedSceneLinks(world, user),
       isManager: shell?.isManager ?? isManager(user, world),
       isModerator: shell?.isModerator ?? isModerator(user, world),
+      isQuestor: shell?.isQuestor ?? isQuestor(user, world),
       liveSceneId,
       inboxCount: user ? world.inboxCountFor(user.username) : 0,
       ...hrefs,

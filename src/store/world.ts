@@ -10,6 +10,8 @@ import {
   evaluateQuests,
   parseAlchemyRecipes,
   parseQuestFile,
+  questFileForDisk,
+  questGiveArtefactIds,
   QuestValidationError,
 } from "../logic/quests.js";
 import type {
@@ -68,6 +70,11 @@ export class WorldStore implements AccessWorld {
   userFlags = new Map<string, Record<string, FlagValue>>();
   /** username → badge ids */
   userBadges = new Map<string, string[]>();
+  /** Manager `quests/<name>.json` files (file content). */
+  masterQuests: QuestFile[] = [];
+  /** Per-user `quests/users/<name>.json` file contents (no author field). */
+  userQuestFiles = new Map<string, QuestFile>();
+  /** Merged manager-first + users for eval (user quests have author set). */
   quests: QuestFile[] = [];
   /** Master `alchemy/recipes.json` (file content; unrestricted gives). */
   masterAlchemyRecipes: AlchemyRecipe[] = [];
@@ -102,6 +109,8 @@ export class WorldStore implements AccessWorld {
     this.inbox.clear();
     this.userFlags.clear();
     this.userBadges.clear();
+    this.masterQuests = [];
+    this.userQuestFiles.clear();
     this.quests = [];
     this.masterAlchemyRecipes = [];
     this.userAlchemyFiles.clear();
@@ -126,6 +135,7 @@ export class WorldStore implements AccessWorld {
     await mkdir(join(this.dataDir, "entrance-groups"), { recursive: true });
     await mkdir(join(this.dataDir, "inbox"), { recursive: true });
     await mkdir(join(this.dataDir, "quests"), { recursive: true });
+    await mkdir(join(this.dataDir, "quests", "users"), { recursive: true });
     await mkdir(join(this.dataDir, "alchemy"), { recursive: true });
     await mkdir(join(this.dataDir, "alchemy", "users"), { recursive: true });
 
@@ -315,8 +325,17 @@ export class WorldStore implements AccessWorld {
     return [...this.quests];
   }
 
+  /** Manager quest files only (`quests/<name>.json`). */
+  listMasterQuests(): QuestFile[] {
+    return [...this.masterQuests];
+  }
+
   getQuest(name: string): QuestFile | undefined {
     return this.quests.find((q) => q.name === name);
+  }
+
+  getMasterQuest(name: string): QuestFile | undefined {
+    return this.masterQuests.find((q) => q.name === name);
   }
 
   badgeTitle(id: string): string {
@@ -324,16 +343,60 @@ export class WorldStore implements AccessWorld {
   }
 
   async loadLogicFiles(): Promise<void> {
-    const quests: QuestFile[] = [];
+    await mkdir(join(this.dataDir, "quests"), { recursive: true });
+    await mkdir(join(this.dataDir, "quests", "users"), { recursive: true });
+
+    const master: QuestFile[] = [];
+    const masterNames = new Set<string>();
     for (const file of await listFiles(join(this.dataDir, "quests"), ".json")) {
       try {
         const raw = await readJson<unknown>(join(this.dataDir, "quests", file));
-        quests.push(parseQuestFile(raw));
+        const quest = parseQuestFile(raw);
+        master.push(quest);
+        masterNames.add(quest.name);
       } catch (err) {
         logQuestFault(`load quest ${file}`, err);
       }
     }
-    this.quests = quests.sort((a, b) => a.name.localeCompare(b.name));
+    master.sort((a, b) => a.name.localeCompare(b.name));
+    this.masterQuests = master;
+
+    const userFiles = new Map<string, QuestFile>();
+    const merged: QuestFile[] = [...master];
+    const usersDir = join(this.dataDir, "quests", "users");
+    for (const file of await listFiles(usersDir, ".json")) {
+      const username = file.replace(/\.json$/, "");
+      try {
+        const parsed = parseQuestFile(await readJson<unknown>(join(usersDir, file)));
+        userFiles.set(username, parsed);
+        if (parsed.name !== username) {
+          logQuestFault(
+            `quest user ${username}: name must be username`,
+            new Error(`got "${parsed.name}"`),
+          );
+          continue;
+        }
+        if (masterNames.has(parsed.name)) {
+          logQuestFault(
+            `quest user ${username}: skipped (manager quest owns namespace)`,
+            new Error(`manager quest "${parsed.name}" already exists`),
+          );
+          continue;
+        }
+        if (!this.userQuestGrantsAllowed(username, parsed)) {
+          logQuestFault(
+            `quest user ${username}: grant not allowed`,
+            new Error("canManage required on home scene for each giveArtefact"),
+          );
+          continue;
+        }
+        merged.push({ ...parsed, author: username });
+      } catch (err) {
+        logQuestFault(`load quests/users/${file}`, err);
+      }
+    }
+    this.userQuestFiles = userFiles;
+    this.quests = merged;
 
     await this.loadAlchemyFiles();
   }
@@ -433,15 +496,86 @@ export class WorldStore implements AccessWorld {
     return this.userAlchemyFiles.get(username) ?? [];
   }
 
+  /** True when a (possibly user-authored) quest may grant its artefacts right now. */
+  userQuestGrantsAllowed(username: string, quest: QuestFile): boolean {
+    const author = this.getUser(username);
+    if (!author) return false;
+    for (const gid of questGiveArtefactIds(quest)) {
+      const artefact = this.getArtefact(gid);
+      if (!artefact) return false;
+      const home = this.getScene(artefact.homeSceneId);
+      if (!home || !canManage(author, home, this)) return false;
+    }
+    return true;
+  }
+
+  assertUserQuestGrants(username: string, quest: QuestFile): void {
+    const author = this.getUser(username);
+    if (!author) {
+      throw new QuestValidationError(`Unknown user ${username}`);
+    }
+    for (const gid of questGiveArtefactIds(quest)) {
+      const artefact = this.getArtefact(gid);
+      if (!artefact) {
+        throw new QuestValidationError(`giveArtefact ${gid} does not exist`);
+      }
+      const home = this.getScene(artefact.homeSceneId);
+      if (!home || !canManage(author, home, this)) {
+        throw new QuestValidationError(
+          `can only giveArtefact ${gid} if you own or manage its home scene`,
+        );
+      }
+    }
+  }
+
+  getUserQuest(username: string): QuestFile | undefined {
+    return this.userQuestFiles.get(username);
+  }
+
+  emptyUserQuest(username: string): QuestFile {
+    const shell = {
+      name: username,
+      title: `${username}'s quests`,
+      description:
+        "Personal quest namespace. Flags and badges must use your username as prefix.",
+      rules: [] as [],
+    };
+    try {
+      return parseQuestFile(shell);
+    } catch {
+      // Username may start with a digit (allowed for accounts, not for quest names).
+      return shell;
+    }
+  }
+
   async saveQuest(quest: QuestFile): Promise<void> {
-    parseQuestFile(quest);
-    await writeJsonAtomic(join(this.dataDir, "quests", `${quest.name}.json`), quest);
+    const parsed = questFileForDisk(parseQuestFile(quest));
+    await writeJsonAtomic(join(this.dataDir, "quests", `${parsed.name}.json`), parsed);
     await this.loadLogicFiles();
   }
 
   async deleteQuest(name: string): Promise<void> {
     const path = join(this.dataDir, "quests", `${name}.json`);
     if (await exists(path)) await unlink(path);
+    await this.loadLogicFiles();
+  }
+
+  /** Persist one user's quest file (namespace + ACL-checked) and rebuild the merge. */
+  async saveUserQuest(username: string, quest: QuestFile): Promise<void> {
+    const parsed = questFileForDisk(parseQuestFile(quest));
+    if (parsed.name !== username) {
+      throw new QuestValidationError(
+        `Quest name must be your username ("${username}")`,
+      );
+    }
+    if (this.getMasterQuest(username)) {
+      throw new QuestValidationError(
+        `Namespace "${username}" is owned by a manager quest; ask a manager to register an official name`,
+      );
+    }
+    this.assertUserQuestGrants(username, parsed);
+    await mkdir(join(this.dataDir, "quests", "users"), { recursive: true });
+    await writeJsonAtomic(join(this.dataDir, "quests", "users", `${username}.json`), parsed);
     await this.loadLogicFiles();
   }
 
@@ -946,7 +1080,8 @@ export class WorldStore implements AccessWorld {
   async setStaffRoles(username: string, roles: StaffRole[]): Promise<StaffFile> {
     if (!this.users.has(username)) throw new Error("User not found");
     const cleaned = [...new Set(roles)].filter(
-      (r): r is StaffRole => r === "moderator" || r === "topographer" || r === "manager",
+      (r): r is StaffRole =>
+        r === "moderator" || r === "topographer" || r === "manager" || r === "questor",
     );
     if (cleaned.length) this.staff.roles[username] = cleaned;
     else delete this.staff.roles[username];
@@ -1902,7 +2037,14 @@ function normalizeStaff(raw: Record<string, unknown>): StaffFile {
     for (const r of list) {
       const s = String(r);
       if (s === "organiser") cleaned.push("topographer");
-      else if (s === "moderator" || s === "topographer" || s === "manager") cleaned.push(s);
+      else if (
+        s === "moderator" ||
+        s === "topographer" ||
+        s === "manager" ||
+        s === "questor"
+      ) {
+        cleaned.push(s);
+      }
     }
     if (cleaned.length) roles[username] = [...new Set(cleaned)];
   }

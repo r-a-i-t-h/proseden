@@ -93,13 +93,25 @@ not Pred trees.
 The JSON shape, validation, and evaluation rules are specified in
 **[QUESTS.md](QUESTS.md)** (this section is the design summary).
 
-One file per quest: `data/quests/<name>.json`. The `name` is the write
+One file per manager quest: `data/quests/<name>.json`. The `name` is the write
 namespace. Managers edit via a giant JSON textarea (no fancy builder in v1).
+
+Questors (staff role; managers included) edit a personal file at
+`data/quests/users/<username>.json` via Edit toolbar **Quests**. Managers edit
+the official set via **Data → Quests** and their own file via the toolbar — same
+split as alchemy (**Data → Alchemy** vs toolbar **Alchemy**). Unlike alchemy
+(open to every signed-in user), questor is **hand-picked** — personal quests add
+more overhead and need elevated trust. The quest `name` must be their username;
+flags and badges use that prefix. Manager quests are evaluated before personal
+ones. Load faults in personal files are skipped silently (logged). Unauthorized
+`giveArtefact` (home scene not owned or managed) is rejected on save and omitted
+from the merge on load — same idea as user alchemy. For a named official quest,
+ask a manager to register it under Data → Quests.
 
 Seed ships **`builders`** (scene-count threshold badges) and **`proseden`**
 (empty shell that reserves the `proseden.*` prefix for the platform). There is
-no hard-coded reserved-name list in the engine — presence of the quest file
-owns the namespace. Release migration **`003-default-quests`** installs those
+no hard-coded reserved-name list in the engine — presence of the manager quest
+file owns the namespace. Release migration **`003-default-quests`** installs those
 two quests (and empty alchemy recipes) into existing worlds when missing.
 
 ```ts
@@ -146,7 +158,8 @@ or other user actions.
 
 Not triggers: anonymous views, heartbeats, scene create/delete.
 
-Within one pass: all quests (name order), all matching rules may fire.
+Within one pass: all quests in load order (manager files sorted by name, then
+questor personal files), all matching rules may fire.
 Alchemy recipes remain first-match-wins on combine.
 
 ---
@@ -238,6 +251,7 @@ Quests may later notice results via `holds` → `setFlag`.
 
 ```
 data/quests/<name>.json
+data/quests/users/<username>.json
 data/alchemy/recipes.json
 data/alchemy/users/<username>.json
 data/users/<name>.flags.json
@@ -266,7 +280,8 @@ mission journal, per-quest private flag stores, shared mutable world flags.
 
 ## Success criterion
 
-Managers edit quest JSON and the master alchemy file; every signed-in user may
-edit their own alchemy file. Readers see flag-gated prose, use Inventory
-Alchemy, earn/drop badges on profile, and never see flags. Quest logic wakes on
-agreed events and cascades when flags change — without a mission to start.
+Managers edit official quest JSON and the master alchemy file; hand-picked
+questors edit their personal quest file; every signed-in user may edit their own
+alchemy file. Readers see flag-gated prose, use Inventory Alchemy, earn/drop
+badges on profile, and never see flags. Quest logic wakes on agreed events and
+cascades when flags change — without a mission to start.

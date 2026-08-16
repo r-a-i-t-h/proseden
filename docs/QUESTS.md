@@ -8,8 +8,12 @@ Design intent (flag bus vs alchemy, world gates, non-goals) lives in
 [PUZZLES.md](PUZZLES.md). This document matches the parser and evaluator in
 `src/logic/quests.ts`, `src/logic/pred.ts`, and `src/model/logic.ts`.
 
-Managers edit quests at **Data → Quests** (`/data/quests`), or by writing files
-under `data/quests/`. Seed copies are `seed/quests/*.json`.
+Managers edit official quests at **Data → Quests** (`/data/quests`), or by writing
+files under `data/quests/<name>.json`. Hand-picked **questors** (staff role; not
+open to all users the way alchemy is) edit their personal file via Edit toolbar
+**Quests** (`/quests`) → `data/quests/users/<username>.json`. Managers use the
+same split as alchemy: **Data** for the shared/official set, toolbar **Quests**
+for their own username file. Seed copies are `seed/quests/*.json`.
 
 ---
 
@@ -17,21 +21,31 @@ under `data/quests/`. Seed copies are `seed/quests/*.json`.
 
 | Path | Role |
 |---|---|
-| `data/quests/<name>.json` | One quest per file |
+| `data/quests/<name>.json` | Manager (official) quest — one quest per file |
+| `data/quests/users/<username>.json` | Questor personal quest — `name` must equal username |
 | `data/users/<username>.flags.json` | That reader’s flag map (`{ "quest.local": value, … }`) |
 | `data/users/<username>.badges.json` | That reader’s badge ids (JSON array of strings) |
 
-The live filename should be **`<name>.json`**, matching the object’s `name`
+The live manager filename should be **`<name>.json`**, matching the object’s `name`
 field. The loader uses `name` from JSON, not the filename. The manager save
 path writes `data/quests/<name>.json` and rejects a body whose `name` differs
 from the URL.
+
+Personal questor files use the **username as the write namespace** (flags/badges
+must be `username.local`). Manager quests are loaded and evaluated **before**
+user files. Invalid user files, wrong `name`, namespaces already owned by a
+manager quest, or unauthorized `giveArtefact` targets are **skipped at load**
+(logged as `[proseden:quest] …`) without blocking other quests.
 
 `name` is the **write namespace**. Every flag id, badge id, and `onFlag` key
 in the file must be `name.` plus a non-empty local part (e.g. quest `demo`
 may set `demo.found`, never `other.found` or `demo.`).
 
-There is no reserved-name list in the engine. Presence of a file owns that
-prefix. Seed ships **`builders`** (scene-count badges) and **`proseden`**
+For an **official** named quest (not tied to a username), a manager registers
+it under Data → Quests (or the questor is promoted to manager).
+
+There is no reserved-name list in the engine. Presence of a manager file owns
+that prefix. Seed ships **`builders`** (scene-count badges) and **`proseden`**
 (empty shell that reserves `proseden.*`). Migration `003-default-quests`
 installs those two files (and empty alchemy recipes) when missing; it does
 not overwrite edits.
