@@ -39,11 +39,12 @@ Seed login: **admin** / **admin**. Change it from **Profile** after you log in.
 Novice-friendly walkthrough (DNS, Node, nginx, two subdomains, HTTPS, updates): **[DEPLOY.md](DEPLOY.md)**.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/r-a-i-t-h/proseden/main/deploy/install.sh \
-  | sudo bash -s -- --name www --server-name www.proseden.co.uk --port 3336
+curl -fsSL https://raw.githubusercontent.com/r-a-i-t-h/node-vps-kit/main/install.sh \
+  | sudo bash -s -- --app proseden \
+      --name www --server-name www.proseden.co.uk --port 3336
 ```
 
-Each instance keeps its own app copy and `data/` directory. `sudo proseden-update --name test` upgrades only that world. Releases are GitHub Release tarballs (`npm run pack` / tag `v*`), not a live git checkout.
+Install/update live in **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)** (`--app proseden`). Each instance keeps its own app copy and `data/` directory. `sudo proseden-update --name test` upgrades only that world. Releases are GitHub Release tarballs (`npm run pack` / tag `v*`), not a live git checkout.
 
 ### Subdirectory / multiple copies
 

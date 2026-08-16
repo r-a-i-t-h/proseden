@@ -2,7 +2,7 @@
 
 This guide is for someone who can SSH into a server but has not shipped a Node app before. It walks through putting **one or more** Proseden worlds behind nginx.
 
-You do **not** clone this git repo onto the VPS. A small installer downloads a ready-made release (compiled server, CSS/JS, seed world, and libraries) and wires up the process manager and reverse proxy.
+You do **not** clone this git repo onto the VPS. The shared **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)** installer downloads a ready-made Proseden release (compiled server, CSS/JS, seed world, and libraries) and wires up the process manager and reverse proxy.
 
 ## What you will end up with
 
@@ -81,11 +81,12 @@ Do **not** expose 3336/3337 to the internet; only nginx should reach them.
 
 ## 4. Run the installer (first instance)
 
-The installer is a shell script in this repo. Once the repo is public you can pipe it straight from GitHub:
+The installer lives in **node-vps-kit** (not this repo). Pipe it from GitHub with `--app proseden`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/r-a-i-t-h/proseden/main/deploy/install.sh \
+curl -fsSL https://raw.githubusercontent.com/r-a-i-t-h/node-vps-kit/main/install.sh \
   | sudo bash -s -- \
+      --app proseden \
       --name www \
       --server-name www.proseden.co.uk \
       --port 3336
@@ -93,15 +94,16 @@ curl -fsSL https://raw.githubusercontent.com/r-a-i-t-h/proseden/main/deploy/inst
 
 That single command:
 
-1. Checks you are root and that `node` (>= 20), `nginx`, and `systemctl` exist.
-2. Asks GitHub for the **latest Release** and downloads `proseden.tar.gz`.
-3. Unpacks it to `/opt/proseden/www/releases/vX.Y.Z` and points `current` at it.
-4. Creates `/opt/proseden/www/data` (empty — the app copies the seed world on first boot).
-5. Writes `/opt/proseden/www/env` (port, paths, `NODE_ENV=production`).
-6. Creates a system user `proseden` if needed.
-7. Installs and starts `proseden-www.service`.
-8. Writes an nginx **server** block for `www.proseden.co.uk` and reloads nginx.
-9. Copies `proseden-install` and `proseden-update` into `/usr/local/sbin/` so you do not need curl next time.
+1. Fetches node-vps-kit and loads the Proseden app profile.
+2. Checks you are root and that `node` (>= 20), `nginx`, and `systemctl` exist.
+3. Asks GitHub for Proseden’s **latest Release** and downloads `proseden.tar.gz`.
+4. Unpacks it to `/opt/proseden/www/releases/vX.Y.Z` and points `current` at it.
+5. Creates `/opt/proseden/www/data` (empty — the app copies the seed world on first boot).
+6. Writes `/opt/proseden/www/env` (port, paths, `NODE_ENV=production`).
+7. Creates a system user `proseden` if needed.
+8. Installs and starts `proseden-www.service`.
+9. Writes an nginx **server** block for `www.proseden.co.uk` and reloads nginx.
+10. Installs the kit under `/usr/local/lib/node-vps-kit` and wrappers `proseden-install` / `proseden-update` in `/usr/local/sbin/`.
 
 Watch the output. A healthy finish looks like `health check ok` and `Instance 'www' is installed.`
 
@@ -186,6 +188,7 @@ The updater:
 - Flips `current`
 - Runs `deploy/post-update.sh`, which applies `deploy/migrations/NNN-*.sh` where `NNN` is greater than `schemaVersion` in `data/meta.json` (missing or non-numeric = **0**). `001` stamps `schemaVersion: 1`. `002` rewrites `pedia:`/`srch:`/`media:` link prefixes in scene and artefact prose (including history snapshots) and stamps `2`. `003` creates `quests/` and `alchemy/` if needed, copies default seed quests `builders` and `proseden` (and empty alchemy recipes) when those files are absent, and stamps `3`. Existing quest/recipe files are left alone. A failed hook aborts before restart.
 - Restarts `proseden-<name>`
+- Refreshes node-vps-kit (so `proseden-install` / `proseden-update` update themselves)
 - Does **not** delete or re-seed `data/`, and does **not** rewrite `env`
 - Keeps one previous release folder so you can roll back by pointing `current` back and restarting
 
@@ -258,13 +261,14 @@ Do not mix a root-mounted world (cookie path `/`) with `/raith` on the same host
 
 | Flag | Meaning |
 |---|---|
+| `--app` | Must be `proseden` when using node-vps-kit. |
 | `--name` | Directory and systemd unit suffix. Required. |
 | `--port` | Loopback port. Required. Unique per instance. |
 | `--server-name` | New site: this hostname, app at `/`. |
 | `--nginx-site` + `--base-path` | Path mount on an existing site. |
 | `--prefix` | Parent dir (default `/opt/proseden`). |
 | `--version` | Release tag, or `latest`. |
-| `--repo` | `owner/name` if you forked. |
+| `--repo` | `owner/name` if you forked Proseden. |
 | `--tarball` | Local `.tar.gz` (no GitHub). Useful for testing a pack. |
 | `--skip-nginx` | App + systemd only. |
 | `--user` | Unix user to run Node (default `proseden`). |
@@ -339,7 +343,7 @@ location /live/events {
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Use the matching loopback port from that instance’s `env`. Path mounts need `/<base>/live/events` instead (see `deploy/nginx/location.conf`). App releases also send `X-Accel-Buffering: no` so buffering is disabled even without this block. See [LIVE.md](docs/LIVE.md).
+Use the matching loopback port from that instance’s `env`. Path mounts need `/<base>/live/events` instead (node-vps-kit writes this for Proseden via `APP_NGINX_EXTRA=live-events`; see also `deploy/nginx/location.conf` in this repo). App releases also send `X-Accel-Buffering: no` so buffering is disabled even without this block. See [LIVE.md](docs/LIVE.md).
 
 **Update left the world empty**  
 Updates never copy `seed/` over existing `data/`. If `data/meta.json` was deleted, the next start *will* re-seed. Restore `data/` from backup if you still have one.

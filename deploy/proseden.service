@@ -1,5 +1,6 @@
 [Unit]
 Description=Proseden (__NAME__)
+# Reference unit; production installs render templates/app.service from node-vps-kit.
 After=network.target
 
 [Service]
