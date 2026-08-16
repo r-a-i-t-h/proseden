@@ -102,7 +102,7 @@ Exit requests and view invites remain world-building aids. Peer free-text notes 
 
 ## Peer messages
 
-When peer messaging is enabled (default), a signed-in user can compose on the Messages page (`POST /inbox/send` with `uid` and `body`, max 2000 characters; subject is always `Personal message from <sender>`). Recipients see a `message` entry and may Reply (prefills To) or Delete. Manager notices from `/msg` use subject `Manager message from <manager>`. There is no content filter; rate limits curb API spam. Managers can disable peer messaging or purge all inbox rows from a username on `/msg`.
+When peer messaging is enabled (default), a signed-in user can compose on the Messages page (`POST /inbox/send` with `uid` and `body`, max 2000 characters; subject is always `Personal message from <sender>`). Recipients see a `message` entry and may Reply (prefills To) or Delete. Manager notices from `/msg` use subject `Manager message from <manager>`. Quest badge grants deliver a `notice` from `Proseden` (`You've earned a badge …`, body = badge description when set). There is no content filter; rate limits curb API spam. Managers can disable peer messaging or purge all inbox rows from a username on `/msg`.
 
 ## Manager messages
 

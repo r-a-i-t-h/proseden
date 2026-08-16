@@ -233,7 +233,10 @@ action.
 
 This array is catalogue copy. Granting still requires `onFlag` →
 `grantBadge`. Readers see badges on **profile** and may drop them there;
-flags stay invisible.
+flags stay invisible. Each **new** grant also delivers an inbox `notice`
+from `Proseden` with subject `You've earned a badge <title>` and body set
+to `description` when present (empty otherwise). Re-eval while the badge
+is already held does not send another notice.
 
 ---
 
@@ -266,7 +269,8 @@ catches up on their next trigger.
    - For each change, look up `onFlag` on the quest whose `name` is the
      first dotted segment of the flag id (`demo.has` → quest `demo`). Run
      `onTrue` or `onFalse`.
-3. Persist flags and badges. Then collect any `giveArtefact` ids.
+3. Persist flags and badges. Send an inbox notice for each newly granted
+   badge. Then collect any `giveArtefact` ids.
 
 Faults (malformed `when`, missing artefacts, unexpected throws) are
 logged as `[proseden:quest] …` and never fail login, go, collect, or

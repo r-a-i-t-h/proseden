@@ -475,21 +475,31 @@ export class WorldStore implements AccessWorld {
 
   /**
    * Run quest evaluation for a user (cascade). Persists flags/badges and grants artefacts.
-   * Never throws to callers — faults are logged for operators.
+   * Newly earned badges get an inbox notice. Never throws to callers — faults are logged.
    */
   async evaluateQuestsForUser(username: string, atSceneId?: number): Promise<UserRecord | undefined> {
     const user = this.getUser(username);
     if (!user) return undefined;
     try {
       const sceneId = atSceneId ?? user.lastSceneId;
+      const priorBadges = this.getUserBadges(username);
       const result = evaluateQuests({
         quests: this.quests,
         flags: this.getUserFlags(username),
-        badges: this.getUserBadges(username),
+        badges: priorBadges,
         predContext: this.predContextFor(username, sceneId),
       });
       await this.saveUserFlags(username, result.flags);
       await this.saveUserBadges(username, result.badges);
+      const hadBadge = new Set(priorBadges);
+      for (const badgeId of result.badges) {
+        if (hadBadge.has(badgeId)) continue;
+        try {
+          await this.notifyBadgeEarned(username, badgeId);
+        } catch (err) {
+          logQuestFault(`badge notice ${badgeId} for ${username}`, err);
+        }
+      }
       let updated = user;
       for (const artefactId of result.grantedArtefactIds) {
         try {
@@ -505,6 +515,20 @@ export class WorldStore implements AccessWorld {
       logQuestFault(`evaluateQuestsForUser ${username}`, err);
       return user;
     }
+  }
+
+  /** Inbox notice when a badge is newly granted via quest knock-on. */
+  async notifyBadgeEarned(username: string, badgeId: string): Promise<InboxMessage> {
+    const def = badgeDefsById(this.quests).get(badgeId);
+    const title = def?.title ?? badgeId;
+    const description = def?.description?.trim() ?? "";
+    return this.createInboxMessage({
+      type: "notice",
+      toUser: username,
+      fromUser: "Proseden",
+      subject: `You've earned a badge ${title}`,
+      body: description,
+    });
   }
 
   async saveScene(scene: SceneRecord): Promise<void> {
