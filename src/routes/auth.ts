@@ -155,7 +155,10 @@ authRoutes.post("/password", authPasswordLimit, async (c) => {
 authRoutes.post("/logout", async (c) => {
   const sessions = c.get("sessions");
   const user = c.get("user");
-  if (user) await c.get("locations").flush(user.username);
+  if (user) {
+    await c.get("locations").flush(user.username);
+    c.get("presence").kick(`u:${user.username}`, { reason: "logout" });
+  }
   const cookieName = c.get("sessionCookieName");
   const bearer = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
   const cookieHeader = c.req.header("cookie") ?? "";

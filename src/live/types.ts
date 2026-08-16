@@ -25,7 +25,7 @@ export interface ChatMessage {
   fromKey?: string;
   fromName?: string;
   /** Structured cue for arrive/leave system lines (match without parsing `text`). */
-  systemKind?: "arrive" | "leave";
+  systemKind?: "arrive" | "leave" | "logout";
   text: string;
 }
 
@@ -37,6 +37,8 @@ export interface LiveEvent {
   person?: PresencePerson;
   fromSceneId?: number;
   toSceneId?: number;
+  /** Why presence.leave fired (omit for ordinary disconnect / grace expiry / kick). */
+  leaveReason?: "logout";
   message?: ChatMessage;
   /** Snapshot payload */
   here?: PresencePerson[];

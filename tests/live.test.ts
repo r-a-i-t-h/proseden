@@ -674,6 +674,38 @@ describe("live presence and chat", () => {
     expect(presence.findByUserKey("g:bbbbbbbbbbbbbbbb")).toBeUndefined();
   });
 
+  it("logout kicks signed-in presence and posts logged out", async () => {
+    presence.connect({
+      userKey: "u:alice",
+      displayName: "alice",
+      sceneId: sceneIds.public,
+    });
+    // Separate connection so linger cancel does not drop the logout line.
+    presence.connect({
+      userKey: "u:bob",
+      displayName: "bob",
+      sceneId: sceneIds.public,
+    });
+    hub.say({
+      sceneId: sceneIds.public,
+      fromKey: "u:bob",
+      fromName: "bob",
+      text: "bye",
+    });
+
+    const res = await app.request("/auth/logout", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${tokens.alice}`,
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(presence.findByUserKey("u:alice")).toBeUndefined();
+    const logoutLine = hub.snapshot(sceneIds.public).messages.find((m) => m.systemKind === "logout");
+    expect(logoutLine?.text).toBe("alice logged out.");
+  });
+
   it("POST /live/ping requires presence then heartbeats", async () => {
     const headers = {
       Authorization: `Bearer ${tokens.alice}`,

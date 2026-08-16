@@ -23,7 +23,7 @@ Preference: signed-in users store `localStorage` key `proseden-panel` = `live` \
 - **POST** `/live/say`, `/live/shout` — require an active presence connection.
 - **POST** `/live/ping` — client proof-of-life (kept running in background tabs). Server SSE pings keep the proxy socket alive but do **not** count as presence.
 - After **3 minutes** without a client ping, idle sweep drops the connection. Reconnect grace is **60 seconds** so navigations and brief socket drops do not emit leave/arrive.
-- Guests get a short-lived guest cookie on public scenes; join requires sign-in. Login, register, and logout clear that cookie and kick the `g:` presence so it cannot linger next to the signed-in user.
+- Guests get a short-lived guest cookie on public scenes; join requires sign-in. Login, register, and logout clear that cookie and kick the `g:` presence so it cannot linger next to the signed-in user. Logout also kicks the signed-in `u:` presence immediately and posts `"Name logged out."` instead of a plain leave.
 
 ## Chat linger
 

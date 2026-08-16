@@ -27,7 +27,11 @@ export class SceneHub {
       if (event.kind === "presence.join" && event.person && event.sceneId !== undefined) {
         this.appendSystem(event.sceneId, event.person, "arrive");
       } else if (event.kind === "presence.leave" && event.person && event.sceneId !== undefined) {
-        this.appendSystem(event.sceneId, event.person, "leave");
+        this.appendSystem(
+          event.sceneId,
+          event.person,
+          event.leaveReason === "logout" ? "logout" : "leave",
+        );
       } else if (
         event.kind === "presence.move" &&
         event.person &&
@@ -156,12 +160,14 @@ export class SceneHub {
   private appendSystem(
     sceneId: number,
     person: PresencePerson,
-    systemKind: "arrive" | "leave",
+    systemKind: "arrive" | "leave" | "logout",
   ): void {
     const text =
       systemKind === "arrive"
         ? `${person.displayName} arrives.`
-        : `${person.displayName} leaves.`;
+        : systemKind === "logout"
+          ? `${person.displayName} logged out.`
+          : `${person.displayName} leaves.`;
     const message = this.makeMessage({
       kind: "chat.system",
       sceneId,
@@ -172,7 +178,10 @@ export class SceneHub {
     });
 
     // Consecutive arrive→leave for the same person: fanout leave, but drop both from linger.
-    if (systemKind === "leave" && this.tryCancelArrive(sceneId, person.userKey)) {
+    if (
+      (systemKind === "leave" || systemKind === "logout") &&
+      this.tryCancelArrive(sceneId, person.userKey)
+    ) {
       this.presence.fanout(
         { kind: "chat.system", ts: message.ts, sceneId, message },
         { sceneId },
