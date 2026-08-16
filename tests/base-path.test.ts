@@ -48,9 +48,9 @@ describe("subdirectory base path", () => {
     expect(html).toContain('href="assets/styles.css"');
     expect(html).toContain('src="assets/panel.js"');
     expect(html).toContain('action="auth/login"');
-    expect(html).toContain('href="a/1"');
+    expect(html).toContain('href="s/1?card"');
     expect(html).not.toContain('href="/assets/');
-    expect(html).not.toContain('href="/a/1"');
+    expect(html).not.toContain('href="/s/1');
   });
 
   it("redirects stay inside the base path, with or without trailing slash", async () => {
@@ -77,7 +77,7 @@ describe("subdirectory base path", () => {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ username: "gardener", password: "garden" }),
+      body: JSON.stringify({ username: "admin", password: "admin" }),
     });
     expect(res.status).toBe(200);
     const setCookie = res.headers.get("set-cookie") ?? "";
@@ -92,7 +92,7 @@ describe("subdirectory base path", () => {
     const html = await res.text();
     expect(html).toContain('<base href="/" />');
     expect(html).toContain('href="assets/styles.css"');
-    expect(html).toContain('href="a/1"');
+    expect(html).toContain('href="s/1?card"');
     const assets = await a.request("/assets/styles.css");
     expect(assets.status).toBe(200);
   });
@@ -120,12 +120,12 @@ describe("subdirectory base path", () => {
       const loginA = await a.request("/world-a/auth/login", {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "gardener", password: "garden" }),
+        body: JSON.stringify({ username: "admin", password: "admin" }),
       });
       const loginB = await b.request("/world-b/auth/login", {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "gardener", password: "garden" }),
+        body: JSON.stringify({ username: "admin", password: "admin" }),
       });
       const cookieA = loginA.headers.get("set-cookie") ?? "";
       const cookieB = loginB.headers.get("set-cookie") ?? "";

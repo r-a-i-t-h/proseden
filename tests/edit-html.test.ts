@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { hashPassword } from "../src/auth/password.js";
 import { SessionStore } from "../src/auth/sessions.js";
 import { createApp } from "../src/app.js";
 import { editModeHrefs } from "../src/render/html.js";
@@ -32,8 +33,25 @@ describe("read-only HTML vs edit bootstrap", () => {
     dataDir = await mkdtemp(join(tmpdir(), "proseden-edit-html-"));
     world = new WorldStore(dataDir);
     await world.load(join(process.cwd(), "seed"));
+    const member = await world.createScene({
+      owner: "admin",
+      title: "Reading nook",
+      body: "A quiet bay of shelves.",
+      visibility: "public",
+    });
+    await world.createEntranceGroup({
+      title: "The Public Wing",
+      entranceSceneId: 1,
+      sceneIds: [1, member.id],
+    });
+    await world.createArtefact({
+      owner: "admin",
+      homeSceneId: 1,
+      title: "A pressed leaf",
+      body: "Between two sheets of tissue, a maple leaf.",
+    });
     sessions = new SessionStore();
-    token = sessions.create("gardener").token;
+    token = sessions.create("admin").token;
   });
 
   afterEach(async () => {
@@ -52,8 +70,8 @@ describe("read-only HTML vs edit bootstrap", () => {
     expect(html).toContain('id="edit-root"');
     expect(html).toContain('id="edit-bootstrap"');
     expect(html).toContain("Moss softens the stone step");
-    expect(html).toContain('href="u/gardener"');
-    expect(html).toContain('<p class="byline">by <a href="u/gardener">gardener</a></p>');
+    expect(html).toContain('href="u/admin"');
+    expect(html).toContain('<p class="byline">by <a href="u/admin">admin</a></p>');
     expect(html).not.toContain("data-method");
     expect(html).not.toContain("Create scene");
     expect(html).not.toContain("Save scene");
@@ -120,8 +138,8 @@ describe("read-only HTML vs edit bootstrap", () => {
     expect(html.indexOf('href="inv"')).toBeLessThan(html.indexOf('id="panel-edit"'));
     expect(html).not.toContain("data-method");
     expect(html).not.toContain("Create scene");
-    expect(html).toContain('"username":"gardener"');
-    expect(html).toContain('href="u/gardener"');
+    expect(html).toContain('"username":"admin"');
+    expect(html).toContain('href="u/admin"');
     expect(html).not.toContain("passwordHash");
   });
 
@@ -161,6 +179,8 @@ describe("create scene then exit from a junction", () => {
     dataDir = await mkdtemp(join(tmpdir(), "proseden-edit-link-"));
     world = new WorldStore(dataDir);
     await world.load(join(process.cwd(), "seed"));
+    const password = await hashPassword("visit");
+    await world.createUser("visitor", password.hash, password.salt);
     sessions = new SessionStore();
     bob = sessions.create("visitor").token;
   });

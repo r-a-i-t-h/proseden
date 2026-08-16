@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import { hashPassword } from "../src/auth/password.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const username = process.argv[2] ?? "gardener";
-const password = process.argv[3] ?? "garden";
+const username = process.argv[2] ?? "admin";
+const password = process.argv[3] ?? "admin";
 
 const { hash, salt } = await hashPassword(password);
 const user = {

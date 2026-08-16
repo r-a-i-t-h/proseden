@@ -65,7 +65,7 @@ flowchart TD
 - Types + migration in `src/model/types.ts` / load path in `src/store/world.ts`
 - Finish `src/access/permissions.ts`: rights levels, `*`, user-level grants, group stub no-op until Phase 3
 - Routes + HTML sidebar panels for scene access; text mode shows access summary only to managers
-- Seed: keep Threshold public; Private Study demonstrates invite (visitor read grant)
+- Seed: single public Threshold junction; ACL demos live in tests, not seed
 
 ### Phase 3 — Groups ✅
 
@@ -89,7 +89,7 @@ flowchart TD
 - **Moderator:** edit/delete any scene/artefact prose (not necessarily restructure graph)
 - **Topographer:** edit exits, groups, junctions, entrance groups worldwide (not prose)
 - **Manager:** assign roles + user denies at staff level (superset of moderator + topographer)
-- Bootstrap: first manager via env `PROSEDEN_MANAGERS=gardener` or seed staff file
+- Bootstrap: first manager via env `PROSEDEN_MANAGERS=admin` or seed staff file
 - Access helpers consult roles after ownership/grants
 
 ### Phase 6 — Version history ✅

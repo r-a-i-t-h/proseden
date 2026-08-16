@@ -32,9 +32,7 @@ Environment:
 | `PROSEDEN_SECURE_COOKIES` | _(empty)_ | Set `1` to mark session cookies `Secure` (also on when `NODE_ENV=production`) |
 | `PROSEDEN_BACKUP` | sibling `backup/` of the data dir | Timestamped `data/` archives (Admin + `proseden-update`) |
 
-Seed login: **gardener** / **garden**. Change it from **Profile** after you log in.
-
-Demo invite: **visitor** / **visit** can read the Private Study (`/s/3`) via a scene grant.
+Seed login: **admin** / **admin**. Change it from **Profile** after you log in.
 
 ## Deploy on a VPS
 
@@ -69,21 +67,12 @@ curl -s -H 'Accept: text/plain' http://127.0.0.1:3336/s/1
 # Examine a detail
 curl -s -H 'Accept: text/plain' 'http://127.0.0.1:3336/s/1?card'
 
-# Artefact
-curl -s -H 'Accept: text/plain' http://127.0.0.1:3336/a/1
-
 # Log in (returns bearer token)
 TOKEN=$(curl -s -H 'Accept: application/json' -H 'Content-Type: application/json' \
-  -d '{"username":"gardener","password":"garden"}' \
+  -d '{"username":"admin","password":"admin"}' \
   http://127.0.0.1:3336/auth/login | jq -r .token)
 
-# Private scene
-curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
-  http://127.0.0.1:3336/s/3
-
-# Collect / inventory
-curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' \
-  -X POST http://127.0.0.1:3336/a/1/collect
+# Inventory (empty until you collect artefacts)
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
   http://127.0.0.1:3336/inv
 ```

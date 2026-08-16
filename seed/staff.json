@@ -1,5 +1,5 @@
 {
   "roles": {
-    "gardener": ["manager"]
+    "admin": ["manager"]
   }
 }

@@ -373,5 +373,5 @@ Next:
   - After DNS works: sudo certbot --nginx -d ${SERVER_NAME:-your.domain}
   - Later upgrades: sudo proseden-update --name $NAME
 
-Seed login (change it): gardener / garden
+Seed login (change it): admin / admin
 EOF
