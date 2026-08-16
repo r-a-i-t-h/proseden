@@ -11,7 +11,7 @@ Detail views (`/s/:id?card`) and artefact pages (`/a/:id`) keep you present in t
 | Mode | UI | Presence |
 |---|---|---|
 | Live | Chat, who’s here, online + Join | Connected |
-| Edit | Existing editor (form state kept when switching to Live) | Connected (same as Live) |
+| Edit | Existing editor (form state kept when switching to Live) | Connected (same as Live); new says/shouts from others show a brief (~5s) toast with a **Live** switch |
 | View | Sidebar closed | Disconnected — not visible, not joinable |
 
 Preference: signed-in users store `localStorage` key `proseden-panel` = `live` \| `edit` (absent = View). Guests do **not** restore Live from localStorage — they must click Live; that choice lasts for the tab via `sessionStorage` `proseden-panel-guest-live`. Legacy `sessionStorage` `proseden-edit` migrates to Edit once. `?edit` still opens Edit.

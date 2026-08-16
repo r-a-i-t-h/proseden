@@ -993,6 +993,69 @@ button.linkish {
   border-bottom: 1px solid var(--line);
 }
 
+.live-toasts {
+  position: fixed;
+  z-index: 40;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.45rem;
+  width: min(28rem, calc(100% - 2rem));
+  pointer-events: none;
+}
+
+.live-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.7rem;
+  background: rgba(238, 243, 234, 0.96);
+  border: 1px solid var(--line);
+  box-shadow: 0 0.35rem 1rem rgba(28, 36, 28, 0.12);
+  pointer-events: auto;
+  animation: live-toast-in 0.2s ease-out;
+}
+
+.live-toast-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-toast-live {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--leaf);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+
+.live-toast-live:hover {
+  color: var(--ember);
+  border-color: rgba(180, 83, 42, 0.35);
+}
+
+@keyframes live-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .live-purge {
   margin-top: 0.75rem;
 }

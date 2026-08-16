@@ -60,11 +60,18 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+export type LiveUiMode = "live" | "edit" | "view";
+
 export interface LiveController {
   connect: () => void;
   disconnect: () => void;
   destroy: () => void;
+  /** Tell Live whether the chat pane is visible (Edit still receives SSE). */
+  setUiMode: (mode: LiveUiMode) => void;
 }
+
+const TOAST_MS = 5000;
+const TOAST_TEXT_MAX = 72;
 
 /**
  * Mount live UI once into `pane`. SSE starts via connect() and stays up across Live↔Edit.
@@ -72,6 +79,9 @@ export interface LiveController {
 export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveController {
   const sceneId = boot.liveSceneId;
   const selfKey = boot.user ? `u:${boot.user.username}` : undefined;
+
+  let uiMode: LiveUiMode = "view";
+  let toastHost: HTMLElement | null = null;
 
   const hereList = el("ul", { class: "live-here" });
   const onlineList = el("ul", { class: "live-online" });
@@ -154,7 +164,62 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
   let pingTimer: ReturnType<typeof setInterval> | undefined;
   let seenIds = new Set<string>();
 
-  function appendMessage(msg: ChatMessage): void {
+  function clearToasts(): void {
+    toastHost?.remove();
+    toastHost = null;
+  }
+
+  function ensureToastHost(): HTMLElement {
+    if (toastHost) return toastHost;
+    toastHost = el("div", {
+      class: "live-toasts",
+      role: "status",
+      "aria-live": "polite",
+      "aria-relevant": "additions",
+    });
+    document.body.append(toastHost);
+    return toastHost;
+  }
+
+  function goLive(): void {
+    const btn = document.getElementById("panel-live");
+    if (btn instanceof HTMLButtonElement && !btn.disabled) btn.click();
+  }
+
+  /** Brief awareness toast while Edit hides the chat log. Snapshot replay does not toast. */
+  function showActivityToast(msg: ChatMessage): void {
+    if (uiMode !== "edit") return;
+    if (msg.kind !== "chat.say" && msg.kind !== "chat.shout") return;
+    if (selfKey && msg.fromKey === selfKey) return;
+
+    const host = ensureToastHost();
+    const preview = truncateText(msg.text, TOAST_TEXT_MAX);
+    const who = msg.fromName ?? "?";
+    let summary: string;
+    if (msg.kind === "chat.shout") {
+      const where = msg.sceneTitle
+        ? msg.sceneTitle
+        : msg.sceneId !== undefined
+          ? `Scene ${msg.sceneId}`
+          : "elsewhere";
+      summary = `Shout · ${where} — ${who}: ${preview}`;
+    } else {
+      summary = `${who}: ${preview}`;
+    }
+
+    const toast = el("div", { class: "live-toast" });
+    const liveBtn = el("button", { type: "button", class: "live-toast-live" }, "Live") as HTMLButtonElement;
+    liveBtn.addEventListener("click", goLive);
+    toast.append(el("span", { class: "live-toast-text" }, summary), liveBtn);
+    host.append(toast);
+
+    window.setTimeout(() => {
+      toast.remove();
+      if (toastHost && !toastHost.childNodes.length) clearToasts();
+    }, TOAST_MS);
+  }
+
+  function appendMessage(msg: ChatMessage, opts?: { alert?: boolean }): void {
     if (seenIds.has(msg.id)) return;
     seenIds.add(msg.id);
     const line = el("div", { class: `live-line live-${msg.kind.replace(".", "-")}` });
@@ -178,6 +243,7 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
     }
     log.append(line);
     log.scrollTop = log.scrollHeight;
+    if (opts?.alert) showActivityToast(msg);
   }
 
   function renderHere(people: PresencePerson[]): void {
@@ -251,7 +317,7 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
       }
       return;
     }
-    if (event.message) appendMessage(event.message);
+    if (event.message) appendMessage(event.message, { alert: true });
     if (event.kind === "chat.purged") {
       if (event.purgedSceneId === "all" || event.purgedSceneId === sceneId) {
         seenIds = new Set();
@@ -259,6 +325,11 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
         status.textContent = "Chat purged";
       }
     }
+  }
+
+  function setUiMode(mode: LiveUiMode): void {
+    uiMode = mode;
+    if (mode !== "edit") clearToasts();
   }
 
   function stopPing(): void {
@@ -329,6 +400,7 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
 
   function destroy(): void {
     disconnect();
+    clearToasts();
   }
 
   window.addEventListener("pageshow", (ev) => {
@@ -345,7 +417,13 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
     pane.replaceChildren(el("p", { class: "muted" }, "Live is available on scene pages."));
   }
 
-  return { connect, disconnect, destroy };
+  return { connect, disconnect, destroy, setUiMode };
+}
+
+function truncateText(text: string, max: number): string {
+  const t = text.trim().replace(/\s+/g, " ");
+  if (t.length <= max) return t;
+  return `${t.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
 }
 
 async function postJson(action: string, body: unknown): Promise<void> {

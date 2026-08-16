@@ -130,9 +130,11 @@ function bootPanel(): void {
     if (next === "live" || next === "edit") {
       ensureLive();
       if (canEdit) ensureEdit();
+      live?.setUiMode(next);
       live?.connect();
     } else {
       live?.disconnect();
+      live?.setUiMode(next);
     }
 
     livePane.hidden = next !== "live";
