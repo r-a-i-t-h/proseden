@@ -24,7 +24,7 @@ for their own username file. Seed copies are `seed/quests/*.json`.
 | `data/quests/<name>.json` | Manager (official) quest — one quest per file |
 | `data/quests/users/<username>.json` | Questor personal quest — `name` must equal username |
 | `data/users/<username>.flags.json` | That reader’s flag map (`{ "quest.local": value, … }`) |
-| `data/users/<username>.badges.json` | That reader’s badge ids (JSON array of strings) |
+| `data/users/<username>.badges.json` | That reader’s held badges (JSON array of `{ badge, grantTime }` objects) |
 
 The live manager filename should be **`<name>.json`**, matching the object’s `name`
 field. The loader uses `name` from JSON, not the filename. The manager save
@@ -48,7 +48,9 @@ There is no reserved-name list in the engine. Presence of a manager file owns
 that prefix. Seed ships **`builders`** (scene-count badges) and **`proseden`**
 (empty shell that reserves `proseden.*`). Migration `003-default-quests`
 installs those two files (and empty alchemy recipes) when missing; it does
-not overwrite edits.
+not overwrite edits. Migration `004-badge-objects` rewrites
+`data/users/*.badges.json` from a string-id array to `{ badge, grantTime? }`
+objects and does not invent `grantTime`.
 
 Invalid files are skipped at load and logged as `[proseden:quest] …`.
 Unknown extra JSON keys are ignored on parse and dropped if the manager
@@ -216,7 +218,7 @@ re-grant until the flag goes away and comes back.
 
 | Shape | Effect |
 |---|---|
-| `{ "grantBadge": "demo.winner" }` | Append the id to the reader’s badge list if not already present. Id must be `name.*`. |
+| `{ "grantBadge": "demo.winner" }` | Append `{ "badge": "demo.winner", "grantTime": "<ISO now>" }` if that id is not already held. Id must be `name.*`. |
 | `{ "giveArtefact": 99 }` | After eval, collect artefact `99` if it exists and is not already held. Must be a finite number. Holding then grants artefact-page read; not home-scene read or world collect. |
 
 `giveArtefact` does **not** update inventory mid-cascade. A later rule in
@@ -246,11 +248,12 @@ action.
 | `description` | no | Optional string. |
 
 This array is catalogue copy. Granting still requires `onFlag` →
-`grantBadge`. Readers see badges on **profile** and may drop them there;
-flags stay invisible. Each **new** grant also delivers an inbox `notice`
-from `Proseden` with subject `You've earned a badge <title>` and body set
-to `description` when present (empty otherwise). Re-eval while the badge
-is already held does not send another notice.
+`grantBadge`. Readers see badges on **profile** (with grant time) and may
+drop them there; flags stay invisible. Each **new** grant also delivers an
+inbox `notice` from `Proseden` with subject `You've earned a badge <title>`
+and body set to `description` when present (empty otherwise). Re-eval while
+the badge is already held does not send another notice or change `grantTime`.
+A missing `grantTime` on disk displays as **unknown**.
 
 ---
 

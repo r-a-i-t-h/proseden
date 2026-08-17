@@ -9,7 +9,7 @@ import type {
   SceneRecord,
 } from "../model/types.js";
 import { entityKindLabel, entityPathPrefix } from "./entity.js";
-import { relativeAge } from "./relative-age.js";
+import { grantTimeLabel, relativeAge } from "./relative-age.js";
 import {
   artefactPageView,
   inboxPageView,
@@ -112,7 +112,7 @@ export function renderUserProfileText(opts: {
   ownedScenes?: number;
   ownedArtefacts?: number;
   lastSeenAt?: string;
-  badges?: Array<{ id: string; title: string }>;
+  badges?: Array<{ id: string; title: string; grantTime?: string | null }>;
   basePath?: string;
   back?: { href: string; label: string };
 }): string {
@@ -147,7 +147,9 @@ export function renderUserProfileText(opts: {
     const badges = opts.badges ?? [];
     if (badges.length) {
       lines.push("Badges:");
-      for (const b of badges) lines.push(`  - ${b.title} (${b.id})`);
+      for (const b of badges) {
+        lines.push(`  - ${b.title} (${b.id}) · ${grantTimeLabel(b.grantTime ?? undefined)}`);
+      }
       lines.push("");
     }
   }

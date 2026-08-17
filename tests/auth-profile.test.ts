@@ -406,6 +406,42 @@ describe("profile and password change", () => {
     });
   });
 
+  it("shows badge grantTime and unknown when missing", async () => {
+    await world.saveQuest({
+      name: "demo",
+      rules: [],
+      badges: [{ id: "demo.winner", title: "Winner" }],
+    });
+    await world.saveUserBadges("alice", [
+      { badge: "demo.winner", grantTime: "2026-01-02T03:04:05.000Z" },
+      { badge: "demo.bare" },
+    ]);
+
+    const json = await app().request("/u/alice", {
+      headers: { Accept: "application/json" },
+    });
+    expect(json.status).toBe(200);
+    expect(await json.json()).toMatchObject({
+      badges: [
+        { id: "demo.winner", title: "Winner", grantTime: "2026-01-02T03:04:05.000Z" },
+        { id: "demo.bare", title: "demo.bare", grantTime: null },
+      ],
+    });
+
+    const html = await (await app().request("/u/alice", { headers: { Accept: "text/html" } })).text();
+    expect(html).toContain("Winner");
+    expect(html).toContain("unknown");
+    expect(html).toMatch(/<time datetime="2026-01-02T03:04:05\.000Z"/);
+
+    const own = await app().request("/profile", {
+      headers: { Accept: "text/html", ...auth() },
+    });
+    expect(own.status).toBe(200);
+    const ownHtml = await own.text();
+    expect(ownHtml).toContain("Winner (demo.winner) · ");
+    expect(ownHtml).toContain("demo.bare (demo.bare) · unknown");
+  });
+
   it("returns 404 for an unknown user", async () => {
     const res = await app().request("/u/nobody", { headers: { Accept: "text/html" } });
     expect(res.status).toBe(404);

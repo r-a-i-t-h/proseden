@@ -33,7 +33,8 @@ the JSON definition in [QUESTS.md](QUESTS.md)) are
 named logic bundles that set per-reader flags — not assignments the reader
 is “on.”
 
-Badges may mark public achievements on a profile; flags stay invisible.
+Badges may mark public achievements on a profile, including when they
+were granted; flags stay invisible.
 
 The "reader" plays no character.
 

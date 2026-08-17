@@ -17,7 +17,7 @@ import type {
 import { escapeAttr } from "./escape.js";
 import { entityKindLabel, entityPath, userPath } from "./entity.js";
 import { escapeHtml, formatProse } from "./prose.js";
-import { relativeAgeHtml } from "./relative-age.js";
+import { grantTimeHtml, relativeAgeHtml } from "./relative-age.js";
 import {
   artefactPageView,
   DENIES_EXAMPLE,
@@ -371,7 +371,7 @@ export function renderUserProfileBodyHtml(opts: {
   ownedScenes?: number;
   ownedArtefacts?: number;
   lastSeenAt?: string;
-  badges?: Array<{ id: string; title: string }>;
+  badges?: Array<{ id: string; title: string; grantTime?: string | null }>;
   back?: PageBackLink;
 }): string {
   const path = userPath(opts.username);
@@ -394,7 +394,7 @@ export function renderUserProfileBodyHtml(opts: {
     <ul class="link-list">${badges
       .map(
         (b) =>
-          `<li>${escapeHtml(b.title)} <span class="muted">(${escapeHtml(b.id)})</span></li>`,
+          `<li>${escapeHtml(b.title)} <span class="muted">(${escapeHtml(b.id)}) · ${grantTimeHtml(b.grantTime ?? undefined)}</span></li>`,
       )
       .join("")}</ul>`;
   return `${back}<h1>${escapeHtml(opts.username)}</h1>

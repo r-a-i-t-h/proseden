@@ -23,3 +23,13 @@ export function relativeAgeHtml(iso: string, nowMs = Date.now()): string {
   }
   return `<time datetime="${safeIso}" title="${safeIso}">${escapeHtml(age)}</time>`;
 }
+
+/** Badge grant time for profile copy. Missing timestamps show as "unknown". */
+export function grantTimeLabel(iso: string | undefined, nowMs = Date.now()): string {
+  return iso ? relativeAge(iso, nowMs) : "unknown";
+}
+
+/** HTML grant time with hover tooltip, or "unknown" when missing. */
+export function grantTimeHtml(iso: string | undefined, nowMs = Date.now()): string {
+  return iso ? relativeAgeHtml(iso, nowMs) : "unknown";
+}

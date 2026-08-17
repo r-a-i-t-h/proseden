@@ -203,9 +203,10 @@ Anonymous readers: empty flags → positive FlagRefs fail; `not.*` succeeds.
 ## Badges
 
 Public; listed and dropped **only on profile**. Granted only via flag
-`onTrue` knock-on. Ids are `quest.local`. Each newly granted badge also
-places a `notice` in the earner’s inbox (`You've earned a badge …`, body =
-catalogue description when set).
+`onTrue` knock-on. Ids are `quest.local`. Held as `{ badge, grantTime }`
+(`grantTime` is ISO; omitted displays as **unknown**). Each newly granted
+badge also places a `notice` in the earner’s inbox (`You've earned a
+badge …`, body = catalogue description when set).
 
 ---
 

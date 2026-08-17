@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -56,7 +56,9 @@ describe("badge earn inbox notice", () => {
   it("sends a notice with title and description when a badge is first granted", async () => {
     await world.evaluateQuestsForUser("alice");
 
-    expect(world.getUserBadges("alice")).toEqual(["demo.winner"]);
+    expect(world.getUserBadges("alice")).toEqual([
+      { badge: "demo.winner", grantTime: expect.any(String) },
+    ]);
     const inbox = world.listInboxFor("alice");
     expect(inbox).toHaveLength(1);
     expect(inbox[0]).toMatchObject({
@@ -73,5 +75,24 @@ describe("badge earn inbox notice", () => {
     await world.evaluateQuestsForUser("alice");
 
     expect(world.listInboxFor("alice")).toHaveLength(1);
+  });
+
+  it("writes badge objects with grantTime and preserves them on re-eval", async () => {
+    await world.evaluateQuestsForUser("alice");
+    const [first] = world.getUserBadges("alice");
+    expect(first?.grantTime).toEqual(expect.any(String));
+    expect(JSON.parse(await readFile(join(dataDir, "users", "alice.badges.json"), "utf8"))).toEqual([
+      { badge: "demo.winner", grantTime: first!.grantTime },
+    ]);
+
+    await world.evaluateQuestsForUser("alice");
+    expect(world.getUserBadges("alice")).toEqual([first]);
+  });
+
+  it("does not invent grantTime for a badge already held without one", async () => {
+    await world.saveUserBadges("alice", [{ badge: "demo.winner" }]);
+    await world.evaluateQuestsForUser("alice");
+    expect(world.getUserBadges("alice")).toEqual([{ badge: "demo.winner" }]);
+    expect(world.listInboxFor("alice")).toHaveLength(0);
   });
 });

@@ -389,9 +389,10 @@ worldRoutes.get("/profile", (c) => {
       : "appearance";
   const world = c.get("world");
   const back = sceneBackLink(user, world);
-  const badges = world.getUserBadges(user.username).map((id) => ({
-    id,
-    title: world.badgeTitle(id),
+  const badges = world.getUserBadges(user.username).map((b) => ({
+    id: b.badge,
+    title: world.badgeTitle(b.badge),
+    grantTime: b.grantTime,
   }));
   return page(
     c,
@@ -415,7 +416,7 @@ worldRoutes.post("/profile/badges/:id/drop", async (c) => {
   const user = c.get("user");
   if (!user) return apiError(c, 401, "Authentication required");
   const badgeId = decodeURIComponent(c.req.param("id"));
-  const next = world.getUserBadges(user.username).filter((b) => b !== badgeId);
+  const next = world.getUserBadges(user.username).filter((b) => b.badge !== badgeId);
   await world.saveUserBadges(user.username, next);
   await triggerQuestEval(c, user, user.lastSceneId);
   if (wantsJson(c)) return c.json({ ok: true, badges: next });
@@ -1095,9 +1096,10 @@ worldRoutes.get("/u/:username", (c) => {
   const ownedScenes = world.listScenesOwnedBy(target.username).length;
   const ownedArtefacts = world.listArtefactsOwnedBy(target.username).length;
   const lastSeenAt = target.lastSeenAt;
-  const badges = world.getUserBadges(target.username).map((id) => ({
-    id,
-    title: world.badgeTitle(id),
+  const badges = world.getUserBadges(target.username).map((b) => ({
+    id: b.badge,
+    title: world.badgeTitle(b.badge),
+    grantTime: b.grantTime ?? null,
   }));
   const payload = {
     username: target.username,

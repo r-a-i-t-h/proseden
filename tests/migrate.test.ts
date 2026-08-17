@@ -8,6 +8,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseProseDocument } from "../src/store/markdown.js";
 import { WorldStore } from "../src/store/world.js";
 import { rewriteLegacyLinkSchemes } from "../deploy/migrations/002-rewrite-link-schemes.mjs";
+import {
+  badgeListNeedsConvert,
+  convertBadgeList,
+} from "../deploy/migrations/004-badge-objects.mjs";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -72,6 +76,33 @@ describe("rewriteLegacyLinkSchemes", () => {
   });
 });
 
+describe("convertBadgeList", () => {
+  it("wraps string ids without inventing grantTime", () => {
+    expect(convertBadgeList(["builders.hamlet", "  demo.winner  "])).toEqual([
+      { badge: "builders.hamlet" },
+      { badge: "demo.winner" },
+    ]);
+    expect(badgeListNeedsConvert(["builders.hamlet"])).toBe(true);
+    expect(badgeListNeedsConvert([{ badge: "builders.hamlet" }])).toBe(false);
+    expect(badgeListNeedsConvert([])).toBe(false);
+  });
+
+  it("keeps existing objects and grantTime, skips junk", () => {
+    expect(
+      convertBadgeList([
+        { badge: "a.one", grantTime: "2020-01-01T00:00:00.000Z" },
+        "a.one",
+        "a.two",
+        { badge: "  " },
+        null,
+      ]),
+    ).toEqual([
+      { badge: "a.one", grantTime: "2020-01-01T00:00:00.000Z" },
+      { badge: "a.two" },
+    ]);
+  });
+});
+
 describe("schema migrate runner", () => {
   let dataDir: string;
 
@@ -83,7 +114,7 @@ describe("schema migrate runner", () => {
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  it("001 then 002 then 003 stamp schemaVersion 3 and keep other meta keys", async () => {
+  it("001 then 002 then 003 then 004 stamp schemaVersion 4 and keep other meta keys", async () => {
     await writeMeta(dataDir, {
       nextSceneId: 4,
       nextArtefactId: 2,
@@ -98,9 +129,10 @@ describe("schema migrate runner", () => {
     expect(first.stdout).toMatch(/applying 001-schema-version\.sh/);
     expect(first.stdout).toMatch(/applying 002-rewrite-link-schemes\.sh/);
     expect(first.stdout).toMatch(/applying 003-default-quests\.sh/);
+    expect(first.stdout).toMatch(/applying 004-badge-objects\.sh/);
 
     const meta = await readMeta(dataDir);
-    expect(meta.schemaVersion).toBe(3);
+    expect(meta.schemaVersion).toBe(4);
     expect(meta.nextSceneId).toBe(4);
     expect(meta.nextArtefactId).toBe(2);
     expect(meta.nextGroupId).toBe(2);
@@ -126,7 +158,7 @@ describe("schema migrate runner", () => {
 
     const second = await runMigrate(dataDir);
     expect(second.code).toBe(0);
-    expect(second.stdout).toMatch(/already at schema 3/);
+    expect(second.stdout).toMatch(/already at schema 4/);
     expect(second.stdout).not.toMatch(/applying/);
     expect(await readFile(join(dataDir, "meta.json"), "utf8")).toBe(afterFirst);
   });
@@ -149,11 +181,47 @@ describe("schema migrate runner", () => {
     const result = await runMigrate(dataDir);
     expect(result.code).toBe(0);
     expect(result.stdout).toMatch(/applying 003-default-quests\.sh/);
+    expect(result.stdout).toMatch(/applying 004-badge-objects\.sh/);
     const builders = JSON.parse(
       await readFile(join(dataDir, "quests", "builders.json"), "utf8"),
     ) as { description?: string };
     expect(builders.description).toBe("custom");
-    expect(await readMeta(dataDir)).toMatchObject({ schemaVersion: 3 });
+    expect(await readMeta(dataDir)).toMatchObject({ schemaVersion: 4 });
+  });
+
+  it("004 converts string badge files and leaves object files and grantTime alone", async () => {
+    await writeMeta(dataDir, {
+      nextSceneId: 4,
+      nextArtefactId: 2,
+      nextGroupId: 2,
+      nextEntranceGroupId: 2,
+      entranceSceneId: 1,
+      schemaVersion: 3,
+    });
+    await mkdir(join(dataDir, "users"), { recursive: true });
+    await writeFile(
+      join(dataDir, "users", "alice.badges.json"),
+      `${JSON.stringify(["builders.hamlet", "demo.winner"], null, 2)}\n`,
+    );
+    await writeFile(
+      join(dataDir, "users", "bob.badges.json"),
+      `${JSON.stringify([{ badge: "builders.hamlet", grantTime: "2020-01-01T00:00:00.000Z" }], null, 2)}\n`,
+    );
+    await writeFile(join(dataDir, "users", "carol.badges.json"), "[]\n");
+    const bobBefore = await readFile(join(dataDir, "users", "bob.badges.json"), "utf8");
+    const carolBefore = await readFile(join(dataDir, "users", "carol.badges.json"), "utf8");
+
+    const result = await runMigrate(dataDir);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toMatch(/applying 004-badge-objects\.sh/);
+    expect(result.stdout).toMatch(/rewrote 1 file\(s\)/);
+    expect(JSON.parse(await readFile(join(dataDir, "users", "alice.badges.json"), "utf8"))).toEqual([
+      { badge: "builders.hamlet" },
+      { badge: "demo.winner" },
+    ]);
+    expect(await readFile(join(dataDir, "users", "bob.badges.json"), "utf8")).toBe(bobBefore);
+    expect(await readFile(join(dataDir, "users", "carol.badges.json"), "utf8")).toBe(carolBefore);
+    expect(await readMeta(dataDir)).toMatchObject({ schemaVersion: 4 });
   });
 
   it("applies 001 then 002 in order from v0", async () => {
@@ -242,6 +310,7 @@ Inline code \`[x](pedia:y)\` stays put.
     expect(result.stdout).not.toMatch(/001-schema-version/);
     expect(result.stdout).toMatch(/applying 002-rewrite-link-schemes\.sh/);
     expect(result.stdout).toMatch(/applying 003-default-quests\.sh/);
+    expect(result.stdout).toMatch(/applying 004-badge-objects\.sh/);
     expect(result.stdout).toMatch(/rewrote 3 file\(s\)/);
 
     expect(await readFile(join(dataDir, "scenes", "1.md"), "utf8")).toBe(`---
@@ -258,7 +327,7 @@ Inline code \`[x](pedia:y)\` stays put.
       "A [clipping](search:deckle edge).\n",
     );
     expect(await readFile(join(dataDir, "scenes", "1.exits.json"), "utf8")).toBe("[]\n");
-    expect((await readMeta(dataDir)).schemaVersion).toBe(3);
+    expect((await readMeta(dataDir)).schemaVersion).toBe(4);
   });
 
   it("upgrades a sample scene file without mangling the rest", async () => {

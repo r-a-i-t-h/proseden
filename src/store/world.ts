@@ -37,6 +37,7 @@ import type {
   SettingsFile,
   StaffFile,
   StaffRole,
+  UserBadge,
   UserRecord,
 } from "../model/types.js";
 import type { FlagRef } from "../model/logic.js";
@@ -44,6 +45,7 @@ import { appendLineAtomic, readJson, readText, writeJsonAtomic, writeTextAtomic 
 import { parseProseDocument, serializeProseDocument } from "./markdown.js";
 import { parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
 import { logQuestFault } from "../logic/log.js";
+import { mergeGrantedBadges, parseUserBadges } from "./user-badges.js";
 
 export class WorldStore implements AccessWorld {
   readonly dataDir: string;
@@ -68,8 +70,8 @@ export class WorldStore implements AccessWorld {
   settings: SettingsFile = { peerMessagingEnabled: true };
   /** username → flags */
   userFlags = new Map<string, Record<string, FlagValue>>();
-  /** username → badge ids */
-  userBadges = new Map<string, string[]>();
+  /** username → held badges */
+  userBadges = new Map<string, UserBadge[]>();
   /** Manager `quests/<name>.json` files (file content). */
   masterQuests: QuestFile[] = [];
   /** Per-user `quests/users/<name>.json` file contents (no author field). */
@@ -171,10 +173,7 @@ export class WorldStore implements AccessWorld {
     for (const file of await listFiles(join(this.dataDir, "users"), ".badges.json")) {
       const username = file.replace(/\.badges\.json$/, "");
       const raw = await readJson<unknown>(join(this.dataDir, "users", file));
-      this.userBadges.set(
-        username,
-        Array.isArray(raw) ? raw.map(String) : [],
-      );
+      this.userBadges.set(username, parseUserBadges(raw));
     }
 
     const bootstrapped = this.applyManagerBootstrap();
@@ -308,8 +307,8 @@ export class WorldStore implements AccessWorld {
     return { ...(this.userFlags.get(username) ?? {}) };
   }
 
-  getUserBadges(username: string): string[] {
-    return [...(this.userBadges.get(username) ?? [])];
+  getUserBadges(username: string): UserBadge[] {
+    return (this.userBadges.get(username) ?? []).map((b) => ({ ...b }));
   }
 
   async saveUserFlags(username: string, flags: Record<string, FlagValue>): Promise<void> {
@@ -317,8 +316,8 @@ export class WorldStore implements AccessWorld {
     await writeJsonAtomic(join(this.dataDir, "users", `${username}.flags.json`), flags);
   }
 
-  async saveUserBadges(username: string, badges: string[]): Promise<void> {
-    this.userBadges.set(username, badges);
+  async saveUserBadges(username: string, badges: UserBadge[]): Promise<void> {
+    this.userBadges.set(username, badges.map((b) => ({ ...b })));
     await writeJsonAtomic(join(this.dataDir, "users", `${username}.badges.json`), badges);
   }
 
@@ -618,15 +617,19 @@ export class WorldStore implements AccessWorld {
     try {
       const sceneId = atSceneId ?? user.lastSceneId;
       const priorBadges = this.getUserBadges(username);
+      const priorIds = priorBadges.map((b) => b.badge);
       const result = evaluateQuests({
         quests: this.quests,
         flags: this.getUserFlags(username),
-        badges: priorBadges,
+        badges: priorIds,
         predContext: this.predContextFor(username, sceneId),
       });
       await this.saveUserFlags(username, result.flags);
-      await this.saveUserBadges(username, result.badges);
-      const hadBadge = new Set(priorBadges);
+      await this.saveUserBadges(
+        username,
+        mergeGrantedBadges(priorBadges, result.badges, nowIso()),
+      );
+      const hadBadge = new Set(priorIds);
       for (const badgeId of result.badges) {
         if (hadBadge.has(badgeId)) continue;
         try {

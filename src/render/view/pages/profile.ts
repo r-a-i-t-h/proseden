@@ -1,4 +1,5 @@
 import { formatAccessSummary } from "../../../access/acl.js";
+import { grantTimeLabel } from "../../relative-age.js";
 import type { Deny, Grant } from "../../../model/types.js";
 import {
   DENIES_EXAMPLE,
@@ -66,7 +67,7 @@ export function profilePageView(opts: {
   denies?: Deny[];
   back?: PageBackLink;
   openSection?: "appearance" | "password" | "sharing";
-  badges?: Array<{ id: string; title: string }>;
+  badges?: Array<{ id: string; title: string; grantTime?: string }>;
 }): PageView {
   const open = opts.openSection ?? "appearance";
   const accessAction = `u/${encodeURIComponent(opts.username)}/access`;
@@ -83,7 +84,9 @@ export function profilePageView(opts: {
   }
   if (badges.length) {
     textLines.push("Badges:");
-    for (const b of badges) textLines.push(`  - ${b.title} (${b.id})`);
+    for (const b of badges) {
+      textLines.push(`  - ${b.title} (${b.id}) · ${grantTimeLabel(b.grantTime)}`);
+    }
     textLines.push("", "  POST {base}/profile/badges/:id/drop", "");
   }
   textLines.push("Appearance:");
@@ -120,7 +123,7 @@ export function profilePageView(opts: {
               action: `profile/badges/${encodeURIComponent(b.id)}/drop`,
               class: "badge-row",
             },
-            muted(`${b.title} (${b.id})`),
+            muted(`${b.title} (${b.id}) · ${grantTimeLabel(b.grantTime)}`),
             button("drop"),
           ),
         );

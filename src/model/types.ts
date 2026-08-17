@@ -21,6 +21,13 @@ export interface InventoryItem {
   artefactId: number;
 }
 
+/** Held badge on a reader’s shelf (`data/users/<name>.badges.json`). */
+export interface UserBadge {
+  badge: string;
+  /** ISO timestamp. Omitted when unknown. */
+  grantTime?: string;
+}
+
 export interface UserRecord {
   username: string;
   passwordHash: string;
