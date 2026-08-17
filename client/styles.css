@@ -383,6 +383,29 @@ button:hover:not(.editor-tool):not(.mode-switch-btn):not(.linkish):not(.edit-too
   margin: 0.35rem 0;
 }
 
+.stat-list {
+  display: grid;
+  gap: 0.2rem 0;
+  margin: 0;
+}
+
+.stat-list .stat {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto;
+  gap: 0.35rem 1.25rem;
+  align-items: baseline;
+}
+
+.stat-list dt {
+  margin: 0;
+}
+
+.stat-list dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .exit-remove-item {
   display: flex;
   flex-direction: row;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ExitRecord } from "../src/model/types.js";
 import {
   artefactPageView,
+  dashboardPageView,
   scenePageView,
   toHtml,
   toText,
@@ -88,5 +89,54 @@ describe("artefactPageView", () => {
     expect(text).toContain("[Artefact 1: Mantel Card]");
     expect(text).toContain("home: /s/1?from=1");
     expect(text).toContain("tags: paper");
+  });
+});
+
+const overviewCounts = {
+  users: 2,
+  scenes: 3,
+  artefacts: 4,
+  exits: 5,
+  groups: 1,
+  entranceGroups: 1,
+  quests: 2,
+  userQuestFiles: 0,
+  alchemyRecipes: 6,
+  userAlchemyFiles: 1,
+  inbox: 7,
+  staff: 1,
+};
+
+describe("dashboardPageView", () => {
+  it("renders HTML counts and drill-down links", () => {
+    const html = toHtml(
+      dashboardPageView({
+        counts: overviewCounts,
+        online: 1,
+        back: { href: "s/1", label: "← Scene 1" },
+      }).body,
+    );
+    expect(html).toContain("<h1>Dashboard</h1>");
+    expect(html).toContain("<dt>Users</dt><dd>2</dd>");
+    expect(html).toContain('href="live/admin">Online</a>');
+    expect(html).toContain("<dd>1</dd>");
+    expect(html).toContain('href="staff">Staff</a>');
+    expect(html).toContain("<dt>Scenes</dt><dd>3</dd>");
+    expect(html).toContain("<dt>Artefacts</dt><dd>4</dd>");
+    expect(html).toContain('href="data/quests">Quests</a>');
+    expect(html).toContain('href="data">Data</a>');
+  });
+
+  it("renders text counts and prefixes assetBase", () => {
+    const text = toText(
+      dashboardPageView({ counts: overviewCounts, online: 1 }).body,
+      { basePath: "/garden" },
+    );
+    expect(text).toContain("[Dashboard]");
+    expect(text).toContain("Users: 2");
+    expect(text).toContain("Online: 1  /garden/live/admin");
+    expect(text).toContain("Scenes: 3");
+    expect(text).toContain("Quests: 2  /garden/data/quests");
+    expect(text).toContain("- Data (backups, reload, quests, alchemy)  /garden/data");
   });
 });

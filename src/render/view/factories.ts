@@ -4,6 +4,7 @@ import type {
   MetaPart,
   Node,
   PageView,
+  StatListItem,
 } from "./types.js";
 
 export function fragment(...children: Node[]): Node {
@@ -75,6 +76,10 @@ export function meta(...parts: MetaPart[]): Node {
 
 export function linkList(items: LinkListItem[]): Node {
   return { type: "linkList", items };
+}
+
+export function statList(items: StatListItem[]): Node {
+  return { type: "statList", items };
 }
 
 export function section(title: string, children: Node[], channel?: "html" | "text" | "both"): Node {

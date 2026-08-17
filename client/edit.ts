@@ -259,6 +259,7 @@ export function mountEdit(boot: EditBootstrap, pane: HTMLElement): { toolbar: HT
   }
   if (boot.isManager) {
     links.append(
+      el("a", { class: "edit-tool-link", href: "dashboard" }, "Dashboard"),
       el("a", { class: "edit-tool-link", href: "msg" }, "Msg"),
       el("a", { class: "edit-tool-link", href: "data" }, "Data"),
       el("a", { class: "edit-tool-link", href: "staff" }, "Staff"),

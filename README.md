@@ -91,6 +91,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `POST` | `/inbox/send` | Peer free-text message (auth; when peer messaging enabled) |
 | `POST` | `/inbox/:id/confirm` | Confirm exit request (recipient) |
 | `POST`/`DELETE` | `/inbox/:id/delete` or `/inbox/:id` | Delete inbox message (recipient) |
+| `GET` | `/dashboard` | World overview counts (manager) |
 | `GET` | `/msg` | Manager notices + peer-messaging controls (manager) |
 | `POST` | `/msg` | Send free-text notice to one user or all (manager) |
 | `POST` | `/msg/peer-messaging` | Enable/disable peer messaging (manager) |

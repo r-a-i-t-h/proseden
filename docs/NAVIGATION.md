@@ -149,6 +149,7 @@ Assume entrance group “Wing”: entrance = scene `2` (private, Bob may read), 
 | `POST` | `/inbox/send` | Peer free-text message (auth; when enabled) |
 | `POST` | `/inbox/:id/confirm` | Confirm exit request |
 | `POST` | `/inbox/:id/delete` | Delete inbox message |
+| `GET` | `/dashboard` | World overview counts (manager) |
 | `GET` | `/msg` | Manager notices + peer-messaging controls (manager) |
 | `POST` | `/msg` | Send to one user or all (manager) |
 | `POST` | `/msg/peer-messaging` | Enable/disable peer messaging (manager) |

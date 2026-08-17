@@ -22,6 +22,13 @@ export type LinkListItem = {
   textId?: string | number;
 };
 
+export type StatListItem = {
+  label: string;
+  value: string | number;
+  /** Optional drill-down; label is linked when set. */
+  href?: string;
+};
+
 export type Control =
   | {
       type: "text";
@@ -104,6 +111,7 @@ export type Node =
   | { type: "para"; text: string; class?: string }
   | { type: "meta"; parts: MetaPart[] }
   | { type: "linkList"; items: LinkListItem[] }
+  | { type: "statList"; items: StatListItem[] }
   | { type: "section"; title: string; children: Node[]; channel?: Channel }
   | {
       type: "details";

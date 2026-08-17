@@ -52,6 +52,7 @@ import {
 } from "../render/html.js";
 import { ALCHEMY_EXAMPLE, ALCHEMY_HELP, QUEST_EXAMPLE, QUEST_HELP } from "../render/view/examples.js";
 import {
+  dashboardPageView,
   artefactPageView,
   inboxPageView,
   msgPageView,
@@ -2041,6 +2042,19 @@ async function deleteArtefact(c: Context) {
   if (wantsJson(c)) return c.json({ ok: true });
   return c.redirect(`${c.get("assetBase")}/`);
 }
+
+worldRoutes.get("/dashboard", (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!isManager(user, world)) {
+    return apiError(c, user ? 403 : 401, "Manager role required");
+  }
+  const counts = world.overviewCounts();
+  const online = c.get("presence").online().length;
+  if (wantsJson(c)) return c.json({ ok: true, ...counts, online });
+  const back = sceneBackLink(user!, world);
+  return page(c, 200, dashboardPageView({ counts, online, back }));
+});
 
 worldRoutes.get("/msg", (c) => {
   const world = c.get("world");

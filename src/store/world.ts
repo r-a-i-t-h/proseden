@@ -47,6 +47,21 @@ import { parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
 import { logQuestFault } from "../logic/log.js";
 import { mergeGrantedBadges, parseUserBadges } from "./user-badges.js";
 
+export type WorldOverviewCounts = {
+  users: number;
+  scenes: number;
+  artefacts: number;
+  exits: number;
+  groups: number;
+  entranceGroups: number;
+  quests: number;
+  userQuestFiles: number;
+  alchemyRecipes: number;
+  userAlchemyFiles: number;
+  inbox: number;
+  staff: number;
+};
+
 export class WorldStore implements AccessWorld {
   readonly dataDir: string;
   meta: MetaFile = {
@@ -1040,6 +1055,26 @@ export class WorldStore implements AccessWorld {
 
   listUsers(): UserRecord[] {
     return [...this.users.values()].sort((a, b) => a.username.localeCompare(b.username));
+  }
+
+  /** In-memory entity totals for the manager dashboard. */
+  overviewCounts(): WorldOverviewCounts {
+    let exits = 0;
+    for (const list of this.exits.values()) exits += list.length;
+    return {
+      users: this.users.size,
+      scenes: this.scenes.size,
+      artefacts: this.artefacts.size,
+      exits,
+      groups: this.groups.size,
+      entranceGroups: this.entranceGroups.size,
+      quests: this.masterQuests.length,
+      userQuestFiles: this.userQuestFiles.size,
+      alchemyRecipes: this.masterAlchemyRecipes.length,
+      userAlchemyFiles: this.userAlchemyFiles.size,
+      inbox: this.inbox.size,
+      staff: Object.keys(this.staff.roles).length,
+    };
   }
 
   /**

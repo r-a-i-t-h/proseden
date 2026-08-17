@@ -175,6 +175,18 @@ function renderNode(node: Node): string {
         .join("");
       return `<ul class="link-list">${items}</ul>`;
     }
+    case "statList": {
+      if (!node.items.length) return "";
+      const rows = node.items
+        .map((item) => {
+          const label = item.href
+            ? `<a href="${escapeAttr(item.href)}">${escapeHtml(item.label)}</a>`
+            : escapeHtml(item.label);
+          return `<div class="stat"><dt>${label}</dt><dd>${escapeHtml(String(item.value))}</dd></div>`;
+        })
+        .join("");
+      return `<dl class="stat-list">${rows}</dl>`;
+    }
     case "section":
       if (!channelOk(node.channel)) return "";
       return `<section><h2>${escapeHtml(node.title)}</h2>${renderNodes(node.children)}</section>`;

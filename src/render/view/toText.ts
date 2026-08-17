@@ -95,6 +95,12 @@ function pushNode(lines: string[], node: Node, opts: TextRenderOptions): void {
         }
       }
       return;
+    case "statList":
+      for (const item of node.items) {
+        const href = item.href ? `  ${withBase(base, item.href)}` : "";
+        lines.push(`  ${item.label}: ${item.value}${href}`);
+      }
+      return;
     case "section":
       if (!channelOk(node.channel)) return;
       lines.push(`${node.title}:`);
