@@ -5,6 +5,7 @@ import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import { canRead, isModerator } from "../access/permissions.js";
 import { bypassesSceneFlagGate } from "../access/scene-gate.js";
+import { gateFactsFor } from "../logic/pred.js";
 import { sceneAllowed } from "../logic/world-view.js";
 import { apiError, page, sceneBackLink, wantsJson } from "../http.js";
 import { guestCookieName, parseGuestId } from "../live/guest.js";
@@ -228,8 +229,8 @@ liveRoutes.get("/join/:userKey", (c) => {
   if (!canRead(user, scene, world)) {
     return apiError(c, 403, "You cannot read the scene they are in.");
   }
-  const flags = world.getUserFlags(user.username);
-  if (!bypassesSceneFlagGate(user, scene, world) && !sceneAllowed(scene, flags)) {
+  const facts = gateFactsFor(world, user);
+  if (!bypassesSceneFlagGate(user, scene, world) && !sceneAllowed(scene, facts)) {
     return apiError(c, 403, scene.whenDenied?.trim() || "You cannot enter here yet.");
   }
 

@@ -32,7 +32,7 @@ import {
   visibleArtefacts,
   visibleExits,
 } from "../logic/world-view.js";
-import { parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
+import { gateFactsFor, parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
 import { matchAlchemyRecipe, parseAlchemyRecipes, parseQuestFile, QuestValidationError } from "../logic/quests.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import type { InboxMessage, StaffRole } from "../model/types.js";
@@ -114,8 +114,8 @@ worldRoutes.get("/s/:id", (c) => {
         renderMessageText("Forbidden", msg),
       );
     }
-    const entranceFlags = user ? world.getUserFlags(user.username) : {};
-    if (!bypassesSceneFlagGate(user, entrance, world) && !sceneAllowed(entrance, entranceFlags)) {
+    const entranceFacts = gateFactsFor(world, user);
+    if (!bypassesSceneFlagGate(user, entrance, world) && !sceneAllowed(entrance, entranceFacts)) {
       const msg = entrance.whenDenied?.trim() || "You cannot enter here yet.";
       return page(
         c,
@@ -152,8 +152,8 @@ worldRoutes.get("/s/:id", (c) => {
     );
   }
 
-  const flags = user ? world.getUserFlags(user.username) : {};
-  if (!bypassesSceneFlagGate(user, scene, world) && !sceneAllowed(scene, flags)) {
+  const facts = gateFactsFor(world, user);
+  if (!bypassesSceneFlagGate(user, scene, world) && !sceneAllowed(scene, facts)) {
     const msg = scene.whenDenied?.trim() || "You cannot enter here yet.";
     return page(
       c,
@@ -165,11 +165,11 @@ worldRoutes.get("/s/:id", (c) => {
   }
 
   const detail = queryDetailName(c);
-  const exits = visibleExits(world.getExits(id), flags);
-  const artefacts = visibleArtefacts(world.artefactsAt(id), flags);
+  const exits = visibleExits(world.getExits(id), facts);
+  const artefacts = visibleArtefacts(world.artefactsAt(id), facts);
   const readerScene = {
     ...scene,
-    details: resolveSceneDetails(scene, flags),
+    details: resolveSceneDetails(scene, facts),
   };
   const manage = canManage(user, scene, world);
   const accessSummary = manage
@@ -246,8 +246,8 @@ worldRoutes.get("/s/:id/go/:exit", async (c) => {
   const exit = world.findExit(fromId, exitKey);
   if (!exit) return apiError(c, 404, `No exit matching "${exitKey}"`);
 
-  const flags = user ? world.getUserFlags(user.username) : {};
-  if (!exitAllowed(exit, flags)) {
+  const facts = gateFactsFor(world, user);
+  if (!exitAllowed(exit, facts)) {
     const msg = exit.whenDenied?.trim() || "That way is closed.";
     return apiError(c, 403, msg);
   }
@@ -257,7 +257,7 @@ worldRoutes.get("/s/:id/go/:exit", async (c) => {
   if (!dest || !canRead(user, dest, world)) {
     return apiError(c, user ? 403 : 401, "Destination is not reachable");
   }
-  if (!bypassesSceneFlagGate(user, dest, world) && !sceneAllowed(dest, flags)) {
+  if (!bypassesSceneFlagGate(user, dest, world) && !sceneAllowed(dest, facts)) {
     const msg = dest.whenDenied?.trim() || "You cannot enter here yet.";
     return apiError(c, 403, msg);
   }
@@ -292,7 +292,7 @@ worldRoutes.get("/a/:id", (c) => {
     );
   }
   const collected = !!user?.inventory.some((i) => i.artefactId === id);
-  const flags = user ? world.getUserFlags(user.username) : {};
+  const facts = gateFactsFor(world, user);
   // Holding is a reader credential for this page only — not home-scene read,
   // world collect, or history. Skip ACL / scene when / artefact when when held.
   if (!collected) {
@@ -305,7 +305,7 @@ worldRoutes.get("/a/:id", (c) => {
         renderMessageText("Forbidden", "This artefact is not for your eyes."),
       );
     }
-    if (!bypassesSceneFlagGate(user, home, world) && !sceneAllowed(home, flags)) {
+    if (!bypassesSceneFlagGate(user, home, world) && !sceneAllowed(home, facts)) {
       const msg = home.whenDenied?.trim() || "You cannot enter here yet.";
       return page(
         c,
@@ -315,7 +315,7 @@ worldRoutes.get("/a/:id", (c) => {
         renderMessageText("Forbidden", msg),
       );
     }
-    if (!artefactVisible(artefact, flags)) {
+    if (!artefactVisible(artefact, facts)) {
       return page(
         c,
         404,
@@ -329,7 +329,7 @@ worldRoutes.get("/a/:id", (c) => {
   const detail = queryDetailName(c);
   const readerArtefact = {
     ...artefact,
-    details: resolveArtefactDetails(artefact, flags),
+    details: resolveArtefactDetails(artefact, facts),
   };
 
   // Like inventory/profile: do not move Live; crumb back to the current scene.
@@ -2007,11 +2007,11 @@ worldRoutes.post("/a/:id/collect", async (c) => {
   if (!home || !canReadArtefact(user, artefact, home, world)) {
     return apiError(c, 403, "Cannot collect a prohibited artefact");
   }
-  const flags = world.getUserFlags(user.username);
-  if (!bypassesSceneFlagGate(user, home, world) && !sceneAllowed(home, flags)) {
+  const facts = gateFactsFor(world, user);
+  if (!bypassesSceneFlagGate(user, home, world) && !sceneAllowed(home, facts)) {
     return apiError(c, 403, home.whenDenied?.trim() || "You cannot enter here yet.");
   }
-  if (!artefactVisible(artefact, flags)) {
+  if (!artefactVisible(artefact, facts)) {
     return apiError(c, 403, "That artefact is not available to collect.");
   }
 

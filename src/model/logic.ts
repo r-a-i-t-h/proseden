@@ -3,8 +3,10 @@
 export type FlagValue = boolean | number | string;
 
 /**
- * World-gate flag reference. Require `flags[id] === true`, or invert with a
- * `not.` prefix (`not.builders.hamlet` is not a stored flag).
+ * World-gate condition string. No colon → flag scheme (`quest.local`);
+ * `flag:` is optional. Also `holds:<id>` and `badge:<id>`. Invert with
+ * `not.` on the payload (`not.x`, `flag:not.x`, `holds:not.1`). Unknown
+ * schemes are false. Empty = ungated.
  */
 export type FlagRef = string;
 

@@ -170,7 +170,7 @@ function jsonField(label: string, name: string, rows: number, value: unknown, ex
   return wrap;
 }
 
-const FLAG_REF_PLACEHOLDER = "quest.flag or not.quest.flag";
+const FLAG_REF_PLACEHOLDER = "quest.flag, holds:1, badge:quest.x";
 
 /** Closed-by-default opt-in for FlagRef gates. */
 function conditionCollapse(summary: string, ...children: Array<Node | string>): HTMLElement {
@@ -400,8 +400,8 @@ function sceneEditor(manage: ManageContext | undefined, inspector: HTMLElement):
         "detailWhenJson",
         6,
         scene.detailWhen ?? {},
-        '{\n  "secret": "q.secret",\n  "old door": "not.q.open"\n}',
-        "Map detail name → flag id.",
+        '{\n  "secret": "q.secret",\n  "old door": "not.q.open",\n  "keyhole": "holds:12"\n}',
+        "Map detail name → condition (flag, holds, badge).",
       ),
     ),
     el(
@@ -484,7 +484,7 @@ function artefactEditor(manage: ManageContext, inspector: HTMLElement): HTMLElem
         6,
         artefact.detailWhen ?? {},
         '{\n  "inscription": "q.read"\n}',
-        "Map detail name → flag id.",
+        "Map detail name → condition (flag, holds, badge).",
       ),
     ),
     el(

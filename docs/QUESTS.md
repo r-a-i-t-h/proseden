@@ -156,8 +156,9 @@ Combinators nest freely. Example:
 ```
 
 World gates on **exits, scene access, details, and artefacts** are a different
-surface: a **FlagRef** string (`"flag.id"` or `"not.flag.id"`), not quest Pred.
-They are not part of quest JSON. See [PUZZLES.md](PUZZLES.md#world-gates).
+surface: a **FlagRef** condition string (`"flag.id"`, `"holds:12"`,
+`"badge:demo.x"`), not quest Pred. They are not part of quest JSON. See
+[PUZZLES.md](PUZZLES.md#world-gates).
 
 ---
 
@@ -351,9 +352,19 @@ collect is enough to catch up.
 
 ### Hold an artefact, then gate the world
 
-Quest JSON only flips flags. An exit, scene access, or artefact `when` on the
-**world record** is a FlagRef string (e.g. `"cellar.unlocked"` or
-`"not.cellar.unlocked"`), not a quest Pred and not `holds`.
+For **current** possession only, the world record can check inventory
+directly — no quest pair required:
+
+```json
+"when": "holds:12"
+```
+
+(`badge:demo.x` is the same idea for a held badge.) That does not grant
+rewards; live gates do not fire `onFlag`.
+
+Quest JSON only flips flags. Use a FlagRef **flag** (e.g. `"cellar.unlocked"`
+or `"not.cellar.unlocked"`) when you need **sticky** unlocks or knock-ons.
+The pair below mirrors hold / drop into a flag so a badge can be granted:
 
 ```json
 {

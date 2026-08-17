@@ -76,10 +76,13 @@ describe("detailWhen schema", () => {
     });
   });
 
-  it("uses Flag condition as the value column", () => {
+  it("uses Condition as the value column", () => {
     expect(schema.title).toBe("Detail conditions");
-    expect(schema.columns.map((c) => c.label)).toEqual(["Key", "Flag condition"]);
-    expect(schema.columns[1]).toMatchObject({ type: "text" });
+    expect(schema.columns.map((c) => c.label)).toEqual(["Key", "Condition"]);
+    expect(schema.columns[1]).toMatchObject({
+      type: "text",
+      placeholder: "quest.flag, holds:1, badge:quest.x",
+    });
   });
 });
 

@@ -8,8 +8,8 @@ import {
 import type { SceneRecord, UserRecord } from "../model/types.js";
 
 /**
- * Owner / edit / manage / staff may enter a FlagRef-gated scene without the flag
- * (CMS and moderation). Grant-read and public readers must pass the gate.
+ * Owner / edit / manage / staff may enter a FlagRef-gated scene without passing
+ * the condition (CMS and moderation). Grant-read and public readers must pass.
  */
 export function bypassesSceneFlagGate(
   user: UserRecord | undefined,

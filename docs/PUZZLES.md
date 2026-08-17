@@ -35,8 +35,8 @@ Rewards are prose (artefacts) and public badges — not a win screen.
 |---|---|
 | Quests (`data/quests/<name>.json`) | Scenes, artefacts, exits |
 | Flags (`data/users/<name>.flags.json`) — invisible | Scene **body** — never conditional |
-| Badges (`data/users/<name>.badges.json`) — profile | **Details** — hide by FlagRef |
-| Alchemy recipes (`data/alchemy/recipes.json` + `alchemy/users/*.json`) | Scene **access** — FlagRef (teleport bypass lock) |
+| Badges (`data/users/<name>.badges.json`) — profile | **Details** — hide by FlagRef condition |
+| Alchemy recipes (`data/alchemy/recipes.json` + `alchemy/users/*.json`) | Scene **access** — FlagRef condition (teleport bypass lock) |
 
 ---
 
@@ -49,20 +49,29 @@ that quest’s namespace (`questName.local`).
 When a flag’s stored value **actually changes**, declared `onFlag` knock-ons
 run once for that transition (`grantBadge`, `giveArtefact`).
 
-The prose world and badge shelf do **not** read inventory or rich facts
-directly for gates: exits, scene access, details, and artefacts use a
-**FlagRef** string (`not.` to invert). **Missing flag == false** for a
-positive ref.
+The prose world does **not** evaluate quest Pred trees. Exits, scene access,
+details, and artefacts use a **FlagRef** condition string. The default is a
+flag (`quest.local` / `not.quest.local`, or explicit `flag:`). Two live
+reader facts are also allowed: current inventory (`holds:<id>`) and current
+badges (`badge:<id>`). **Missing flag == false** for a positive flag ref.
+Unknown schemes are false.
+
+Tag checks (`holdsTag`), location (`atScene`), ownership counts, and
+combinators stay in quest JSON. `holdsTag` is too general for world records
+— it would encourage obscure category gates. Name a specific artefact or
+badge, or set a flag from quest logic.
 
 ```
 rich when  →  setFlag/clearFlag  →  onChange knock-ons
                  ↓
-         world FlagRef (flag true / not.)
+         world FlagRef (flag / holds / badge)
 ```
 
 Same-value set is a no-op (no knock-on). Dropping a badge or uncollecting a
 granted artefact does **not** re-grant while the flag stays true. Unset then
-set again → knock-ons may fire again (re-earn).
+set again → knock-ons may fire again (re-earn). Live `holds:` / `badge:`
+gates track **current** possession and do not fire knock-ons; use a flag
+when you want sticky unlocks or rewards.
 
 ---
 
@@ -83,8 +92,9 @@ type Pred =
   | { any: Pred[] };
 ```
 
-**World gates** use FlagRef strings on world objects (see World gates below),
-not Pred trees.
+**World gates** use FlagRef condition strings on world objects (see World
+gates below), not Pred trees. `holdsTag` / `atScene` / `scenesOwned` stay
+quest-only.
 
 ---
 
@@ -167,11 +177,24 @@ Alchemy recipes remain first-match-wins on combine.
 ## World gates
 
 World objects use a **FlagRef** string — not quest Pred trees. Empty = ungated.
-Require `flags[id] === true`, or invert with a `not.` prefix (`not.builders.hamlet`
-is not a stored flag).
+First `:` splits `scheme` / payload. No colon → `flag` scheme (`flag:` is
+optional). Invert with `not.` on the payload (`not.x`, `flag:not.x`,
+`holds:not.1`). Unknown schemes are false.
+
+| Written | True when |
+|---|---|
+| `quest.local` / `flag:quest.local` | `flags[id] === true` |
+| `not.quest.local` / `flag:not.quest.local` | that flag is not `true` |
+| `holds:12` | inventory contains artefact id `12` |
+| `holds:not.12` | inventory does not contain that id |
+| `badge:demo.x` | reader holds badge `demo.x` |
+| `badge:not.demo.x` | reader does not hold that badge |
+
+`holdsTag`, `atScene`, and `scenesOwned` are not world-gate schemes (quest
+Pred only). Tag gates are too general for world records.
 
 ```ts
-type FlagRef = string; // "quest.local" | "not.quest.local"
+type FlagRef = string; // "quest.local" | "flag:…" | "holds:12" | "badge:demo.x"
 
 // ExitRecord
 when?: FlagRef;
@@ -194,9 +217,12 @@ Authors usually set the **same** FlagRef on an inbound exit and the destination
 scene so teleport cannot bypass a locked door — never auto-copied.
 
 Edit UI: optional **Condition** (or **Conditions** for detail maps) disclosure,
-closed by default. Quests still flip flags via manager JSON.
+closed by default. Quests still flip flags via manager JSON. Live `holds:` /
+`badge:` on the world record is enough when the gate should track current
+possession; use a flag when you need sticky state or `onFlag` knock-ons.
 
-Anonymous readers: empty flags → positive FlagRefs fail; `not.*` succeeds.
+Anonymous readers: empty flags, inventory, and badges → positive refs fail;
+`not.*` / `holds:not.` / `badge:not.` succeed.
 
 ---
 

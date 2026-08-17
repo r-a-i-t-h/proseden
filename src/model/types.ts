@@ -64,12 +64,12 @@ export interface SceneMeta {
   /** @deprecated migrated to grants on load */
   invites?: string[];
   /**
-   * Scene access gate (FlagRef). Body is never gated; teleport/go/join must
-   * pass this after ACL unless owner/edit/manage/staff.
+   * Scene access gate (FlagRef condition). Body is never gated; teleport/go/join
+   * must pass this after ACL unless owner/edit/manage/staff.
    */
   when?: import("./logic.js").FlagRef;
   whenDenied?: string;
-  /** Per detail name: FlagRef (hide when false). */
+  /** Per detail name: FlagRef condition (hide when false). */
   detailWhen?: Record<string, import("./logic.js").FlagRef>;
   /** @deprecated load-only; prefer inverse FlagRef pairs on detailWhen */
   detailSwap?: Record<string, string[]>;
@@ -85,7 +85,7 @@ export interface ExitRecord {
   nickname: string;
   toSceneId: number;
   createdAt: string;
-  /** FlagRef gate; missing flag == false. Prefix `not.` to invert. */
+  /** FlagRef condition; empty = ungated. Invert with `not.` on the payload. */
   when?: import("./logic.js").FlagRef;
   whenDenied?: string;
   /** Omit from exit lists until when is true. */
@@ -100,9 +100,9 @@ export interface ArtefactMeta {
   tags: string[];
   createdAt: string;
   modifiedAt: string[];
-  /** FlagRef: listed/collectable on home scene only when true. */
+  /** FlagRef condition: listed/collectable on home scene only when true. */
   when?: import("./logic.js").FlagRef;
-  /** Per detail name: FlagRef (hide when false). */
+  /** Per detail name: FlagRef condition (hide when false). */
   detailWhen?: Record<string, import("./logic.js").FlagRef>;
   /** @deprecated load-only; prefer inverse FlagRef pairs on detailWhen */
   detailSwap?: Record<string, string[]>;

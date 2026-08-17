@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateFlagPred, evaluateFlagRef, evaluatePred, isFlagOnlyPred } from "./pred.js";
+import { evaluateFlagPred, evaluateFlagRef, evaluatePred, gateFacts, isFlagOnlyPred } from "./pred.js";
 import {
   applyFlagEffects,
   evaluateQuests,
@@ -35,10 +35,17 @@ describe("pred", () => {
     expect(evaluateFlagPred({ holds: 1 }, {})).toBe(false);
   });
 
-  it("FlagRef not. invert", () => {
-    expect(evaluateFlagRef("q.a", base.flags)).toBe(true);
-    expect(evaluateFlagRef("not.q.a", base.flags)).toBe(false);
-    expect(evaluateFlagRef("not.q.missing", {})).toBe(true);
+  it("FlagRef default is the flag scheme; flag: is optional", () => {
+    expect(evaluateFlagRef("q.a", gateFacts({ flags: base.flags }))).toBe(true);
+    expect(evaluateFlagRef("flag:q.a", gateFacts({ flags: base.flags }))).toBe(true);
+    expect(evaluateFlagRef("not.q.a", gateFacts({ flags: base.flags }))).toBe(false);
+    expect(evaluateFlagRef("not.q.missing", gateFacts())).toBe(true);
+    expect(evaluateFlagRef("holds:1", gateFacts({ inventoryIds: base.inventoryIds }))).toBe(true);
+    expect(evaluateFlagRef("holds:not.1", gateFacts({ inventoryIds: base.inventoryIds }))).toBe(
+      false,
+    );
+    expect(evaluateFlagRef("badge:q.badge", gateFacts({ badges: base.badges }))).toBe(true);
+    expect(evaluateFlagRef("atScene:5", gateFacts({ flags: { "atScene:5": true } }))).toBe(false);
   });
 });
 

@@ -2,6 +2,43 @@ import type { FlagRef, FlagValue, Pred } from "../model/logic.js";
 import { logQuestFault } from "./log.js";
 
 const NOT_PREFIX = "not.";
+const HOLDS_ID = /^[1-9]\d*$/;
+const GATE_SCHEMES = new Set(["flag", "holds", "badge"]);
+
+/** Reader facts for world-gate FlagRef evaluation (not quest Pred trees). */
+export type GateFacts = {
+  flags: Record<string, FlagValue>;
+  inventoryIds: ReadonlySet<number>;
+  badges: ReadonlySet<string>;
+};
+
+export function gateFacts(partial?: Partial<GateFacts>): GateFacts {
+  return {
+    flags: partial?.flags ?? {},
+    inventoryIds: partial?.inventoryIds ?? new Set(),
+    badges: partial?.badges ?? new Set(),
+  };
+}
+
+export function emptyGateFacts(): GateFacts {
+  return gateFacts();
+}
+
+/** Build GateFacts for a reader (anonymous → empty flags / inventory / badges). */
+export function gateFactsFor(
+  world: {
+    getUserFlags(username: string): Record<string, FlagValue>;
+    getUserBadges(username: string): ReadonlyArray<{ badge: string }>;
+  },
+  user: { username: string; inventory: ReadonlyArray<{ artefactId: number }> } | undefined,
+): GateFacts {
+  if (!user) return emptyGateFacts();
+  return gateFacts({
+    flags: world.getUserFlags(user.username),
+    inventoryIds: new Set(user.inventory.map((i) => i.artefactId)),
+    badges: new Set(world.getUserBadges(user.username).map((b) => b.badge)),
+  });
+}
 
 /** True when `flags[id] === true`. Empty / whitespace ref is treated as ungated by callers. */
 export function flagIsTrue(flags: Record<string, FlagValue>, flagId: string): boolean {
@@ -9,27 +46,49 @@ export function flagIsTrue(flags: Record<string, FlagValue>, flagId: string): bo
 }
 
 /**
- * Evaluate a world-gate FlagRef. `not.foo` inverts `foo` (not a stored flag).
- * Empty string is ungated (true).
+ * Evaluate a world-gate FlagRef. Empty string is ungated (true).
+ * No colon → `flag` scheme. Unknown schemes are false.
  */
 export function evaluateFlagRef(
   ref: FlagRef | undefined | null,
-  flags: Record<string, FlagValue>,
+  facts: GateFacts,
 ): boolean {
   if (ref === undefined || ref === null) return true;
   const trimmed = String(ref).trim();
   if (!trimmed) return true;
   try {
-    if (trimmed.startsWith(NOT_PREFIX)) {
-      const id = trimmed.slice(NOT_PREFIX.length).trim();
-      if (!id) return false;
-      return !flagIsTrue(flags, id);
-    }
-    return flagIsTrue(flags, trimmed);
+    return evaluateFlagRefUnsafe(trimmed, facts);
   } catch (err) {
     logQuestFault("evaluateFlagRef", err);
     return false;
   }
+}
+
+function evaluateFlagRefUnsafe(trimmed: string, facts: GateFacts): boolean {
+  const colon = trimmed.indexOf(":");
+  const scheme = colon < 0 ? "flag" : trimmed.slice(0, colon);
+  const rest = colon < 0 ? trimmed : trimmed.slice(colon + 1);
+  if (colon === 0 || !GATE_SCHEMES.has(scheme)) return false;
+
+  const restTrimmed = rest.trim();
+  const invert = restTrimmed.startsWith(NOT_PREFIX);
+  const payload = invert ? restTrimmed.slice(NOT_PREFIX.length).trim() : restTrimmed;
+  if (!payload) return false;
+
+  let ok = false;
+  if (scheme === "flag") {
+    ok = flagIsTrue(facts.flags, payload);
+  } else if (scheme === "holds") {
+    if (!HOLDS_ID.test(payload)) return false;
+    const id = Number(payload);
+    if (!Number.isSafeInteger(id)) return false;
+    ok = facts.inventoryIds.has(id);
+  } else if (scheme === "badge") {
+    ok = facts.badges.has(payload);
+  } else {
+    return false;
+  }
+  return invert ? !ok : ok;
 }
 
 /** Normalize / validate a FlagRef from input; empty → undefined. */
