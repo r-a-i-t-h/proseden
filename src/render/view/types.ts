@@ -99,7 +99,7 @@ export type Node =
   | { type: "crumb"; href: string; label: string; history?: boolean }
   | { type: "byline"; username: string }
   | { type: "prose"; text: string }
-  | { type: "muted"; text: string }
+  | { type: "muted"; parts: MetaPart[] }
   | { type: "notice"; text: string; kind?: "status" | "error" | "flash" }
   | { type: "para"; text: string; class?: string }
   | { type: "meta"; parts: MetaPart[] }

@@ -1,9 +1,15 @@
 import { entityKindLabel, userPath } from "../entity.js";
 import { relativeAge } from "../relative-age.js";
-import type { Node, TextRenderOptions } from "./types.js";
+import type { MetaPart, Node, TextRenderOptions } from "./types.js";
 
 function channelOk(channel: "html" | "text" | "both" | undefined): boolean {
   return channel === undefined || channel === "both" || channel === "text";
+}
+
+function renderMetaPartText(part: MetaPart): string {
+  if (typeof part === "string") return part;
+  if (part.type === "relativeAge") return relativeAge(part.iso);
+  return part.username;
 }
 
 /** Match historical `${basePath}/path` (empty base → `/path`). */
@@ -66,7 +72,7 @@ function pushNode(lines: string[], node: Node, opts: TextRenderOptions): void {
       lines.push(expandBase(node.text, base));
       return;
     case "muted":
-      lines.push(`(${node.text})`);
+      lines.push(`(${node.parts.map(renderMetaPartText).join("")})`);
       return;
     case "notice":
       lines.push(node.text);
@@ -74,11 +80,7 @@ function pushNode(lines: string[], node: Node, opts: TextRenderOptions): void {
       return;
     case "meta": {
       if (!node.parts.length) return;
-      const parts = node.parts.map((p) => {
-        if (typeof p === "string") return p;
-        if (p.type === "relativeAge") return `last seen ${relativeAge(p.iso)}`;
-        return p.username;
-      });
+      const parts = node.parts.map(renderMetaPartText);
       lines.push(parts.join(" · "));
       return;
     }

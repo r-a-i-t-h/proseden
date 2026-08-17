@@ -144,7 +144,7 @@ function renderNode(node: Node): string {
     case "prose":
       return `<div class="desc">${formatProse(node.text)}</div>`;
     case "muted":
-      return `<p class="muted">${escapeHtml(node.text)}</p>`;
+      return `<p class="muted">${node.parts.map(renderMetaPart).join("")}</p>`;
     case "notice": {
       if (node.kind === "error") {
         return `<p class="notice notice-error" role="alert">${escapeHtml(node.text)}</p>`;

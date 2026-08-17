@@ -123,7 +123,10 @@ export function profilePageView(opts: {
               action: `profile/badges/${encodeURIComponent(b.id)}/drop`,
               class: "badge-row",
             },
-            muted(`${b.title} (${b.id}) · ${grantTimeLabel(b.grantTime)}`),
+            muted(
+              `${b.title} (${b.id}) · `,
+              b.grantTime ? { type: "relativeAge", iso: b.grantTime } : "unknown",
+            ),
             button("drop"),
           ),
         );

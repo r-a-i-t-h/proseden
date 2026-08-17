@@ -54,8 +54,8 @@ export function prose(text: string): Node {
   return { type: "prose", text };
 }
 
-export function muted(text: string): Node {
-  return { type: "muted", text };
+export function muted(...parts: MetaPart[]): Node {
+  return { type: "muted", parts };
 }
 
 export function notice(

@@ -438,7 +438,9 @@ describe("profile and password change", () => {
     });
     expect(own.status).toBe(200);
     const ownHtml = await own.text();
-    expect(ownHtml).toContain("Winner (demo.winner) · ");
+    expect(ownHtml).toMatch(
+      /Winner \(demo\.winner\) · <time datetime="2026-01-02T03:04:05\.000Z" title="2026-01-02T03:04:05\.000Z">/,
+    );
     expect(ownHtml).toContain("demo.bare (demo.bare) · unknown");
   });
 
