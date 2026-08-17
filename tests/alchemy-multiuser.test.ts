@@ -149,6 +149,18 @@ describe("multi-user alchemy", () => {
     expect(world.getUserAlchemyRecipes("bob")).toEqual([]);
   });
 
+  it("cold-loads user recipes after restart (grant ACL needs artefacts)", async () => {
+    await world.saveUserAlchemy("bob", [
+      { id: "brew", inputs: [ingredientA, ingredientB], gives: bobArt },
+    ]);
+    expect(world.alchemyRecipes.some((r) => r.id === "bob/brew")).toBe(true);
+
+    const reloaded = new WorldStore(dataDir);
+    await reloaded.load();
+    expect(reloaded.alchemyRecipes.map((r) => r.id)).toContain("bob/brew");
+    expect(reloaded.getUserAlchemyRecipes("bob").map((r) => r.id)).toEqual(["brew"]);
+  });
+
   it("rebuilds merge after save so combine sees new rules", async () => {
     await world.collectArtefact("bob", ingredientA);
     await world.collectArtefact("bob", ingredientB);

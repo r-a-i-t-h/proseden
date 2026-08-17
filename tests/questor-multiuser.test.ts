@@ -172,6 +172,21 @@ describe("questor / multi-user quests", () => {
     expect(world.getUserQuest("bob")?.onFlag?.["bob.x"]).toBeTruthy();
   });
 
+  it("cold-loads user quests with giveArtefact after restart", async () => {
+    await world.saveUserQuest("bob", {
+      name: "bob",
+      rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x", to: true }] }],
+      onFlag: {
+        "bob.x": { onTrue: [{ giveArtefact: bobArt }] },
+      },
+    });
+    expect(world.quests.some((q) => q.name === "bob" && q.author === "bob")).toBe(true);
+
+    const reloaded = new WorldStore(dataDir);
+    await reloaded.load();
+    expect(reloaded.quests.some((q) => q.name === "bob" && q.author === "bob")).toBe(true);
+  });
+
   it("questor may GET/POST /quests; non-questor is forbidden", async () => {
     const denied = await app().request("/quests", {
       headers: { Accept: "text/html", Authorization: `Bearer ${carolToken}` },

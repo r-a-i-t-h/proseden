@@ -177,8 +177,6 @@ export class WorldStore implements AccessWorld {
       );
     }
 
-    await this.loadLogicFiles();
-
     const bootstrapped = this.applyManagerBootstrap();
     if (bootstrapped || !(await exists(staffPath))) {
       await this.saveStaff();
@@ -236,6 +234,9 @@ export class WorldStore implements AccessWorld {
       );
       this.entranceGroups.set(eg.id, eg);
     }
+
+    // After scenes/artefacts/groups: user quest/alchemy grant ACL needs them.
+    await this.loadLogicFiles();
 
     for (const file of await listFiles(join(this.dataDir, "inbox"), ".json")) {
       const id = Number(file.replace(/\.json$/, ""));
