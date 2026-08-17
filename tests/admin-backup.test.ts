@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { hashPassword } from "../src/auth/password.js";
-import { SessionStore } from "../src/auth/sessions.js";
+import { SessionStore, SESSION_HANDOFF_FILE } from "../src/auth/sessions.js";
 import { BACKUP_NAME_RE } from "../src/store/backup.js";
 import { WorldStore } from "../src/store/world.js";
 
@@ -111,6 +111,21 @@ describe("admin backups", () => {
     } finally {
       await rm(extract, { recursive: true, force: true });
     }
+  });
+
+  it("omits the session handoff file from archives", async () => {
+    await writeFile(
+      join(dataDir, SESSION_HANDOFF_FILE),
+      JSON.stringify({ sessions: [{ tokenHash: "abc", username: "alice" }] }),
+    );
+    const created = await app.request("/data/backup", {
+      method: "POST",
+      headers: auth(managerToken),
+    });
+    expect(created.status).toBe(200);
+    const { name } = (await created.json()) as { name: string };
+    const listed = await execFileAsync("tar", ["-tzf", join(backupDir, name)]);
+    expect(listed.stdout).not.toMatch(/\.sessions\.json/);
   });
 
   it("downloads and deletes an archive", async () => {

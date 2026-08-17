@@ -24,7 +24,7 @@ NAME=$(date -u +%Y-%m-%dT%H%M%SZ).tar.gz
 DEST="$BACKUP/$NAME"
 PARTIAL="$DEST.partial"
 
-tar -czf "$PARTIAL" -C "$DATA" . || {
+tar -czf "$PARTIAL" --exclude=.sessions.json -C "$DATA" . || {
   rm -f "$PARTIAL"
   err "tar failed"
 }

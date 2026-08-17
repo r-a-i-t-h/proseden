@@ -149,6 +149,7 @@ On boot the server loads `data/` into memory and write-throughs on every mutatio
 data/
   meta.json
   staff.json
+  .sessions.json          # ephemeral SIGTERM handoff; not in tarballs
   users/<username>.json
   quests/<name>.json
   quests/users/<username>.json
@@ -166,6 +167,8 @@ backup/
 ```
 
 Managers can create, download, and delete archives from **Data**. `proseden-update` writes one snapshot before it touches the app. See [DEPLOY.md](DEPLOY.md) for the SSH one-liner and restore notes.
+
+A planned stop (SIGTERM) writes SHA-256 hashes of live session tokens to `data/.sessions.json` (mode 0600). The next boot loads that file as a one-shot fallback and deletes it, so a save after an update still authenticates. Idle cookies, crashes, and a second restart without a visit may still log people out. The handoff file is not included in data tarballs.
 
 Staff roles: `moderator`, `topographer`, `manager`, `questor`. Questors edit personal quest JSON under `quests/users/`; managers register official named quests under Data → Quests.
 

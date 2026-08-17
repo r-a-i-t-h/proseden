@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { SESSION_HANDOFF_FILE } from "../auth/sessions.js";
 
 export const BACKUP_NAME_RE = /^\d{4}-\d{2}-\d{2}T\d{6}Z\.tar\.gz$/;
 
@@ -95,9 +96,13 @@ export async function deleteBackup(backupDir: string, name: string): Promise<boo
 
 function runTar(archive: string, dataDir: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn("tar", ["-czf", archive, "-C", dataDir, "."], {
-      stdio: ["ignore", "ignore", "pipe"],
-    });
+    const child = spawn(
+      "tar",
+      ["-czf", archive, `--exclude=${SESSION_HANDOFF_FILE}`, "-C", dataDir, "."],
+      {
+        stdio: ["ignore", "ignore", "pipe"],
+      },
+    );
     let stderr = "";
     child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
