@@ -10,6 +10,7 @@ import {
 describe("jsonKindFromFieldName", () => {
   it("maps known field names", () => {
     expect(jsonKindFromFieldName("detailsJson")).toBe("details");
+    expect(jsonKindFromFieldName("detailWhenJson")).toBe("detailWhen");
     expect(jsonKindFromFieldName("grantsJson")).toBe("grants");
     expect(jsonKindFromFieldName("deniesJson")).toBe("denies");
     expect(jsonKindFromFieldName("recipesJson")).toBe("alchemy");
@@ -54,6 +55,31 @@ describe("details schema", () => {
         { key: "a", value: "2" },
       ]),
     ).toMatchObject({ ok: false });
+  });
+});
+
+describe("detailWhen schema", () => {
+  const schema = getJsonTableSchema("detailWhen")!;
+
+  it("round-trips flag refs keyed by detail name", () => {
+    const loaded = schema.toRows({ secret: "q.secret", "old door": "not.q.open" });
+    expect(loaded).toEqual({
+      ok: true,
+      rows: [
+        { key: "secret", value: "q.secret" },
+        { key: "old door", value: "not.q.open" },
+      ],
+    });
+    expect(schema.fromRows([{ key: "secret", value: "q.secret" }])).toEqual({
+      ok: true,
+      value: { secret: "q.secret" },
+    });
+  });
+
+  it("uses Flag condition as the value column", () => {
+    expect(schema.title).toBe("Detail conditions");
+    expect(schema.columns.map((c) => c.label)).toEqual(["Key", "Flag condition"]);
+    expect(schema.columns[1]).toMatchObject({ type: "text" });
   });
 });
 
@@ -160,7 +186,7 @@ describe("alchemy schema", () => {
 describe("schema registry", () => {
   it("lists built-in kinds and accepts new schemas", () => {
     expect(listJsonTableKinds()).toEqual(
-      expect.arrayContaining(["details", "grants", "denies", "alchemy"]),
+      expect.arrayContaining(["details", "detailWhen", "grants", "denies", "alchemy"]),
     );
     registerJsonTableSchema({
       kind: "widgets",

@@ -52,6 +52,7 @@ export function listJsonTableKinds(): string[] {
 /** Map known form field names to schema kinds. Extend when adding datasets. */
 const FIELD_NAME_TO_KIND: Record<string, string> = {
   detailsJson: "details",
+  detailWhenJson: "detailWhen",
   grantsJson: "grants",
   deniesJson: "denies",
   recipesJson: "alchemy",
@@ -81,9 +82,9 @@ function asRights(raw: unknown): Right[] {
   return out;
 }
 
-function detailsToRows(parsed: unknown): JsonTableRowsResult {
+function stringMapToRows(parsed: unknown, objectError: string): JsonTableRowsResult {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { ok: false, error: "Details must be a JSON object of named texts." };
+    return { ok: false, error: objectError };
   }
   const rows: JsonTableRow[] = Object.entries(parsed as Record<string, unknown>).map(([key, value]) => ({
     key,
@@ -92,13 +93,13 @@ function detailsToRows(parsed: unknown): JsonTableRowsResult {
   return { ok: true, rows };
 }
 
-function detailsFromRows(rows: JsonTableRow[]): JsonTableResult {
+function stringMapFromRows(rows: JsonTableRow[], item: string): JsonTableResult {
   const out: Record<string, string> = {};
   const seen = new Set<string>();
   for (const row of rows) {
     const key = String(row.key ?? "").trim();
-    if (!key) return { ok: false, error: "Each detail needs a non-empty key." };
-    if (seen.has(key)) return { ok: false, error: `Duplicate detail key: ${key}` };
+    if (!key) return { ok: false, error: `Each ${item} needs a non-empty key.` };
+    if (seen.has(key)) return { ok: false, error: `Duplicate ${item} key: ${key}` };
     seen.add(key);
     out[key] = String(row.value ?? "");
   }
@@ -156,8 +157,20 @@ registerJsonTableSchema({
     { key: "key", label: "Key", type: "text", placeholder: "slug" },
     { key: "value", label: "Description", type: "prose", rows: 4 },
   ],
-  toRows: detailsToRows,
-  fromRows: detailsFromRows,
+  toRows: (parsed) => stringMapToRows(parsed, "Details must be a JSON object of named texts."),
+  fromRows: (rows) => stringMapFromRows(rows, "detail"),
+});
+
+registerJsonTableSchema({
+  kind: "detailWhen",
+  title: "Detail conditions",
+  emptyValue: {},
+  columns: [
+    { key: "key", label: "Key", type: "text", placeholder: "slug" },
+    { key: "value", label: "Flag condition", type: "text", placeholder: "quest.flag or not.quest.flag" },
+  ],
+  toRows: (parsed) => stringMapToRows(parsed, "Detail conditions must be a JSON object of named flags."),
+  fromRows: (rows) => stringMapFromRows(rows, "detail condition"),
 });
 
 registerJsonTableSchema({
