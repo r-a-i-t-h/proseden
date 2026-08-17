@@ -101,6 +101,19 @@ export function canRemoveExit(
   return !!dest && dest.owner === user.username;
 }
 
+/**
+ * Reorder the origin’s full exit list. Same gate as editing every exit
+ * (manage or topographer) — not junction visitors with partial rights.
+ */
+export function canReorderExits(
+  user: UserRecord | undefined,
+  scene: SceneRecord,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  return canManage(user, scene, world) || isTopographer(user, world);
+}
+
 export function canReadArtefact(
   user: UserRecord | undefined,
   artefact: ArtefactRecord,

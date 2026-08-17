@@ -11,7 +11,7 @@ See [SPEC.md](SPEC.md) for the product rules; this document describes the v1 HTT
 | Teleport | `GET /s/:id` | Caller names a scene id directly |
 | Navigate (go) | `GET /s/:id/go/:exit` | Caller follows a directed exit from the current scene |
 
-Exits are stored per origin scene (`scenes/<id>.exits.json`) with an incremental `exitId`, a `nickname`, and `toSceneId`. `:exit` may be the numeric id or the nickname (case-insensitive).
+Exits are stored per origin scene (`scenes/<id>.exits.json`) with an incremental `exitId`, a `nickname`, and `toSceneId`. `:exit` may be the numeric id or the nickname (case-insensitive). Display order is the stored array order (creation order until the origin is reordered by manage/topographer via `POST /s/:id/exits/reorder`).
 
 HTML scene pages list exits under **Exits**, offer **Subscribe** / **Unsubscribe** with a subscriber count (signed-in readers), and expose an **Actions** section: teleport to a typed scene id (sending `?from=<current>`), and invite a signed-in user to view the current scene.
 

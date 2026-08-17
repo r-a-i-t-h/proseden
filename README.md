@@ -108,6 +108,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `DELETE`/`POST` | `/s/:id/subscribe` or `/subscribe/drop` | Unsubscribe |
 | `DELETE`/`POST` | `/s/:id/exits/:exit/delete` | Remove one exit (manage/organise any; on a public junction, also exits to scenes you own) |
 | `POST` | `/s/:id/exits/delete` | Remove one or more exits (`exitId` / `exitIds`) |
+| `POST` | `/s/:id/exits/reorder` | Reorder exits (`exitIds` permutation; manage/topographer) |
 | `GET`/`PUT`/`POST` | `/s/:id/access` | Scene grants/denies (manage) |
 | `POST` | `/s/:id/transfer` | Transfer ungrouped scene (+ owner's homed artefacts); owner or staff manager |
 | `GET`/`PUT`/`POST` | `/u/:username/access` | User-level share-all (self or manager) |

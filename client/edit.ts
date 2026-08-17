@@ -52,6 +52,7 @@ interface ManageContext {
   canEdit?: boolean;
   canManage?: boolean;
   canAddExit?: boolean;
+  canReorderExits?: boolean;
   isTopographer?: boolean;
   canDelete?: boolean;
   canTransfer?: boolean;
@@ -822,11 +823,61 @@ function exitsTool(
   });
 
   const wrap = el("div", { class: "stack" }, el("p", { class: "edit-kicker" }, "Add exit"), add, addBtn);
+  const allExits = manage.exits ?? [];
+  if (manage.canReorderExits && allExits.length > 1) {
+    wrap.append(orderExitsBlock(scene.id, allExits, inspector));
+  }
   if (editable.length) {
     wrap.append(el("p", { class: "edit-kicker" }, "Edit exits"), editList);
     wrap.append(el("p", { class: "edit-kicker" }, "Remove exits"), list, removeBtn);
   }
   return wrap;
+}
+
+function orderExitsBlock(
+  sceneId: number,
+  exits: Array<{ exitId: number; nickname: string; toSceneId: number; when?: string }>,
+  inspector: HTMLElement,
+): HTMLElement {
+  const list = el("ul", { class: "link-list manage-exit-order" });
+  for (const exit of exits) {
+    const item = el("li", {
+      class: "manage-exit-order-item",
+      "data-exit-id": String(exit.exitId),
+    });
+    const label = el(
+      "span",
+      { class: "exit-order-label" },
+      `${exit.nickname} `,
+      el("span", { class: "muted" }, `→ ${exit.toSceneId}`),
+    );
+    if (exit.when) label.append(el("span", { class: "muted" }, ` · ${exit.when}`));
+    const up = el("button", { type: "button", class: "editor-tool", title: "Move up" }, "↑");
+    const down = el("button", { type: "button", class: "editor-tool", title: "Move down" }, "↓");
+    up.addEventListener("click", () => {
+      const prev = item.previousElementSibling;
+      if (prev) list.insertBefore(item, prev);
+    });
+    down.addEventListener("click", () => {
+      const next = item.nextElementSibling;
+      if (next) list.insertBefore(next, item);
+    });
+    item.append(label, up, down);
+    list.append(item);
+  }
+  const save = el("button", { type: "button" }, "Save order");
+  save.addEventListener("click", async () => {
+    const exitIds = Array.from(list.querySelectorAll<HTMLElement>("[data-exit-id]")).map((node) =>
+      Number(node.dataset.exitId),
+    );
+    try {
+      await apiJson("POST", `s/${sceneId}/exits/reorder`, { exitIds });
+      window.location.reload();
+    } catch (err) {
+      setStatus(inspector, err instanceof Error ? err.message : "Could not reorder exits");
+    }
+  });
+  return el("div", { class: "stack" }, el("p", { class: "edit-kicker" }, "Order exits"), list, save);
 }
 
 function accessTool(manage: ManageContext | undefined, inspector: HTMLElement): HTMLElement {

@@ -119,6 +119,27 @@ describe("world hygiene", () => {
     expect(h.world.findExit(1, String(exit.exitId))).toBeUndefined();
   });
 
+  it("reorders exits in place without changing ids or gates", async () => {
+    const a = await h.world.addExit(1, "north", 2);
+    const b = await h.world.addExit(1, "east", 2, {
+      when: "quest.open",
+      whenDenied: "Closed.",
+      hidden: true,
+    });
+    const c = await h.world.addExit(1, "south", 2);
+    const reordered = await h.world.reorderExits(1, [c.exitId, a.exitId, b.exitId]);
+    expect(reordered.map((e) => e.exitId)).toEqual([c.exitId, a.exitId, b.exitId]);
+    expect(h.world.getExits(1).map((e) => e.nickname)).toEqual(["south", "north", "east"]);
+    expect(h.world.getExits(1)[2]).toMatchObject({
+      nickname: "east",
+      toSceneId: 2,
+      when: "quest.open",
+      whenDenied: "Closed.",
+      hidden: true,
+    });
+    await expect(h.world.reorderExits(1, [c.exitId])).rejects.toThrow(/permutation/i);
+  });
+
   it("rejects invalid details JSON with 400", async () => {
     const res = await h.app.request("/s/1", {
       method: "PUT",

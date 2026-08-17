@@ -422,6 +422,21 @@ button:hover:not(.editor-tool):not(.mode-switch-btn):not(.linkish):not(.edit-too
   flex-shrink: 0;
 }
 
+.manage-exit-order-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.manage-exit-order-item .exit-order-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.manage-exit-order-item .editor-tool {
+  flex-shrink: 0;
+}
+
 .edit-root[hidden] {
   display: none;
 }

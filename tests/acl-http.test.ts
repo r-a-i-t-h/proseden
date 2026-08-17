@@ -336,6 +336,93 @@ describe("HTTP ACL enforcement", () => {
     expect(world.findExit(3, String(bobAgain.exitId))).toBeUndefined();
   });
 
+  it("reorders exits for the owner and updates the reader list", async () => {
+    const { app, tokens, world } = harness;
+    const north = await world.addExit(1, "north", 3);
+    const east = await world.addExit(1, "east", 3, {
+      when: "quest.open",
+      whenDenied: "Nope.",
+      hidden: true,
+    });
+    const south = await world.addExit(1, "south", 3);
+
+    const ok = await app.request("/s/1/exits/reorder", {
+      method: "POST",
+      headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
+      body: JSON.stringify({ exitIds: [south.exitId, north.exitId, east.exitId] }),
+    });
+    expect(ok.status).toBe(200);
+    const ordered = world.getExits(1);
+    expect(ordered.map((e) => e.exitId)).toEqual([south.exitId, north.exitId, east.exitId]);
+    expect(ordered[2]).toMatchObject({
+      exitId: east.exitId,
+      nickname: "east",
+      when: "quest.open",
+      whenDenied: "Nope.",
+      hidden: true,
+    });
+
+    const listed = await app.request("/s/1", { headers: { Accept: "text/plain" } });
+    expect(listed.status).toBe(200);
+    const text = await listed.text();
+    const southAt = text.indexOf("- south");
+    const northAt = text.indexOf("- north");
+    expect(southAt).toBeGreaterThan(-1);
+    expect(northAt).toBeGreaterThan(-1);
+    expect(southAt).toBeLessThan(northAt);
+    expect(text).not.toContain("- east");
+
+    const partial = await app.request("/s/1/exits/reorder", {
+      method: "POST",
+      headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
+      body: JSON.stringify({ exitIds: [south.exitId, north.exitId] }),
+    });
+    expect(partial.status).toBe(400);
+
+    const dupes = await app.request("/s/1/exits/reorder", {
+      method: "POST",
+      headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
+      body: JSON.stringify({ exitIds: [south.exitId, south.exitId, north.exitId] }),
+    });
+    expect(dupes.status).toBe(400);
+  });
+
+  it("lets manage grantees and topographers reorder, not junction visitors", async () => {
+    const { app, tokens, world } = harness;
+    const first = await world.addExit(2, "out", 1);
+    const second = await world.addExit(2, "also", 1);
+    await world.updateSceneAccess(2, {
+      grants: [{ who: "bob", rights: ["manage"] }],
+    });
+
+    const grantee = await app.request("/s/2/exits/reorder", {
+      method: "POST",
+      headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
+      body: JSON.stringify({ exitIds: [second.exitId, first.exitId] }),
+    });
+    expect(grantee.status).toBe(200);
+    expect(world.getExits(2).map((e) => e.exitId)).toEqual([second.exitId, first.exitId]);
+
+    await world.setStaffRoles("carol", ["topographer"]);
+    const topo = await app.request("/s/2/exits/reorder", {
+      method: "POST",
+      headers: { ...auth(tokens.carol), "Content-Type": "application/json" },
+      body: JSON.stringify({ exitIds: [first.exitId, second.exitId] }),
+    });
+    expect(topo.status).toBe(200);
+    expect(world.getExits(2).map((e) => e.exitId)).toEqual([first.exitId, second.exitId]);
+
+    const j1 = await world.addExit(3, "one", 1);
+    const j2 = await world.addExit(3, "two", 1);
+    const visitor = await app.request("/s/3/exits/reorder", {
+      method: "POST",
+      headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
+      body: JSON.stringify({ exitIds: [j2.exitId, j1.exitId] }),
+    });
+    expect(visitor.status).toBe(403);
+    expect(world.getExits(3).map((e) => e.exitId)).toEqual([j1.exitId, j2.exitId]);
+  });
+
   it("blocks reading and collecting artefacts in unreadable homes", async () => {
     const { app, tokens } = harness;
 

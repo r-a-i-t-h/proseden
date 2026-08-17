@@ -1674,6 +1674,18 @@ export class WorldStore implements AccessWorld {
     return exit;
   }
 
+  async reorderExits(fromSceneId: number, orderedIds: number[]): Promise<ExitRecord[]> {
+    if (!this.scenes.has(fromSceneId)) throw new Error("From scene not found");
+    const current = this.getExits(fromSceneId);
+    if (!isExitIdPermutation(orderedIds, current)) {
+      throw new Error("exitIds must be a permutation of the current exits");
+    }
+    const byId = new Map(current.map((e) => [e.exitId, e]));
+    const exits = orderedIds.map((id) => byId.get(id)!);
+    await this.saveExits(fromSceneId, exits);
+    return exits;
+  }
+
   async createArtefact(input: {
     owner: string;
     homeSceneId: number;
@@ -2207,6 +2219,17 @@ function normalizeSubs(raw: unknown): string[] {
 function sceneTitleForNotice(scene: { id: number; title?: string }): string {
   const title = scene.title?.trim();
   return title || `scene ${scene.id}`;
+}
+
+function isExitIdPermutation(orderedIds: number[], current: ExitRecord[]): boolean {
+  if (orderedIds.length !== current.length) return false;
+  const currentIds = new Set(current.map((e) => e.exitId));
+  const seen = new Set<number>();
+  for (const id of orderedIds) {
+    if (!Number.isInteger(id) || !currentIds.has(id) || seen.has(id)) return false;
+    seen.add(id);
+  }
+  return true;
 }
 
 function definedEntries<T extends object>(patch: T): Partial<T> {

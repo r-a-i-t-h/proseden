@@ -76,6 +76,8 @@ export interface ManageContext {
   canManage?: boolean;
   /** Add exit from this scene (manage/topographer, or public junction). */
   canAddExit?: boolean;
+  /** Reorder the origin’s full exit list (manage or topographer). */
+  canReorderExits?: boolean;
   isTopographer?: boolean;
   canDelete?: boolean;
   canTransfer?: boolean;

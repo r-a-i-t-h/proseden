@@ -13,6 +13,7 @@ import {
   canReadArtefact,
   canReadGroup,
   canRemoveExit,
+  canReorderExits,
   isManager,
   isModerator,
   isQuestor,
@@ -220,6 +221,7 @@ worldRoutes.get("/s/:id", (c) => {
       canEdit: canEdit(user, scene, world),
       canManage: manage,
       canAddExit: canAddExit(user, scene, world),
+      canReorderExits: canReorderExits(user, scene, world),
       isTopographer: isTopographer(user, world),
       canDelete: manage || isModerator(user, world),
       canTransfer: canTransferScene(user, scene, world),
@@ -1673,6 +1675,7 @@ async function dropSubscribe(c: Context) {
 worldRoutes.delete("/s/:id/exits/:exit", async (c) => removeExit(c));
 worldRoutes.post("/s/:id/exits/:exit/delete", async (c) => removeExit(c));
 worldRoutes.post("/s/:id/exits/delete", async (c) => removeExits(c));
+worldRoutes.post("/s/:id/exits/reorder", async (c) => reorderExitsRoute(c));
 
 worldRoutes.put("/s/:id/exits/:exit", async (c) => updateExitRoute(c));
 worldRoutes.post("/s/:id/exits/:exit", async (c) => updateExitRoute(c));
@@ -1686,7 +1689,9 @@ async function updateExitRoute(c: Context) {
   const scene = world.getScene(id);
   if (!scene) return apiError(c, 404, "Scene not found");
   const exitKey = decodeURIComponent(String(c.req.param("exit") ?? ""));
-  if (exitKey === "delete") return apiError(c, 404, `No exit matching "${exitKey}"`);
+  if (exitKey === "delete" || exitKey === "reorder") {
+    return apiError(c, 404, `No exit matching "${exitKey}"`);
+  }
   const existing = world.findExit(id, exitKey);
   if (!existing) return apiError(c, 404, `No exit matching "${exitKey}"`);
   if (!canRemoveExit(user, scene, existing, world) && !canManage(user, scene, world)) {
@@ -1790,6 +1795,38 @@ async function removeExits(c: Context) {
 
   if (wantsJson(c)) return c.json({ ok: true, removed });
   return c.redirect(`${c.get("assetBase")}/s/${id}`);
+}
+
+async function reorderExitsRoute(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const id = Number(c.req.param("id"));
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canReorderExits(user, scene, world)) {
+    return apiError(c, 403, "Not allowed to reorder exits on this scene");
+  }
+
+  const body = await readBody(c);
+  const raw = body.exitIds ?? body.exitId;
+  if (raw === undefined || raw === null || raw === "") {
+    return apiError(c, 400, "exitIds is required");
+  }
+  const keys = collectExitKeys({ exitIds: raw });
+  const exitIds = keys.map(Number);
+  if (!exitIds.length || exitIds.some((n) => !Number.isInteger(n))) {
+    return apiError(c, 400, "exitIds must be a list of exit ids");
+  }
+
+  try {
+    const exits = await world.reorderExits(id, exitIds);
+    if (wantsJson(c)) return c.json({ ok: true, exits });
+    return c.redirect(`${c.get("assetBase")}/s/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not reorder exits");
+  }
 }
 
 function collectExitKeys(body: Record<string, unknown>): string[] {
