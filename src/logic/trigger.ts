@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { UserRecord } from "../model/types.js";
+import { timedAsync } from "../observe.js";
 import { logQuestFault } from "./log.js";
 
 /** Evaluate quests after a state-changing event; refresh c.set("user"). Never throws. */
@@ -10,7 +11,9 @@ export async function triggerQuestEval(
 ): Promise<UserRecord> {
   try {
     const world = c.get("world");
-    const updated = await world.evaluateQuestsForUser(user.username, atSceneId);
+    const updated = await timedAsync(c.get("timer"), "quests", () =>
+      world.evaluateQuestsForUser(user.username, atSceneId),
+    );
     const next = updated ?? world.getUser(user.username) ?? user;
     c.set("user", next);
     return next;

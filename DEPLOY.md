@@ -315,6 +315,48 @@ The Proseden site is not enabled, or another `default_server` wins. Check `ls /e
 **Styles missing / 404 on `/assets/`**  
 The process is running from a tree that was not packed with `public/assets`. Re-install from an official Release tarball, not a git clone.
 
+**A page load takes many seconds**  
+Scene HTML is served from RAM. A 10s wait usually means the **single Node event loop was busy**, nginx waited on something else, or the browser sat on Live/assets — not a missing index.
+
+1. From the VPS, time `/health` (use the instance’s path prefix if it is a path mount):
+
+   ```bash
+   time curl -sS http://127.0.0.1:3336/health
+   ```
+
+   If this also takes many seconds, the process was stalled. `lagMaxMs` in the JSON is event-loop delay over the last 10s (thousands of ms = the loop was busy). `rssMb` is process RAM.
+
+2. Host vs CPU: `free -h`, `uptime`, and
+
+   ```bash
+   pid=$(systemctl show -p MainPID --value proseden-www)
+   ps -o rss,pcpu,cmd -p "$pid"
+   sudo journalctl -u proseden-www -g 'proseden:slow'
+   ```
+
+   RSS near total RAM plus `si`/`so` in `vmstat 1` is swap thrash. One `node` at ~100% CPU is a stall (backup gzip, reload, login scrypt).
+
+   `systemctl status proseden-www` shows memory when the unit has `MemoryAccounting=yes` (new installs). Existing units are not rewritten by `proseden-update`; add that line under `[Service]` yourself if you want it.
+
+3. nginx vs Node: new installs log `rt=` (browser wait) and `urt=` (upstream) to `/var/log/nginx/proseden-<name>.access.log`. If `rt` is large and `urt` is tiny, look at Live SSE buffering or the client, not the world store.
+
+   Existing certbot-owned site files are not rewritten. To add the same log:
+
+   ```nginx
+   # /etc/nginx/conf.d/proseden-timed-log.conf  (http context; already copied on new installs)
+   log_format timed '$remote_addr [$time_local] "$request" $status '
+                    'rt=$request_time urt=$upstream_response_time';
+   ```
+
+   ```nginx
+   # inside the server { } block
+   access_log /var/log/nginx/proseden-www.access.log timed;
+   ```
+
+   Then `sudo nginx -t && sudo systemctl reload nginx`.
+
+4. In the app: manager **Dashboard** (`/dashboard`) shows process stats and the last 20 slow requests (over 500ms, or `PROSEDEN_SLOW_MS`). Browser DevTools Timing shows `Server-Timing` (`app`, plus spans such as `ownedScenes`, `inbox`, `render`, `quests`, `scrypt`, `backup`, `reload`). A slow line with almost no spans but a large total is wait time on the event loop.
+
 **Live chat stuck on “Connecting…”**  
 The UI waits for the first SSE event. If nginx buffers `/live/events`, the browser never receives it (the Node process is fine — `/live/here` still works). `proseden-update` does **not** rewrite nginx site files (certbot owns them).
 

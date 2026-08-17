@@ -139,4 +139,38 @@ describe("dashboardPageView", () => {
     expect(text).toContain("Quests: 2  /garden/data/quests");
     expect(text).toContain("- Data (backups, reload, quests, alchemy)  /garden/data");
   });
+
+  it("renders process stats and slow request lines", () => {
+    const process = {
+      uptimeSec: 12,
+      rssMb: 40.1,
+      heapUsedMb: 12.2,
+      lagP99Ms: 1.2,
+      lagMaxMs: 4,
+      sseConnections: 2,
+      slowMs: 500,
+      slowLines: ["GET /s/12 200 842ms ownedScenes=12"],
+    };
+    const html = toHtml(
+      dashboardPageView({
+        counts: overviewCounts,
+        online: 1,
+        process,
+      }).body,
+    );
+    expect(html).toContain("<h2>Process</h2>");
+    expect(html).toContain("<dt>Uptime (s)</dt><dd>12</dd>");
+    expect(html).toContain("<dt>RSS (MB)</dt><dd>40.1</dd>");
+    expect(html).toContain("<dt>Event-loop p99 (ms)</dt><dd>1.2</dd>");
+    expect(html).toContain("<dt>Event-loop max (ms)</dt><dd>4</dd>");
+    expect(html).toContain('href="live/admin">SSE connections</a>');
+    expect(html).toContain("<dd>2</dd>");
+    expect(html).toContain("<h2>Recent slow requests</h2>");
+    expect(html).toContain("GET /s/12 200 842ms ownedScenes=12");
+
+    const text = toText(dashboardPageView({ counts: overviewCounts, online: 1, process }).body);
+    expect(text).toContain("Process:");
+    expect(text).toContain("RSS (MB): 40.1");
+    expect(text).toContain("GET /s/12 200 842ms ownedScenes=12");
+  });
 });

@@ -12,6 +12,7 @@ import {
 import { renderMessageText } from "./render/text.js";
 import { isPageView, toHtml, toText, type PageView } from "./render/view/index.js";
 import type { UserRecord } from "./model/types.js";
+import { timed } from "./observe.js";
 import type { WorldStore } from "./store/world.js";
 
 export function wantsJson(c: Context): boolean {
@@ -147,23 +148,28 @@ function htmlPageResponse(
   if (liveSceneId === undefined && manage?.kind === "artefact" && manage.artefact) {
     liveSceneId = manage.artefact.homeSceneId;
   }
-  return c.html(
+  const timer = c.get("timer");
+  const ownedScenes = timed(timer, "ownedScenes", () => ownedSceneLinks(world, user));
+  const inboxCount = user
+    ? timed(timer, "inbox", () => world.inboxCountFor(user.username))
+    : 0;
+  const html = timed(timer, "render", () =>
     renderHtmlPage({
       title,
       bodyHtml,
       user,
       assetBase: c.get("assetBase"),
       manage,
-      ownedScenes: ownedSceneLinks(world, user),
+      ownedScenes,
       isManager: shell?.isManager ?? isManager(user, world),
       isModerator: shell?.isModerator ?? isModerator(user, world),
       isQuestor: shell?.isQuestor ?? isQuestor(user, world),
       liveSceneId,
-      inboxCount: user ? world.inboxCountFor(user.username) : 0,
+      inboxCount,
       ...hrefs,
     }),
-    status as 200,
   );
+  return c.html(html, status as 200);
 }
 
 export function apiError(

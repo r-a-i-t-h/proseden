@@ -36,6 +36,12 @@ import { gateFactsFor, parseDetailWhenMap, parseOptionalFlagRef } from "../logic
 import { matchAlchemyRecipe, parseAlchemyRecipes, parseQuestFile, QuestValidationError } from "../logic/quests.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import type { InboxMessage, StaffRole } from "../model/types.js";
+import {
+  formatSlowLine,
+  processSnapshot,
+  recentSlowRequests,
+  slowMsThreshold,
+} from "../observe.js";
 import { negotiateFormat, queryDetailName } from "../render/format.js";
 import {
   escapeHtml,
@@ -2087,10 +2093,31 @@ worldRoutes.get("/dashboard", (c) => {
     return apiError(c, user ? 403 : 401, "Manager role required");
   }
   const counts = world.overviewCounts();
-  const online = c.get("presence").online().length;
-  if (wantsJson(c)) return c.json({ ok: true, ...counts, online });
+  const presence = c.get("presence");
+  const online = presence.online().length;
+  const sseConnections = presence.connectionCount();
+  const snap = processSnapshot();
+  const slowMs = slowMsThreshold();
+  const slowRequests = recentSlowRequests();
+  const processStats = {
+    ...snap,
+    sseConnections,
+    slowMs,
+    slowLines: slowRequests.map((entry) => `${entry.at} ${formatSlowLine(entry)}`),
+  };
+  if (wantsJson(c)) {
+    return c.json({
+      ok: true,
+      ...counts,
+      online,
+      sseConnections,
+      ...snap,
+      slowMs,
+      slowRequests,
+    });
+  }
   const back = sceneBackLink(user!, world);
-  return page(c, 200, dashboardPageView({ counts, online, back }));
+  return page(c, 200, dashboardPageView({ counts, online, process: processStats, back }));
 });
 
 worldRoutes.get("/msg", (c) => {

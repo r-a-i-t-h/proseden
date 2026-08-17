@@ -21,4 +21,4 @@ export type { PageBackLink } from "./pages/profile.js";
 export { msgPageView } from "./pages/msg.js";
 export { inboxPageView } from "./pages/inbox.js";
 export { dashboardPageView } from "./pages/dashboard.js";
-export type { DashboardOverviewCounts } from "./pages/dashboard.js";
+export type { DashboardOverviewCounts, DashboardProcess } from "./pages/dashboard.js";

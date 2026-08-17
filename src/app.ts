@@ -2,10 +2,18 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { SessionStore } from "./auth/sessions.js";
 import { loadUser, sessionCookieNameForBase } from "./middleware/auth.js";
-import { writeRateLimit } from "./middleware/rate-limit.js";
+import { pathWithinApp, writeRateLimit } from "./middleware/rate-limit.js";
 import { SceneHub } from "./live/hub.js";
 import { LocationTracker } from "./live/location.js";
 import { PresenceStore } from "./live/presence.js";
+import {
+  healthFields,
+  isLiveEventsPath,
+  recordFinishedRequest,
+  RequestTimer,
+  runWithTimer,
+  serverTimingHeader,
+} from "./observe.js";
 import { mergeRateLimits, type RateLimitConfig } from "./rate-limit/limits.js";
 import { RateLimiter } from "./rate-limit/limiter.js";
 import { adminRoutes } from "./routes/admin.js";
@@ -54,13 +62,26 @@ export function createApp(opts: {
     c.set("locations", locations);
     c.set("rateLimiter", rateLimiter);
     c.set("rateLimits", rateLimits);
-    await next();
+    const timer = new RequestTimer();
+    c.set("timer", timer);
+    await runWithTimer(timer, async () => {
+      await next();
+    });
+    const path = pathWithinApp(c);
+    if (isLiveEventsPath(path)) return;
+    c.header("Server-Timing", serverTimingHeader(timer));
+    recordFinishedRequest({
+      method: c.req.method,
+      path,
+      status: c.res.status,
+      timer,
+    });
   });
 
   app.use("*", loadUser);
   app.use("*", writeRateLimit);
 
-  app.get("/health", (c) => c.json({ ok: true, name: "proseden" }));
+  app.get("/health", (c) => c.json({ ok: true, name: "proseden", ...healthFields() }));
 
   app.route("/auth", authRoutes);
   app.route("/data", adminRoutes);

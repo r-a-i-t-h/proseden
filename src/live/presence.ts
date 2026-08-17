@@ -221,6 +221,11 @@ export class PresenceStore {
     return this.connections.get(connectionId);
   }
 
+  /** Open Live SSE sockets (tabs), not unique online users. */
+  connectionCount(): number {
+    return this.connections.size;
+  }
+
   /** Fanout to connections subscribed to a scene (or all if sceneId omitted for shouts). */
   fanout(event: LiveEvent, opts?: { sceneId?: number; all?: boolean }): void {
     for (const conn of this.connections.values()) {

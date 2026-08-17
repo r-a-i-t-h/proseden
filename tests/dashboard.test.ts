@@ -90,7 +90,14 @@ describe("dashboard", () => {
       entranceGroups: 1,
       staff: 1,
       online: 0,
+      sseConnections: 0,
     });
+    expect(typeof body.rssMb).toBe("number");
+    expect(typeof body.lagP99Ms).toBe("number");
+    expect(typeof body.lagMaxMs).toBe("number");
+    expect(typeof body.uptimeSec).toBe("number");
+    expect(Array.isArray(body.slowRequests)).toBe(true);
+    expect(typeof body.slowMs).toBe("number");
   });
 
   it("renders HTML and text overviews", async () => {
@@ -104,6 +111,10 @@ describe("dashboard", () => {
     expect(html).toContain("<dt>Scenes</dt><dd>2</dd>");
     expect(html).toContain("<dt>Artefacts</dt><dd>1</dd>");
     expect(html).toContain('href="staff">Staff</a>');
+    expect(html).toContain("<h2>Process</h2>");
+    expect(html).toContain("<dt>RSS (MB)</dt>");
+    expect(html).toContain("<dt>Event-loop p99 (ms)</dt>");
+    expect(html).toContain("<h2>Recent slow requests</h2>");
 
     const textRes = await app.request("/dashboard", {
       headers: { Authorization: `Bearer ${managerToken}`, Accept: "text/plain" },
@@ -115,5 +126,8 @@ describe("dashboard", () => {
     expect(text).toContain("Scenes: 2");
     expect(text).toContain("Artefacts: 1");
     expect(text).toContain("Staff: 1  /staff");
+    expect(text).toContain("Process:");
+    expect(text).toContain("RSS (MB):");
+    expect(text).toContain("Recent slow requests:");
   });
 });

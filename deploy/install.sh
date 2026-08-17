@@ -304,6 +304,8 @@ insert_include_in_server() {
 
 if [ "$SKIP_NGINX" -eq 0 ]; then
   ensure_http_includes
+  mkdir -p /etc/nginx/conf.d
+  cp "$REL_DIR/deploy/nginx/timed-log.conf" /etc/nginx/conf.d/proseden-timed-log.conf
   render() {
     sed \
       -e "s|__NAME__|$NAME|g" \

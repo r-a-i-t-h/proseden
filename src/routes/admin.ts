@@ -26,6 +26,7 @@ import {
 } from "../store/backup.js";
 import { formatJsonTextarea, prepareJsonTextarea } from "../json-textarea.js";
 import { parseAlchemyRecipes, parseQuestFile, QuestValidationError } from "../logic/quests.js";
+import { timedAsync } from "../observe.js";
 import { ALCHEMY_EXAMPLE, ALCHEMY_HELP } from "../render/view/examples.js";
 
 export const adminRoutes = new Hono();
@@ -89,7 +90,9 @@ adminRoutes.post("/backup", async (c) => {
   const world = c.get("world");
   let created: BackupInfo;
   try {
-    created = await createDataBackup(world.dataDir, c.get("backupDir"));
+    created = await timedAsync(c.get("timer"), "backup", () =>
+      createDataBackup(world.dataDir, c.get("backupDir")),
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Backup failed";
     return apiError(c, 400, message, { isManager: true });
@@ -113,7 +116,7 @@ adminRoutes.get("/backup/:name", async (c) => {
 
   let bytes: Buffer;
   try {
-    bytes = await readFile(path);
+    bytes = await timedAsync(c.get("timer"), "backupRead", () => readFile(path));
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT") return apiError(c, 404, "Backup not found", { isManager: true });
@@ -154,7 +157,7 @@ adminRoutes.post("/reload", async (c) => {
   if (denied) return denied;
 
   const world = c.get("world");
-  await world.reload();
+  await timedAsync(c.get("timer"), "reload", () => world.reload());
 
   const summary = {
     ok: true as const,
