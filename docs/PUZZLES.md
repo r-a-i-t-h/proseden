@@ -241,7 +241,13 @@ combine time.
 `POST /alchemy/combine` with 2+ artefact ids from inventory. First matching
 recipe wins. Gives result if not already held; inputs stay. Uncollect result
 → may combine again. No flag required. Already-held result uses a fixed
-message (not per-recipe fail prose).
+message (not per-recipe fail prose). Combine does not check whether the
+recipient can read the result’s home scene (same as quest `giveArtefact`).
+
+Holding the result grants artefact-page read even when the home is private or
+flag-gated. It does not grant home-scene read, world collect, or edit history.
+Drop the item and page read closes again. Homing alchemy products on a private
+scene is the usual way to make them via-alchemy only.
 
 Quests may later notice results via `holds` → `setFlag`.
 

@@ -182,7 +182,9 @@ profile page to change password and set share-all grants, group pages
 actions including scene ACL.
 
 Artefacts are collected as inventory *links* to the original; collecting does
-not remove them from their home scene.
+not remove them from their home scene. Holding an artefact grants artefact-page
+read (`GET /a/:id`, body and details). It does not grant home-scene read, world
+collect, or artefact history.
 
 On-disk world data lives as text/JSON files under `data/`, loaded fully into
 memory at boot, with write-through on edit. See [README.md](../README.md).

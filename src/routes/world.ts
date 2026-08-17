@@ -279,7 +279,7 @@ worldRoutes.get("/a/:id", (c) => {
     );
   }
   const home = world.getScene(artefact.homeSceneId);
-  if (!home || !canReadArtefact(user, artefact, home, world)) {
+  if (!home) {
     return page(
       c,
       user ? 403 : 401,
@@ -288,27 +288,39 @@ worldRoutes.get("/a/:id", (c) => {
       renderMessageText("Forbidden", "This artefact is not for your eyes."),
     );
   }
-
-  const flags = user ? world.getUserFlags(user.username) : {};
-  if (!bypassesSceneFlagGate(user, home, world) && !sceneAllowed(home, flags)) {
-    const msg = home.whenDenied?.trim() || "You cannot enter here yet.";
-    return page(
-      c,
-      user ? 403 : 401,
-      "Forbidden",
-      renderMessageBodyHtml("Forbidden", msg),
-      renderMessageText("Forbidden", msg),
-    );
-  }
   const collected = !!user?.inventory.some((i) => i.artefactId === id);
-  if (!collected && !artefactVisible(artefact, flags)) {
-    return page(
-      c,
-      404,
-      "Not found",
-      renderMessageBodyHtml("Not found", `No artefact ${id}.`),
-      renderMessageText("Not found", `No artefact ${id}.`),
-    );
+  const flags = user ? world.getUserFlags(user.username) : {};
+  // Holding is a reader credential for this page only — not home-scene read,
+  // world collect, or history. Skip ACL / scene when / artefact when when held.
+  if (!collected) {
+    if (!canReadArtefact(user, artefact, home, world)) {
+      return page(
+        c,
+        user ? 403 : 401,
+        "Forbidden",
+        renderMessageBodyHtml("Forbidden", "This artefact is not for your eyes."),
+        renderMessageText("Forbidden", "This artefact is not for your eyes."),
+      );
+    }
+    if (!bypassesSceneFlagGate(user, home, world) && !sceneAllowed(home, flags)) {
+      const msg = home.whenDenied?.trim() || "You cannot enter here yet.";
+      return page(
+        c,
+        user ? 403 : 401,
+        "Forbidden",
+        renderMessageBodyHtml("Forbidden", msg),
+        renderMessageText("Forbidden", msg),
+      );
+    }
+    if (!artefactVisible(artefact, flags)) {
+      return page(
+        c,
+        404,
+        "Not found",
+        renderMessageBodyHtml("Not found", `No artefact ${id}.`),
+        renderMessageText("Not found", `No artefact ${id}.`),
+      );
+    }
   }
 
   const detail = queryDetailName(c);

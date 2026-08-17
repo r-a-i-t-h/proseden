@@ -361,6 +361,72 @@ describe("HTTP ACL enforcement", () => {
     expect(bobCollect.status).toBe(200);
   });
 
+  it("lets holders read a private-home artefact without scene access", async () => {
+    const { app, tokens, world } = harness;
+    const headers = {
+      Authorization: `Bearer ${tokens.carol}`,
+      Accept: "text/plain",
+    };
+
+    await world.collectArtefact("carol", 1);
+
+    const page = await app.request("/a/1", { headers });
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("secret");
+
+    const scene = await app.request("/s/2", { headers });
+    expect(scene.status).toBe(403);
+
+    const collect = await app.request("/a/1/collect", {
+      method: "POST",
+      headers: auth(tokens.carol),
+    });
+    expect(collect.status).toBe(403);
+
+    const history = await app.request("/a/1/history", {
+      headers: auth(tokens.carol),
+    });
+    expect(history.status).toBe(403);
+
+    await world.dropArtefact("carol", 1);
+    const afterDrop = await app.request("/a/1", { headers });
+    expect(afterDrop.status).toBe(403);
+  });
+
+  it("lets holders read an artefact whose home scene when-gate they fail", async () => {
+    const { app, tokens, world } = harness;
+    const vault = await world.createScene({
+      owner: "alice",
+      title: "Gated vault",
+      body: "Locked hall.",
+      visibility: "public",
+    });
+    await world.updateScene(
+      vault.id,
+      { when: "never.open", whenDenied: "The vault stays shut." },
+      { by: "alice" },
+    );
+    const potion = await world.createArtefact({
+      owner: "alice",
+      homeSceneId: vault.id,
+      title: "Vault draught",
+      body: "Bitter.",
+    });
+    await world.collectArtefact("carol", potion.id);
+
+    const headers = {
+      Authorization: `Bearer ${tokens.carol}`,
+      Accept: "text/plain",
+    };
+    const page = await app.request(`/a/${potion.id}`, { headers });
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Bitter.");
+
+    const scene = await app.request(`/s/${vault.id}`, { headers });
+    expect(scene.status).toBe(403);
+    expect(await scene.text()).toContain("The vault stays shut.");
+  });
+
   it("lets artefact owners edit without scene edit rights", async () => {
     const { app, tokens } = harness;
     const denied = await app.request("/a/2", {

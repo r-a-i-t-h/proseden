@@ -217,7 +217,7 @@ re-grant until the flag goes away and comes back.
 | Shape | Effect |
 |---|---|
 | `{ "grantBadge": "demo.winner" }` | Append the id to the reader’s badge list if not already present. Id must be `name.*`. |
-| `{ "giveArtefact": 99 }` | After eval, collect artefact `99` if it exists and is not already held. Must be a finite number. |
+| `{ "giveArtefact": 99 }` | After eval, collect artefact `99` if it exists and is not already held. Must be a finite number. Holding then grants artefact-page read; not home-scene read or world collect. |
 
 `giveArtefact` does **not** update inventory mid-cascade. A later rule in
 the same eval cannot see the new artefact via `holds` / `holdsTag`. Flags
