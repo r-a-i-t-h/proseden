@@ -137,14 +137,15 @@ function htmlPageResponse(
   const user = c.get("user");
   const world = c.get("world");
   const hrefs = editModeHrefs(c.req.url, c.get("assetBase"));
+  // Scene pages bind Live to that scene. Artefact/inventory/etc. keep the
+  // viewer's last readable scene; fall back to artefact home only when none.
   let liveSceneId =
-    manage?.kind === "scene" && manage.scene
-      ? manage.scene.id
-      : manage?.kind === "artefact" && manage.artefact
-        ? manage.artefact.homeSceneId
-        : undefined;
+    manage?.kind === "scene" && manage.scene ? manage.scene.id : undefined;
   if (liveSceneId === undefined) {
     liveSceneId = liveSceneIdForUser(user, world);
+  }
+  if (liveSceneId === undefined && manage?.kind === "artefact" && manage.artefact) {
+    liveSceneId = manage.artefact.homeSceneId;
   }
   return c.html(
     renderHtmlPage({

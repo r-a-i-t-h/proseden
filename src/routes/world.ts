@@ -317,8 +317,13 @@ worldRoutes.get("/a/:id", (c) => {
     details: resolveArtefactDetails(artefact, flags),
   };
 
-  // Stay present in the artefact's home scene while examining it.
-  if (user) c.get("locations").noteVisit(user.username, artefact.homeSceneId);
+  // Like inventory/profile: do not move Live; crumb back to the current scene.
+  const back = user
+    ? sceneBackLink(user, world)
+    : {
+        href: `s/${artefact.homeSceneId}?from=${artefact.homeSceneId}`,
+        label: `← Scene ${artefact.homeSceneId}`,
+      };
 
   return page(
     c,
@@ -327,6 +332,7 @@ worldRoutes.get("/a/:id", (c) => {
       artefact: readerArtefact,
       detail,
       collected: user ? collected : undefined,
+      back,
     }),
     {
       kind: "artefact",

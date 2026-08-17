@@ -452,7 +452,7 @@ describe("live presence and chat", () => {
     expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
   });
 
-  it("artefact HTML keeps liveSceneId at the home scene", async () => {
+  it("artefact HTML keeps liveSceneId at the home scene when not elsewhere", async () => {
     const art = await world.createArtefact({
       owner: "alice",
       homeSceneId: sceneIds.public,
@@ -464,6 +464,39 @@ describe("live presence and chat", () => {
     });
     const html = await res.text();
     expect(html).toContain(`"liveSceneId":${sceneIds.public}`);
+  });
+
+  it("examining an artefact keeps Live at lastSceneId and links back", async () => {
+    const other = await world.createScene({
+      owner: "alice",
+      title: "Elsewhere",
+      body: "Not the artefact's home.",
+      visibility: "public",
+    });
+    const art = await world.createArtefact({
+      owner: "alice",
+      homeSceneId: sceneIds.public,
+      title: "Pocket stone",
+      body: "Smooth.",
+    });
+    await world.collectArtefact("alice", art.id);
+
+    const visit = await app.request(`/s/${other.id}`, {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    expect(visit.status).toBe(200);
+    expect(world.getUser("alice")?.lastSceneId).toBe(other.id);
+
+    const res = await app.request(`/a/${art.id}`, {
+      headers: { Accept: "text/html", Authorization: `Bearer ${tokens.alice}` },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(world.getUser("alice")?.lastSceneId).toBe(other.id);
+    expect(html).toContain(`"liveSceneId":${other.id}`);
+    expect(html).toContain(`href="s/${other.id}"`);
+    expect(html).toContain(`← Scene ${other.id}`);
+    expect(html).not.toContain(`href="s/${sceneIds.public}?from=${sceneIds.public}"`);
   });
 
   it("inventory keeps Live at lastSceneId and links back", async () => {

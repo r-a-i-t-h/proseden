@@ -14,12 +14,23 @@ import {
   textOnly,
 } from "../factories.js";
 import type { PageView } from "../types.js";
+import type { PageBackLink } from "./profile.js";
 import { entityDetailView, namedDetails } from "./scene.js";
+
+/** Default crumb: artefact's home scene (used when no Live-bound scene). */
+export function artefactHomeBackLink(artefact: ArtefactRecord): PageBackLink {
+  return {
+    href: `s/${artefact.homeSceneId}?from=${artefact.homeSceneId}`,
+    label: `← Scene ${artefact.homeSceneId}`,
+  };
+}
 
 export function artefactPageView(opts: {
   artefact: ArtefactRecord;
   detail?: string;
   collected?: boolean;
+  /** Prefer Live-bound scene (inventory/profile style); defaults to home. */
+  back?: PageBackLink;
 }): PageView {
   const { artefact, detail } = opts;
   const title = artefact.title ?? `Artefact ${artefact.id}`;
@@ -34,6 +45,9 @@ export function artefactPageView(opts: {
       text: artefact.details[detail],
     });
   }
+
+  const back = opts.back ?? artefactHomeBackLink(artefact);
+  const home = artefactHomeBackLink(artefact);
 
   const collect =
     opts.collected === undefined
@@ -60,23 +74,19 @@ export function artefactPageView(opts: {
             ),
           );
 
+  const textNav: string[] = [];
+  if (opts.back) {
+    textNav.push(`${back.label}  {base}/${back.href.replace(/^\.\//, "")}`);
+  }
+  textNav.push(`home: {base}/${home.href}`);
+
   return pageView(
     title,
     nodes(
-      // Crumb is HTML-oriented; text mode shows home: line instead
-      htmlOnly(
-        crumb(
-          `s/${artefact.homeSceneId}?from=${artefact.homeSceneId}`,
-          `← Scene ${artefact.homeSceneId}`,
-        ),
-      ),
+      htmlOnly(crumb(back.href, back.label, back.history)),
       entityTitle("artefact", artefact.id, artefact.title),
       byline(artefact.owner),
-      textOnly(
-        rawText([
-          `home: {base}/s/${artefact.homeSceneId}?from=${artefact.homeSceneId}`,
-        ]),
-      ),
+      textOnly(rawText(textNav)),
       artefact.tags.length ? htmlOnly(meta(artefact.tags.join(", "))) : undefined,
       artefact.tags.length
         ? textOnly(rawText([`tags: ${artefact.tags.join(", ")}`]))
