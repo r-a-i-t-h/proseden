@@ -5,17 +5,17 @@
   "rules": [
     {
       "id": "hamlet",
-      "when": { "scenesOwned": { "gte": 5 } },
+      "when": { "all": [{ "scenesOwned": { "gte": 5 } }, { "not": { "flag": "builders.hamlet" } }] },
       "then": [{ "setFlag": "builders.hamlet", "to": true }]
     },
     {
       "id": "city",
-      "when": { "scenesOwned": { "gte": 20 } },
+      "when": { "all": [{ "scenesOwned": { "gte": 20 } }, { "not": { "flag": "builders.city" } }] },
       "then": [{ "setFlag": "builders.city", "to": true }]
     },
     {
       "id": "world",
-      "when": { "scenesOwned": { "gte": 100 } },
+      "when": { "all": [{ "scenesOwned": { "gte": 100 } }, { "not": { "flag": "builders.world" } }] },
       "then": [{ "setFlag": "builders.world", "to": true }]
     }
   ],
