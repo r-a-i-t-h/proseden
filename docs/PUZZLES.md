@@ -64,10 +64,10 @@ reader facts are also allowed: current inventory (`holds:<id>`) and current
 badges (`badge:<id>`). **Missing flag == false** for a positive flag ref.
 Unknown schemes are false.
 
-Tag checks (`holdsTag`), location (`atScene`), ownership counts, and
-combinators stay in quest JSON. `holdsTag` is too general for world records
-— it would encourage obscure category gates. Name a specific artefact or
-badge, or set a flag from quest logic.
+Tag checks (`holdsTag`), location (`atScene`), ownership counts, Use, Input,
+and combinators stay in quest JSON. `holdsTag` is too general for world
+records — it would encourage obscure category gates. Name a specific
+artefact or badge, or set a flag from quest logic.
 
 ```
 rich when  →  setFlag/clearFlag  →  onChange knock-ons
@@ -185,7 +185,8 @@ catch up on their next trigger.
 logged as `[proseden:quest] …` for operators and never fail login, go, collect,
 or other user actions.
 
-Not triggers: anonymous views, heartbeats, scene create/delete.
+Not triggers: anonymous views, heartbeats, `GET /s/:id` teleport, scene
+create/delete, Live chat.
 
 Within one pass: all quests in load order (manager files sorted by name, then
 questor personal files), all matching rules may fire.
@@ -209,8 +210,8 @@ optional). Invert with `not.` on the payload (`not.x`, `flag:not.x`,
 | `badge:demo.x` | reader holds badge `demo.x` |
 | `badge:not.demo.x` | reader does not hold that badge |
 
-`holdsTag`, `atScene`, and `scenesOwned` are not world-gate schemes (quest
-Pred only). Tag gates are too general for world records.
+`holdsTag`, `atScene`, `scenesOwned`, `uses`, and `input` are not world-gate
+schemes (quest Pred only). Tag gates are too general for world records.
 
 ```ts
 type FlagRef = string; // "quest.local" | "flag:…" | "holds:12" | "badge:demo.x"
