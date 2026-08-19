@@ -7,10 +7,11 @@ import type {
   Pred,
   QuestFile,
   QuestRule,
+  QuestTrigger,
 } from "../model/logic.js";
 import { QUEST_EVAL_MAX_ITERATIONS } from "../model/logic.js";
 import { logQuestFault } from "./log.js";
-import { evaluatePred, isFlagOnlyPred, type PredContext } from "./pred.js";
+import { evaluatePred, isFlagOnlyPred, normalizeInputPhrase, type PredContext } from "./pred.js";
 
 export class QuestValidationError extends Error {
   constructor(message: string) {
@@ -57,13 +58,85 @@ function parseRule(raw: unknown, questName: string, index: number): QuestRule {
   const o = raw as Record<string, unknown>;
   const id = String(o.id ?? `rule-${index}`);
   if (!o.when) throw new QuestValidationError(`Rule ${id}: when required`);
-  const when = o.when as Pred;
-  assertPredShape(when, `Rule ${id} when`);
+  const on = parseRuleOn(o.on, `Rule ${id}`);
+  const when = parsePred(o.when, `Rule ${id} when`, on);
   if (!Array.isArray(o.then) || !o.then.length) {
     throw new QuestValidationError(`Rule ${id}: then must be a non-empty array`);
   }
   const then = o.then.map((t, i) => parseFlagEffect(t, questName, `${id}.then[${i}]`));
-  return { id, when, then };
+  const okRaw = o.ok !== undefined ? String(o.ok).trim() : "";
+  return {
+    id,
+    when,
+    then,
+    ...(on !== "always" ? { on } : {}),
+    ...(okRaw ? { ok: okRaw } : {}),
+  };
+}
+
+function parseRuleOn(raw: unknown, label: string): QuestTrigger {
+  if (raw === undefined || raw === null || raw === "") return "always";
+  const on = String(raw);
+  if (on === "always" || on === "use" || on === "input") return on;
+  throw new QuestValidationError(`${label}: on must be always, use, or input`);
+}
+
+function parsePred(raw: unknown, label: string, on: QuestTrigger): Pred {
+  const pred = raw as Pred;
+  assertPredShape(pred, label);
+  const rewritten = rewritePred(pred);
+  assertPredAtomsForOn(rewritten, on, label);
+  return rewritten;
+}
+
+function rewritePred(pred: Pred): Pred {
+  if ("not" in pred) return { not: rewritePred(pred.not) };
+  if ("all" in pred) return { all: pred.all.map(rewritePred) };
+  if ("any" in pred) return { any: pred.any.map(rewritePred) };
+  if ("input" in pred) return { input: normalizeInputPhrase(pred.input) };
+  if ("uses" in pred) return { uses: Number(pred.uses) };
+  return pred;
+}
+
+function assertPredAtomsForOn(pred: Pred, on: QuestTrigger, label: string): void {
+  let hasUses = false;
+  let hasInput = false;
+  walkPredAtoms(pred, (atom) => {
+    if ("uses" in atom) {
+      if (on !== "use") {
+        throw new QuestValidationError(`${label}: uses is only valid on use rules`);
+      }
+      hasUses = true;
+    }
+    if ("input" in atom) {
+      if (on !== "input") {
+        throw new QuestValidationError(`${label}: input is only valid on input rules`);
+      }
+      hasInput = true;
+    }
+  });
+  if (on === "use" && !hasUses) {
+    throw new QuestValidationError(`${label}: use rules must include { uses }`);
+  }
+  if (on === "input" && !hasInput) {
+    throw new QuestValidationError(`${label}: input rules must include { input }`);
+  }
+}
+
+function walkPredAtoms(pred: Pred, visit: (atom: Pred) => void): void {
+  if ("not" in pred) {
+    walkPredAtoms(pred.not, visit);
+    return;
+  }
+  if ("all" in pred) {
+    for (const p of pred.all) walkPredAtoms(p, visit);
+    return;
+  }
+  if ("any" in pred) {
+    for (const p of pred.any) walkPredAtoms(p, visit);
+    return;
+  }
+  visit(pred);
 }
 
 function parseFlagEffect(raw: unknown, questName: string, label: string): FlagEffect {
@@ -172,6 +245,23 @@ function assertPredShape(pred: Pred, label: string): void {
   if ("holds" in pred || "holdsTag" in pred || "hasBadge" in pred || "atScene" in pred || "scenesOwned" in pred) {
     return;
   }
+  if ("uses" in pred) {
+    const id = Number(pred.uses);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new QuestValidationError(`${label}: uses must be a finite artefact id`);
+    }
+    return;
+  }
+  if ("input" in pred) {
+    if (typeof pred.input !== "string") {
+      throw new QuestValidationError(`${label}: input must be a string`);
+    }
+    const normalized = normalizeInputPhrase(pred.input);
+    if (!normalized) {
+      throw new QuestValidationError(`${label}: input must be a non-empty phrase`);
+    }
+    return;
+  }
   throw new QuestValidationError(`${label}: unknown predicate shape`);
 }
 
@@ -249,6 +339,26 @@ export interface EvalResult {
   badges: string[];
   grantedArtefactIds: number[];
   iterations: number;
+  actionMatched: boolean;
+  actionOk?: string;
+}
+
+export const QUEST_ACTION_DONE = "Done.";
+export const QUEST_ACTION_NOTHING = "Nothing happens.";
+
+export function questActionMessage(outcome: { actionMatched: boolean; actionOk?: string }): string {
+  if (!outcome.actionMatched) return QUEST_ACTION_NOTHING;
+  const ok = outcome.actionOk?.trim();
+  return ok || QUEST_ACTION_DONE;
+}
+
+export function ruleTrigger(rule: QuestRule): QuestTrigger {
+  return rule.on ?? "always";
+}
+
+export function ruleRunsOn(rule: QuestRule, trigger: QuestTrigger): boolean {
+  const on = ruleTrigger(rule);
+  return on === "always" || on === trigger;
 }
 
 /**
@@ -262,6 +372,7 @@ export function evaluateQuests(opts: {
   flags: Record<string, FlagValue>;
   badges: string[];
   predContext: Omit<PredContext, "flags" | "badges">;
+  trigger?: QuestTrigger;
 }): EvalResult {
   try {
     return evaluateQuestsUnsafe(opts);
@@ -272,6 +383,7 @@ export function evaluateQuests(opts: {
       badges: [...opts.badges],
       grantedArtefactIds: [],
       iterations: 0,
+      actionMatched: false,
     };
   }
 }
@@ -281,12 +393,16 @@ function evaluateQuestsUnsafe(opts: {
   flags: Record<string, FlagValue>;
   badges: string[];
   predContext: Omit<PredContext, "flags" | "badges">;
+  trigger?: QuestTrigger;
 }): EvalResult {
   let flags = { ...opts.flags };
   let badges = [...opts.badges];
   const badgeSet = () => new Set(badges);
   const grantedArtefactIds: number[] = [];
   const quests = [...opts.quests];
+  const trigger = opts.trigger ?? "always";
+  let actionMatched = false;
+  let actionOk: string | undefined;
 
   let iterations = 0;
   while (iterations < QUEST_EVAL_MAX_ITERATIONS) {
@@ -296,12 +412,20 @@ function evaluateQuestsUnsafe(opts: {
     for (const quest of quests) {
       for (const rule of quest.rules ?? []) {
         try {
+          if (!ruleRunsOn(rule, trigger)) continue;
           const ctx: PredContext = {
             ...opts.predContext,
             flags,
             badges: badgeSet(),
           };
           if (!evaluatePred(rule.when, ctx)) continue;
+          if (ruleTrigger(rule) === trigger && trigger !== "always") {
+            actionMatched = true;
+            if (actionOk === undefined) {
+              const ok = rule.ok?.trim();
+              if (ok) actionOk = ok;
+            }
+          }
           const applied = applyFlagEffects(flags, rule.then ?? []);
           flags = applied.flags;
           passChanges.push(...applied.changes);
@@ -335,7 +459,7 @@ function evaluateQuestsUnsafe(opts: {
     }
   }
 
-  return { flags, badges, grantedArtefactIds, iterations };
+  return { flags, badges, grantedArtefactIds, iterations, actionMatched, actionOk };
 }
 
 export function alchemyGivesIds(recipe: AlchemyRecipe): number[] {

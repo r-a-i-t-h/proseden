@@ -57,6 +57,9 @@ function renderControl(control: Control, id?: string): string {
         "placeholder" in control && control.placeholder
           ? `placeholder="${escapeAttr(control.placeholder)}"`
           : "",
+        "maxlength" in control && control.maxlength !== undefined
+          ? `maxlength="${control.maxlength}"`
+          : "",
       ]
         .filter(Boolean)
         .join(" ");

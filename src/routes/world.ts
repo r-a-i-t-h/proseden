@@ -23,6 +23,8 @@ import { bypassesSceneFlagGate } from "../access/scene-gate.js";
 import { apiError, liveSceneIdForUser, page, sceneBackLink, wantsJson } from "../http.js";
 import { prepareJsonTextarea } from "../json-textarea.js";
 import { triggerQuestEval } from "../logic/trigger.js";
+import { questActionMessage } from "../logic/quests.js";
+import { INPUT_PHRASE_MAX } from "../model/logic.js";
 import {
   artefactVisible,
   exitAllowed,
@@ -32,7 +34,7 @@ import {
   visibleArtefacts,
   visibleExits,
 } from "../logic/world-view.js";
-import { gateFactsFor, parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
+import { gateFactsFor, normalizeInputPhrase, parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
 import { matchAlchemyRecipe, parseAlchemyRecipes, parseQuestFile, QuestValidationError } from "../logic/quests.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import type { InboxMessage, StaffRole } from "../model/types.js";
@@ -203,6 +205,8 @@ worldRoutes.get("/s/:id", (c) => {
   if (user) c.get("locations").noteVisit(user.username, scene.id);
 
   const subscriberCount = world.getSubscribers(id).length;
+  const inputOk = c.req.query("input");
+  const inputErr = c.req.query("input-error");
 
   return page(
     c,
@@ -216,6 +220,9 @@ worldRoutes.get("/s/:id", (c) => {
       accessSummary,
       subscribed: user ? world.isSubscribed(id, user.username) : undefined,
       subscriberCount: user ? subscriberCount : undefined,
+      showInput: Boolean(user),
+      notice: inputOk,
+      noticeError: inputErr,
     }),
     {
       kind: "scene",
@@ -271,6 +278,47 @@ worldRoutes.get("/s/:id/go/:exit", async (c) => {
     await triggerQuestEval(c, user, resolved.sceneId);
   }
   return c.redirect(`${c.get("assetBase")}/s/${resolved.sceneId}?from=${fromId}`);
+});
+
+worldRoutes.post("/s/:id/input", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+
+  const id = Number(c.req.param("id"));
+  const fromHint = parseFromScene(c) ?? liveSceneIdForUser(user, world);
+  const resolved = world.resolveTeleportTarget(id, fromHint, {
+    asOwnerUsername: user.username,
+  });
+  if (resolved.redirected) {
+    return apiError(c, 403, "Entrance to this area is not reachable.");
+  }
+
+  const scene = world.getScene(id);
+  if (!scene) return apiError(c, 404, "Scene not found");
+  if (!canRead(user, scene, world)) {
+    return apiError(c, 403, "This scene is private and you do not have access.");
+  }
+  const facts = gateFactsFor(world, user);
+  if (!bypassesSceneFlagGate(user, scene, world) && !sceneAllowed(scene, facts)) {
+    return apiError(c, 403, scene.whenDenied?.trim() || "You cannot enter here yet.");
+  }
+
+  const body = await readBody(c);
+  const phrase = body.phrase !== undefined ? String(body.phrase) : "";
+  if (phrase.length > INPUT_PHRASE_MAX) {
+    return apiError(c, 400, "That phrase is too long.");
+  }
+  if (!normalizeInputPhrase(phrase)) {
+    return apiError(c, 400, "Phrase required.");
+  }
+
+  c.get("locations").noteVisit(user.username, scene.id);
+  const outcome = await triggerQuestEval(c, user, scene.id, {
+    trigger: "input",
+    inputPhrase: phrase,
+  });
+  return questActionReply(c, `/s/${id}`, "input", "input-error", outcome);
 });
 
 worldRoutes.get("/a/:id", (c) => {
@@ -354,6 +402,8 @@ worldRoutes.get("/a/:id", (c) => {
       detail,
       collected: user ? collected : undefined,
       back,
+      notice: c.req.query("use"),
+      noticeError: c.req.query("use-error"),
     }),
     {
       kind: "artefact",
@@ -703,6 +753,21 @@ function alchemyFail(c: Context, message: string) {
   if (wantsJson(c)) return apiError(c, 400, message);
   return c.redirect(
     `${c.get("assetBase")}/inv?alchemy-error=${encodeURIComponent(message)}`,
+  );
+}
+
+function questActionReply(
+  c: Context,
+  path: string,
+  okQuery: string,
+  errQuery: string,
+  outcome: { actionMatched: boolean; actionOk?: string },
+) {
+  const message = questActionMessage(outcome);
+  if (wantsJson(c)) return c.json({ ok: outcome.actionMatched, message });
+  const q = outcome.actionMatched ? okQuery : errQuery;
+  return c.redirect(
+    `${c.get("assetBase")}${path}?${q}=${encodeURIComponent(message)}`,
   );
 }
 
@@ -2030,6 +2095,23 @@ worldRoutes.post("/a/:id/collect", async (c) => {
 
 worldRoutes.delete("/a/:id/collect", async (c) => dropCollect(c));
 worldRoutes.post("/a/:id/collect/drop", async (c) => dropCollect(c));
+
+worldRoutes.post("/a/:id/use", async (c) => {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = Number(c.req.param("id"));
+  const artefact = world.getArtefact(id);
+  if (!artefact) return apiError(c, 404, "Artefact not found");
+  if (!user.inventory.some((i) => i.artefactId === id)) {
+    return apiError(c, 403, "You are not holding that artefact.");
+  }
+  const outcome = await triggerQuestEval(c, user, user.lastSceneId, {
+    trigger: "use",
+    usesArtefactId: id,
+  });
+  return questActionReply(c, `/a/${id}`, "use", "use-error", outcome);
+});
 
 async function dropCollect(c: Context) {
   const world = c.get("world");

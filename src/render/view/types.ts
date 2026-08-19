@@ -39,6 +39,7 @@ export type Control =
       autocomplete?: string;
       placeholder?: string;
       inputMode?: string;
+      maxlength?: number;
     }
   | {
       type: "number";

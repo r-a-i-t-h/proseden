@@ -62,6 +62,29 @@ describe("scenePageView", () => {
     expect(text).toContain("Invite to view: POST /s/1/view-invites");
   });
 
+  it("shows Input for signed-in readers", () => {
+    const html = toHtml(
+      scenePageView({
+        scene: threshold,
+        exits,
+        artefacts: [],
+        showInput: true,
+      }).body,
+    );
+    expect(html).toContain('id="input-form"');
+    expect(html).toContain('name="phrase"');
+    const text = toText(
+      scenePageView({
+        scene: threshold,
+        exits,
+        artefacts: [],
+        showInput: true,
+      }).body,
+      { basePath: "" },
+    );
+    expect(text).toContain("Input: POST /s/1/input");
+  });
+
   it("prefixes assetBase in text mode", () => {
     const text = toText(
       scenePageView({ scene: threshold, exits, artefacts: [] }).body,
@@ -80,6 +103,16 @@ describe("artefactPageView", () => {
     expect(html).toContain("← Scene 1");
     expect(html).toContain("Mantel Card");
     expect(html).toContain("Collect");
+  });
+
+  it("shows Use next to drop when held", () => {
+    const html = toHtml(
+      artefactPageView({ artefact: mantel, collected: true }).body,
+    );
+    expect(html).toContain('action="a/1/use"');
+    expect(html).toContain("Use");
+    expect(html).toContain("Remove from inventory");
+    expect(html).not.toContain(">Collect<");
   });
 
   it("renders text home line", () => {

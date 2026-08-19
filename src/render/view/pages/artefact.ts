@@ -1,13 +1,16 @@
 import type { ArtefactRecord } from "../../../model/types.js";
 import {
+  box,
   button,
   byline,
   crumb,
   entityTitle,
   form,
+  fragment,
   htmlOnly,
   meta,
   nodes,
+  notice,
   pageView,
   prose,
   rawText,
@@ -31,6 +34,8 @@ export function artefactPageView(opts: {
   collected?: boolean;
   /** Prefer Live-bound scene (inventory/profile style); defaults to home. */
   back?: PageBackLink;
+  notice?: string;
+  noticeError?: string;
 }): PageView {
   const { artefact, detail } = opts;
   const title = artefact.title ?? `Artefact ${artefact.id}`;
@@ -53,15 +58,29 @@ export function artefactPageView(opts: {
     opts.collected === undefined
       ? undefined
       : opts.collected
-        ? htmlOnly(
-            form(
-              {
-                method: "post",
-                action: `a/${artefact.id}/collect/drop`,
-                class: "reader-action",
-              },
-              button("Remove from inventory"),
+        ? fragment(
+            htmlOnly(
+              box(
+                "reader-action",
+                form(
+                  {
+                    method: "post",
+                    action: `a/${artefact.id}/use`,
+                    class: "reader-action",
+                  },
+                  button("Use"),
+                ),
+                form(
+                  {
+                    method: "post",
+                    action: `a/${artefact.id}/collect/drop`,
+                    class: "reader-action",
+                  },
+                  button("Remove from inventory"),
+                ),
+              ),
             ),
+            textOnly(rawText([`Use: POST {base}/a/${artefact.id}/use`])),
           )
         : htmlOnly(
             form(
@@ -74,6 +93,13 @@ export function artefactPageView(opts: {
             ),
           );
 
+  const flash =
+    opts.noticeError !== undefined
+      ? fragment(htmlOnly(notice(opts.noticeError, "error")), textOnly(rawText([opts.noticeError, ""])))
+      : opts.notice !== undefined
+        ? fragment(htmlOnly(notice(opts.notice)), textOnly(rawText([opts.notice, ""])))
+        : undefined;
+
   const textNav: string[] = [];
   if (opts.back) {
     textNav.push(`${back.label}  {base}/${back.href.replace(/^\.\//, "")}`);
@@ -84,6 +110,7 @@ export function artefactPageView(opts: {
     title,
     nodes(
       htmlOnly(crumb(back.href, back.label, back.history)),
+      flash,
       entityTitle("artefact", artefact.id, artefact.title),
       byline(artefact.owner),
       textOnly(rawText(textNav)),

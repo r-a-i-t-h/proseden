@@ -120,6 +120,14 @@ export interface PredContext {
   artefactTags: ReadonlyMap<number, readonly string[]>;
   atSceneId?: number;
   scenesOwned: number;
+  usesArtefactId?: number;
+  /** Already normalized (`normalizeInputPhrase`). */
+  inputPhrase?: string;
+}
+
+/** Trim, NFKC, collapse whitespace, en-US lower case. */
+export function normalizeInputPhrase(raw: string): string {
+  return raw.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
 }
 
 export function evaluatePred(pred: Pred, ctx: PredContext): boolean {
@@ -158,6 +166,11 @@ function evaluatePredUnsafe(pred: Pred, ctx: PredContext): boolean {
   }
   if ("hasBadge" in pred) return ctx.badges.has(pred.hasBadge);
   if ("atScene" in pred) return ctx.atSceneId === pred.atScene;
+  if ("uses" in pred) return ctx.usesArtefactId === pred.uses;
+  if ("input" in pred) {
+    if (ctx.inputPhrase === undefined) return false;
+    return ctx.inputPhrase === normalizeInputPhrase(pred.input);
+  }
   if ("scenesOwned" in pred) {
     const gte = pred.scenesOwned?.gte;
     if (typeof gte !== "number") return false;

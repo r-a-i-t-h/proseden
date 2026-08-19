@@ -95,6 +95,8 @@ type Pred =
   | { hasBadge: string }
   | { atScene: number }
   | { scenesOwned: { gte: number } }  // formal facts as added
+  | { uses: number }            // Use eval only
+  | { input: string }           // Input eval only
   | { not: Pred }
   | { all: Pred[] }
   | { any: Pred[] };
@@ -104,8 +106,8 @@ Boolean `all` / `any` / `not` nest freely. Atoms do not grow arithmetic or
 generic comparisons; a numeric fact carries its own fields (`scenesOwned.gte`).
 
 **World gates** use FlagRef condition strings on world objects (see World
-gates below), not Pred trees. `holdsTag` / `atScene` / `scenesOwned` stay
-quest-only.
+gates below), not Pred trees. `holdsTag` / `atScene` / `scenesOwned` /
+`uses` / `input` stay quest-only.
 
 New puzzle support is a new Pred atom and/or eval trigger, documented in
 [QUESTS.md](QUESTS.md) when added. Authors do not get a DSL to invent facts.
@@ -150,7 +152,9 @@ interface QuestFile {
 
 interface QuestRule {
   id: string;
-  when: Pred;                // rich
+  on?: "always" | "use" | "input";  // default always
+  ok?: string;                      // Use/Input notice copy
+  when: Pred;                       // rich
   then: Array<{ setFlag: string; to?: boolean } | { clearFlag: string }>;
 }
 
@@ -166,11 +170,12 @@ type KnockOn =
 Event-driven (no timer). Per authenticated user:
 
 1. Login / session established
-2. Arrive (successful go / teleport / resume)
-3. Collect
-4. Uncollect
-5. Successful alchemy combine
-6. Badge drop
+2. Successful go (`GET /s/:id/go/:exit`)
+3. Collect / uncollect
+4. Successful alchemy combine
+5. Badge drop
+6. **Use** (`POST /a/:id/use`) — Always rules plus `on: "use"`
+7. **Input** (`POST /s/:id/input`) — Always rules plus `on: "input"`
 
 After any flag change: run knock-ons, then evaluate again until quiet or max
 iterations (16). Manager edits to quest/alchemy JSON are **lazy** — users
@@ -320,13 +325,12 @@ Migration: missing files/fields = behaviour as before this feature.
 
 ## Puzzle catalog
 
-Need first, not capability first. Do not add visit counts, guess-input, or
-counters until a concrete seed (or questor) puzzle needs them. Inventory is
-collect-as-link (no quantities). Strings have no natural source until a
-dedicated guess POST exists.
+Need first, not capability first. Do not add visit counts or counters until a
+concrete seed (or questor) puzzle needs them. Inventory is collect-as-link
+(no quantities).
 
 **Already expressible** (HTTP verbs: go, collect/uncollect, alchemy combine,
-examine details):
+examine details, Use, Input):
 
 - **Key and door** — live `holds:12` on exit/scene, or sticky `setFlag` if
   unlock should survive drop
@@ -334,6 +338,10 @@ examine details):
 - **Threshold mark** — `scenesOwned` → flag → badge (seed `builders`)
 - **Hidden until** — `when` + `hidden` on exits/artefacts; `detailWhen` on details
 - **Being there with an item** — `{ "all": [{ "atScene": N }, { "holds": id }] }` → flag
+- **Use an artefact** — `on: "use"` + `{ "uses": id }` (and other preds); button
+  next to Drop; does not consume the artefact
+- **Riddle / password** — `on: "input"` + `{ "input": "phrase" }` on a scene;
+  private POST, not Live chat
 - **Ordered rooms / levers** — a chain of boolean flags (`sawA`, `sawAthenB`),
   not a stage integer
 - **Badge-gated prose** — `badge:quest.local`
@@ -341,10 +349,8 @@ examine details):
 **Would need a named primitive** (not implemented until a puzzle wants it):
 
 - **Visit N times** — engine-maintained fact + something like
-  `{ "visitCount": { "scene": N, "gte": 3 } }` on go — not a quest-authored
+  `{ "visitCount": { "scene": N, "gte": 3 } }` — not a quest-authored
   counter variable
-- **Riddle / password** — a dedicated guess form (new trigger), compare to a
-  constant in the quest; the guess is input, not a stored string variable
 - **Qualities / reputation** — usually milestone flags or artefacts, not a
   mutable number; only add a counter fact if a real puzzle cannot be told
   that way

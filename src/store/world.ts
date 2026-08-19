@@ -2,7 +2,7 @@ import { cp, mkdir, readdir, access, rename, rm, unlink } from "node:fs/promises
 import { join } from "node:path";
 import { canManage, canRead, type AccessWorld } from "../access/permissions.js";
 import { normalizeDenies, normalizeGrants, stripLegacyInvites } from "../access/acl.js";
-import type { AlchemyRecipe, FlagValue, QuestFile } from "../model/logic.js";
+import type { AlchemyRecipe, FlagValue, QuestFile, QuestTrigger } from "../model/logic.js";
 import {
   alchemyGivesIds,
   alchemyRecipesForDisk,
@@ -15,6 +15,7 @@ import {
   QuestValidationError,
   sanitizeUserFlags,
 } from "../logic/quests.js";
+import { normalizeInputPhrase } from "../logic/pred.js";
 import type {
   ArtefactMeta,
   ArtefactRecord,
@@ -658,30 +659,60 @@ export class WorldStore implements AccessWorld {
     await this.loadAlchemyFiles();
   }
 
-  predContextFor(username: string, atSceneId?: number) {
+  predContextFor(
+    username: string,
+    atSceneId?: number,
+    extra?: { usesArtefactId?: number; inputPhrase?: string },
+  ) {
     const user = this.getUser(username);
     const inventoryIds = new Set((user?.inventory ?? []).map((i) => i.artefactId));
     const artefactTags = new Map<number, readonly string[]>();
     for (const a of this.artefacts.values()) artefactTags.set(a.id, a.tags);
-    return { inventoryIds, artefactTags, atSceneId, scenesOwned: this.scenesOwned(username) };
+    return {
+      inventoryIds,
+      artefactTags,
+      atSceneId,
+      scenesOwned: this.scenesOwned(username),
+      usesArtefactId: extra?.usesArtefactId,
+      inputPhrase: extra?.inputPhrase,
+    };
   }
 
   /**
    * Run quest evaluation for a user (cascade). Persists flags/badges and grants artefacts.
    * Newly earned badges get an inbox notice. Never throws to callers — faults are logged.
    */
-  async evaluateQuestsForUser(username: string, atSceneId?: number): Promise<UserRecord | undefined> {
+  async evaluateQuestsForUser(
+    username: string,
+    atSceneId?: number,
+    evalOpts?: {
+      trigger?: QuestTrigger;
+      usesArtefactId?: number;
+      inputPhrase?: string;
+    },
+  ): Promise<
+    { user: UserRecord; actionMatched: boolean; actionOk?: string } | undefined
+  > {
     const user = this.getUser(username);
     if (!user) return undefined;
     try {
       const sceneId = atSceneId ?? user.lastSceneId;
       const priorBadges = this.getUserBadges(username);
       const priorIds = priorBadges.map((b) => b.badge);
+      const trigger = evalOpts?.trigger ?? "always";
+      const inputPhrase =
+        evalOpts?.inputPhrase !== undefined
+          ? normalizeInputPhrase(evalOpts.inputPhrase)
+          : undefined;
       const result = evaluateQuests({
         quests: this.quests,
         flags: this.getUserFlags(username),
         badges: priorIds,
-        predContext: this.predContextFor(username, sceneId),
+        trigger,
+        predContext: this.predContextFor(username, sceneId, {
+          usesArtefactId: evalOpts?.usesArtefactId,
+          inputPhrase,
+        }),
       });
       await this.saveUserFlags(username, result.flags);
       await this.saveUserBadges(
@@ -707,10 +738,15 @@ export class WorldStore implements AccessWorld {
           logQuestFault(`giveArtefact ${artefactId} to ${username}`, err);
         }
       }
-      return this.getUser(username) ?? updated;
+      const next = this.getUser(username) ?? updated;
+      return {
+        user: next,
+        actionMatched: result.actionMatched,
+        actionOk: result.actionOk,
+      };
     } catch (err) {
       logQuestFault(`evaluateQuestsForUser ${username}`, err);
-      return user;
+      return { user, actionMatched: false };
     }
   }
 

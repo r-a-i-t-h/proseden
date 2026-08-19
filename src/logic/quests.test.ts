@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { evaluateFlagPred, evaluateFlagRef, evaluatePred, gateFacts, isFlagOnlyPred } from "./pred.js";
+import { evaluateFlagPred, evaluateFlagRef, evaluatePred, gateFacts, isFlagOnlyPred, normalizeInputPhrase } from "./pred.js";
 import {
   applyFlagEffects,
   evaluateQuests,
   matchAlchemyRecipe,
   parseQuestFile,
+  questActionMessage,
   sanitizeUserFlags,
 } from "./quests.js";
 
@@ -91,6 +92,122 @@ describe("quest eval", () => {
     });
     expect(sanitizeUserFlags(null)).toEqual({});
     expect(sanitizeUserFlags(["nope"])).toEqual({});
+  });
+
+  it("rejects use/input atoms on always rules and missing atoms", () => {
+    expect(() =>
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "x", when: { uses: 12 }, then: [{ setFlag: "demo.x" }] }],
+      }),
+    ).toThrow(/uses is only valid on use rules/);
+    expect(() =>
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "x", when: { input: "hi" }, then: [{ setFlag: "demo.x" }] }],
+      }),
+    ).toThrow(/input is only valid on input rules/);
+    expect(() =>
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "x", on: "use", when: { atScene: 5 }, then: [{ setFlag: "demo.x" }] }],
+      }),
+    ).toThrow(/must include \{ uses \}/);
+    expect(() =>
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "x", on: "input", when: { atScene: 5 }, then: [{ setFlag: "demo.x" }] }],
+      }),
+    ).toThrow(/must include \{ input \}/);
+  });
+
+  it("normalizes input phrases", () => {
+    expect(normalizeInputPhrase("  Open   SESAME ")).toBe("open sesame");
+    const quest = parseQuestFile({
+      name: "demo",
+      rules: [
+        {
+          id: "r",
+          on: "input",
+          when: { input: "  Open   SESAME " },
+          then: [{ setFlag: "demo.ok" }],
+        },
+      ],
+    });
+    expect(quest.rules[0]?.when).toEqual({ input: "open sesame" });
+  });
+
+  it("runs use/input rules only on their trigger", () => {
+    const quest = parseQuestFile({
+      name: "demo",
+      rules: [
+        { id: "always", when: { holds: 1 }, then: [{ setFlag: "demo.held" }] },
+        {
+          id: "use-key",
+          on: "use",
+          ok: "The lock yields.",
+          when: { all: [{ uses: 12 }, { atScene: 5 }] },
+          then: [{ setFlag: "demo.used" }],
+        },
+        {
+          id: "say",
+          on: "input",
+          ok: "The wall slides.",
+          when: { input: "open sesame" },
+          then: [{ setFlag: "demo.spoke" }],
+        },
+      ],
+    });
+    const ctx = {
+      inventoryIds: new Set([1, 12]),
+      artefactTags: new Map<number, readonly string[]>(),
+      atSceneId: 5,
+      scenesOwned: 0,
+    };
+    const onCollect = evaluateQuests({
+      quests: [quest],
+      flags: {},
+      badges: [],
+      predContext: ctx,
+    });
+    expect(onCollect.flags["demo.held"]).toBe(true);
+    expect(onCollect.flags["demo.used"]).toBeUndefined();
+    expect(onCollect.flags["demo.spoke"]).toBeUndefined();
+    expect(onCollect.actionMatched).toBe(false);
+
+    const onUse = evaluateQuests({
+      quests: [quest],
+      flags: {},
+      badges: [],
+      trigger: "use",
+      predContext: { ...ctx, usesArtefactId: 12 },
+    });
+    expect(onUse.flags["demo.held"]).toBe(true);
+    expect(onUse.flags["demo.used"]).toBe(true);
+    expect(onUse.flags["demo.spoke"]).toBeUndefined();
+    expect(onUse.actionMatched).toBe(true);
+    expect(questActionMessage(onUse)).toBe("The lock yields.");
+
+    const onUseWrongItem = evaluateQuests({
+      quests: [quest],
+      flags: {},
+      badges: [],
+      trigger: "use",
+      predContext: { ...ctx, usesArtefactId: 1 },
+    });
+    expect(onUseWrongItem.flags["demo.used"]).toBeUndefined();
+    expect(questActionMessage(onUseWrongItem)).toBe("Nothing happens.");
+
+    const onInput = evaluateQuests({
+      quests: [quest],
+      flags: {},
+      badges: [],
+      trigger: "input",
+      predContext: { ...ctx, inputPhrase: normalizeInputPhrase("OPEN sesame") },
+    });
+    expect(onInput.flags["demo.spoke"]).toBe(true);
+    expect(onInput.flags["demo.used"]).toBeUndefined();
+    expect(questActionMessage(onInput)).toBe("The wall slides.");
   });
 
   it("cascades flag rules and grants badge once per transition", () => {

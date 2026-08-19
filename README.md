@@ -138,8 +138,10 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `GET` | `/a/:id/history` … | Same for artefacts |
 | `POST` | `/a` | Create artefact (auth, edit rights on home) |
 | `PUT`/`POST` | `/a/:id` | Update artefact |
+| `POST` | `/s/:id/input` | Phrase box (auth); private, not Live chat |
 | `POST` | `/a/:id/collect` | Collect (inventory link) |
 | `DELETE` | `/a/:id/collect` | Drop from inventory |
+| `POST` | `/a/:id/use` | Use a held artefact (auth; does not drop) |
 
 ## Storage
 

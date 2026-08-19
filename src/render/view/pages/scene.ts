@@ -3,6 +3,7 @@ import type {
   ExitRecord,
   SceneRecord,
 } from "../../../model/types.js";
+import { INPUT_PHRASE_MAX } from "../../../model/logic.js";
 import { entityKindLabel, entityPath } from "../../entity.js";
 import {
   box,
@@ -18,6 +19,7 @@ import {
   meta,
   muted,
   nodes,
+  notice,
   pageView,
   prose,
   rawText,
@@ -115,6 +117,10 @@ export function scenePageView(opts: {
   subscribed?: boolean;
   /** Subscriber count shown beside the subscribe control (likes-style). */
   subscriberCount?: number;
+  /** Signed-in readers get a private phrase box (not Live chat). */
+  showInput?: boolean;
+  notice?: string;
+  noticeError?: string;
 }): PageView {
   const { scene, exits, artefacts, detail, isEntrance } = opts;
   const title = scene.title ?? `Scene ${scene.id}`;
@@ -198,9 +204,40 @@ export function scenePageView(opts: {
     textRecipes.push(`Unsubscribe: POST {base}/s/${scene.id}/subscribe/drop`);
   }
 
+  if (opts.showInput) {
+    textRecipes.push(`Input: POST {base}/s/${scene.id}/input  phrase=…`);
+  }
+
+  const flash =
+    opts.noticeError !== undefined
+      ? fragment(htmlOnly(notice(opts.noticeError, "error")), textOnly(rawText([opts.noticeError, ""])))
+      : opts.notice !== undefined
+        ? fragment(htmlOnly(notice(opts.notice)), textOnly(rawText([opts.notice, ""])))
+        : undefined;
+
+  const inputForm = opts.showInput
+    ? form(
+        {
+          method: "post",
+          action: `s/${scene.id}/input`,
+          class: "action-form",
+          id: "input-form",
+        },
+        field("Say or guess:", {
+          type: "text",
+          name: "phrase",
+          autocomplete: "off",
+          required: true,
+          maxlength: INPUT_PHRASE_MAX,
+        }),
+        button("Input"),
+      )
+    : undefined;
+
   return pageView(
     title,
     nodes(
+      flash,
       entityTitle("scene", scene.id, scene.title),
       byline(scene.owner),
       htmlOnly(meta(...badges)),
@@ -252,6 +289,7 @@ export function scenePageView(opts: {
             }),
             button("Invite"),
           ),
+          ...(inputForm ? [inputForm] : []),
         ]),
         script(SCENE_ACTION_SCRIPT),
       ),

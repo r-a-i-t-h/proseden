@@ -10,6 +10,8 @@ export type FlagValue = boolean;
  */
 export type FlagRef = string;
 
+export type QuestTrigger = "always" | "use" | "input";
+
 export type Pred =
   | { flag: string; is?: FlagValue }
   | { holds: number }
@@ -17,6 +19,8 @@ export type Pred =
   | { hasBadge: string }
   | { atScene: number }
   | { scenesOwned: { gte: number } }
+  | { uses: number }
+  | { input: string }
   | { not: Pred }
   | { all: Pred[] }
   | { any: Pred[] };
@@ -31,6 +35,10 @@ export interface QuestRule {
   id: string;
   when: Pred;
   then: FlagEffect[];
+  /** Default `always`. Omit on disk when always. */
+  on?: QuestTrigger;
+  /** Reader prose for Use/Input notices; ignored for Always. */
+  ok?: string;
 }
 
 export interface BadgeDef {
@@ -66,3 +74,4 @@ export interface AlchemyRecipe {
 }
 
 export const QUEST_EVAL_MAX_ITERATIONS = 16;
+export const INPUT_PHRASE_MAX = 200;

@@ -43,6 +43,20 @@ export const QUEST_EXAMPLE = `{
       "id": "found-key",
       "when": { "holds": 12 },
       "then": [{ "setFlag": "YOUR_USERNAME.hasKey", "to": true }]
+    },
+    {
+      "id": "use-key",
+      "on": "use",
+      "ok": "The lock yields.",
+      "when": { "all": [{ "uses": 12 }, { "atScene": 5 }] },
+      "then": [{ "setFlag": "YOUR_USERNAME.unlocked", "to": true }]
+    },
+    {
+      "id": "riddle",
+      "on": "input",
+      "ok": "The wall slides aside.",
+      "when": { "all": [{ "input": "open sesame" }, { "atScene": 5 }] },
+      "then": [{ "setFlag": "YOUR_USERNAME.spoke", "to": true }]
     }
   ],
   "onFlag": {
@@ -60,4 +74,4 @@ export const QUEST_EXAMPLE = `{
 }`;
 
 export const QUEST_HELP =
-  "One quest object. name must be your username (the write namespace for flags and badges). Manager quests are evaluated first; invalid or unauthorized personal quests are skipped at load. giveArtefact only for artefacts homed in scenes you own or manage. For an official named quest, ask a manager to register it under Data → Quests.";
+  "One quest object. name must be your username (the write namespace for flags and badges). Optional on is always (default), use, or input. use rules need { uses: id }; input rules need { input: \"phrase\" }. Manager quests are evaluated first; invalid or unauthorized personal quests are skipped at load. giveArtefact only for artefacts homed in scenes you own or manage. For an official named quest, ask a manager to register it under Data → Quests.";

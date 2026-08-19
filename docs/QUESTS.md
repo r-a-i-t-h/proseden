@@ -100,6 +100,8 @@ or “complete” it. Empty `rules` is valid (used to reserve a prefix).
 | `id` | no | string | Stable id for logs. Default `rule-<index>` (0-based). |
 | `when` | yes | [predicate](#predicates) | Rich condition. If true, `then` runs. |
 | `then` | yes | non-empty array | Only [`setFlag` / `clearFlag`](#flag-effects). |
+| `on` | no | `"always"` \| `"use"` \| `"input"` | When this rule is eligible. Default `always` (omit on disk). |
+| `ok` | no | string | Reader prose for Use/Input notices. Ignored for Always. |
 
 `grantBadge` and `giveArtefact` are **not** allowed in `then`. Those are
 knock-ons on flag **transitions** (`onFlag`).
@@ -127,6 +129,8 @@ are treated as false / skipped and logged.
 | `{ "hasBadge": "demo.winner" }` | Reader’s badge list includes that id. |
 | `{ "atScene": 5 }` | Evaluation’s current scene id is `5`. |
 | `{ "scenesOwned": { "gte": 5 } }` | Count of scenes with `owner` equal to this username is ≥ `gte`. |
+| `{ "uses": 12 }` | This eval is a Use of artefact `12`. Only legal in `on: "use"` rules. |
+| `{ "input": "open sesame" }` | Submitted phrase matches after normalize. Only legal in `on: "input"` rules. |
 
 `scenesOwned.gte` must be a number or the atom is false. Scene
 create/delete is **not** an eval trigger; a threshold rule catches up on
@@ -134,6 +138,15 @@ the next [trigger](#evaluation-triggers).
 
 `atScene` uses the scene id passed into that eval (see triggers). Visiting
 `GET /s/:id` (teleport-by-URL) does **not** evaluate quests.
+
+`{ "uses" }` and `{ "input" }` are rejected on Always rules (so
+`{ "not": { "uses": 12 } }` cannot become a tautology). `use` rules must
+contain a `uses` atom; `input` rules must contain an `input` atom.
+
+Input matching: trim, Unicode NFKC, collapse internal whitespace to one
+space, then `toLocaleLowerCase("en-US")`. The JSON literal is normalized
+the same way at parse. Max raw POST length is 200. Live chat is not a
+quest trigger.
 
 ### Combinators
 
@@ -269,25 +282,32 @@ A missing `grantTime` on disk displays as **unknown**.
 
 Event-driven, per authenticated user. No timer.
 
-| Event | `atScene` id used |
-|---|---|
-| Register / login | Resume scene (`lastSceneId` if still readable) |
-| Successful **go** (`GET /s/:id/go/:exit`) | Destination after entrance-group resolve |
-| Collect | Artefact’s home scene |
-| Uncollect | `lastSceneId` |
-| Successful alchemy combine | `lastSceneId` |
-| Badge drop on profile | `lastSceneId` |
+| Event | `atScene` id used | Rules |
+|---|---|---|
+| Register / login | Resume scene (`lastSceneId` if still readable) | Always |
+| Successful **go** (`GET /s/:id/go/:exit`) | Destination after entrance-group resolve | Always |
+| Collect | Artefact’s home scene | Always |
+| Uncollect | `lastSceneId` | Always |
+| Successful alchemy combine | `lastSceneId` | Always |
+| Badge drop on profile | `lastSceneId` | Always |
+| **Use** (`POST /a/:id/use`) | `lastSceneId` | Always + `on: "use"` |
+| **Input** (`POST /s/:id/input`) | That scene (after `noteVisit`) | Always + `on: "input"` |
+
+Use requires the artefact to be held; it does not uncollect. Input uses the
+same standing checks as a successful scene GET (read, flag gate, entrance
+group). A matching Use/Input `when` (even if `then` is a no-op) shows that
+rule’s `ok` or **Done.**; if no Use/Input rule matched, **Nothing happens.**
+Always side effects (e.g. builders) still run and do not change that notice.
 
 Not triggers: anonymous views, heartbeats, `GET /s/:id` teleport, scene
-create/delete, manager JSON edits. Edits are **lazy** — each reader
+create/delete, manager JSON edits, Live chat. Edits are **lazy** — each reader
 catches up on their next trigger.
 
 ### Cascade
 
 1. Sort loaded quests by `name` (`localeCompare`).
 2. Repeat up to **16** passes:
-   - For each quest, for each rule in file order: if `when` holds, apply
-     `then`. Later rules in the same pass see updated flags.
+   - For each quest, for each rule in file order: skip unless `on` is omitted/`always` or equals this eval’s trigger; if `when` holds, apply `then`. Later rules in the same pass see updated flags.
    - If no flag values changed, stop.
    - For each change, look up `onFlag` on the quest whose `name` is the
      first dotted segment of the flag id (`demo.has` → quest `demo`). Run
@@ -316,6 +336,9 @@ other user actions. A bad rule is skipped; other rules still run.
 - `badges` not an array, or an entry not an object / missing namespaced `id`
 - `when` not an object, `all`/`any` not arrays, or an unrecognised predicate key
 - `{ "flag": …, "is": … }` where `is` is present and not a boolean
+- `on` not `always` / `use` / `input`
+- `uses` / `input` atoms on the wrong `on`, or a use/input rule missing its atom
+- `{ "uses": … }` not a finite artefact id, or `{ "input": … }` empty after normalize
 
 Predicate **atom** fields other than `flag.is` are not type-checked beyond
 shape (`"holds" in object`, etc.). A saved `{ "holds": "12" }` will not
@@ -426,6 +449,34 @@ again and `onTrue` may fire once more.
 One collect of artefact `1` can set `demo.has`, then `demo.done` in a
 later pass (or later in the same pass if `b` follows `a`), then grant
 the badge when `demo.done` changes to true.
+
+### Use and Input
+
+```json
+{
+  "name": "cellar",
+  "rules": [
+    {
+      "id": "key",
+      "on": "use",
+      "ok": "The lock yields.",
+      "when": { "all": [{ "uses": 12 }, { "atScene": 5 }] },
+      "then": [{ "setFlag": "cellar.unlocked" }]
+    },
+    {
+      "id": "riddle",
+      "on": "input",
+      "ok": "The wall slides aside.",
+      "when": { "all": [{ "input": "open sesame" }, { "atScene": 5 }] },
+      "then": [{ "setFlag": "cellar.spoke" }]
+    }
+  ]
+}
+```
+
+Use fires only on `POST /a/12/use` while held. Input fires on
+`POST /s/5/input`. Wrong phrase or wrong room is **Nothing happens.** —
+not a hint about which pred failed. Live chat does not match Input rules.
 
 ---
 
