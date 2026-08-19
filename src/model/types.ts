@@ -28,6 +28,12 @@ export interface UserBadge {
   grantTime?: string;
 }
 
+/** Derived, memory-only profile numbers. Absent key = not evaluated yet (not zero). */
+export interface UserCache {
+  /** Owner-only scene count (`Scene.owner === username`). */
+  scenesOwned?: number;
+}
+
 export interface UserRecord {
   username: string;
   passwordHash: string;
@@ -46,6 +52,8 @@ export interface UserRecord {
   lastSceneId?: number;
   /** ISO timestamp of last location note / presence flush. */
   lastSeenAt?: string;
+  /** Derived, memory-only. Never persist. */
+  cache?: UserCache;
 }
 
 export interface SceneMeta {

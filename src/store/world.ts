@@ -38,6 +38,7 @@ import type {
   StaffFile,
   StaffRole,
   UserBadge,
+  UserCache,
   UserRecord,
 } from "../model/types.js";
 import type { FlagRef } from "../model/logic.js";
@@ -304,18 +305,64 @@ export class WorldStore implements AccessWorld {
     return this.users.get(username);
   }
 
+  /** In-memory cache bag on the user; created empty on first access. */
+  private userCache(username: string): UserCache | undefined {
+    const user = this.users.get(username);
+    if (!user) return undefined;
+    if (!user.cache) user.cache = {};
+    return user.cache;
+  }
+
+  private cachedNumber(
+    username: string,
+    key: keyof UserCache,
+    compute: () => number,
+  ): number {
+    const bag = this.userCache(username);
+    if (!bag) return compute();
+    const cur = bag[key];
+    if (typeof cur === "number") return cur;
+    const n = compute();
+    bag[key] = n;
+    return n;
+  }
+
+  private bumpCachedNumber(username: string, key: keyof UserCache, delta: number): void {
+    const bag = this.users.get(username)?.cache;
+    const cur = bag?.[key];
+    if (!bag || typeof cur !== "number") return;
+    bag[key] = cur + delta;
+  }
+
+  /** Owner-only scene count. Fills `user.cache.scenesOwned` on first get. */
+  scenesOwned(username: string): number {
+    return this.cachedNumber(username, "scenesOwned", () => {
+      let n = 0;
+      for (const s of this.scenes.values()) {
+        if (s.owner === username) n += 1;
+      }
+      return n;
+    });
+  }
+
   async saveMeta(): Promise<void> {
     await writeJsonAtomic(join(this.dataDir, "meta.json"), this.meta);
   }
 
   async saveUser(user: UserRecord): Promise<void> {
+    const { cache: incomingCache, ...rest } = user;
+    const existing = this.users.get(user.username);
     const toSave: UserRecord = {
-      ...user,
-      description: user.description ?? "",
-      details: user.details ?? {},
+      ...rest,
+      description: rest.description ?? "",
+      details: rest.details ?? {},
     };
+    const nextCache = incomingCache ?? existing?.cache;
+    if (nextCache) toSave.cache = nextCache;
     this.users.set(toSave.username, toSave);
-    await writeJsonAtomic(join(this.dataDir, "users", `${toSave.username}.json`), toSave);
+    const onDisk: UserRecord = { ...toSave };
+    delete onDisk.cache;
+    await writeJsonAtomic(join(this.dataDir, "users", `${toSave.username}.json`), onDisk);
   }
 
   getUserFlags(username: string): Record<string, FlagValue> {
@@ -615,11 +662,7 @@ export class WorldStore implements AccessWorld {
     const inventoryIds = new Set((user?.inventory ?? []).map((i) => i.artefactId));
     const artefactTags = new Map<number, readonly string[]>();
     for (const a of this.artefacts.values()) artefactTags.set(a.id, a.tags);
-    let scenesOwned = 0;
-    for (const s of this.scenes.values()) {
-      if (s.owner === username) scenesOwned += 1;
-    }
-    return { inventoryIds, artefactTags, atSceneId, scenesOwned };
+    return { inventoryIds, artefactTags, atSceneId, scenesOwned: this.scenesOwned(username) };
   }
 
   /**
@@ -685,7 +728,14 @@ export class WorldStore implements AccessWorld {
   }
 
   async saveScene(scene: SceneRecord): Promise<void> {
+    const prev = this.scenes.get(scene.id);
     this.scenes.set(scene.id, scene);
+    if (!prev) {
+      this.bumpCachedNumber(scene.owner, "scenesOwned", 1);
+    } else if (prev.owner !== scene.owner) {
+      this.bumpCachedNumber(prev.owner, "scenesOwned", -1);
+      this.bumpCachedNumber(scene.owner, "scenesOwned", 1);
+    }
     const { body, details, ...meta } = scene;
     const clean = stripLegacyInvites(meta);
     const raw = serializeProseDocument(clean, body, details);
@@ -1171,6 +1221,7 @@ export class WorldStore implements AccessWorld {
     const groupId = scene.groupId;
     const egId = scene.entranceGroupId;
     this.scenes.delete(id);
+    this.bumpCachedNumber(scene.owner, "scenesOwned", -1);
     this.exits.delete(id);
     this.subscriptions.delete(id);
 
@@ -1934,6 +1985,7 @@ function normalizeMeta(raw: Record<string, unknown>): MetaFile {
   return meta;
 }
 
+/** Persistable user fields only. Disk `cache` (if present) is ignored. */
 function normalizeUser(raw: Record<string, unknown>): UserRecord {
   const lastSceneId = Number(raw.lastSceneId);
   return {

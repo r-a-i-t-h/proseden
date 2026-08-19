@@ -1102,7 +1102,7 @@ worldRoutes.get("/u/:username", (c) => {
   const description = target.description ?? "";
   const details = target.details ?? {};
   const detail = queryDetailName(c);
-  const ownedScenes = world.listScenesOwnedBy(target.username).length;
+  const scenesOwned = world.scenesOwned(target.username);
   const ownedArtefacts = world.listArtefactsOwnedBy(target.username).length;
   const lastSeenAt = target.lastSeenAt;
   const badges = world.getUserBadges(target.username).map((b) => ({
@@ -1114,7 +1114,7 @@ worldRoutes.get("/u/:username", (c) => {
     username: target.username,
     description,
     details,
-    ownedScenes,
+    cache: { scenesOwned },
     ownedArtefacts,
     badges,
     ...(lastSeenAt ? { lastSeenAt } : {}),
@@ -1142,7 +1142,7 @@ worldRoutes.get("/u/:username", (c) => {
       description,
       details,
       detail,
-      ownedScenes,
+      ownedScenes: scenesOwned,
       ownedArtefacts,
       lastSeenAt,
       badges,
@@ -1153,7 +1153,7 @@ worldRoutes.get("/u/:username", (c) => {
       description,
       details,
       detail,
-      ownedScenes,
+      ownedScenes: scenesOwned,
       ownedArtefacts,
       lastSeenAt,
       badges,

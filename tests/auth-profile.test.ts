@@ -399,7 +399,7 @@ describe("profile and password change", () => {
       username: "alice",
       description: "Soft-spoken.",
       details: { coat: "Patched at the elbow." },
-      ownedScenes: 1,
+      cache: { scenesOwned: 1 },
       ownedArtefacts: 1,
       badges: [],
       lastSeenAt,
