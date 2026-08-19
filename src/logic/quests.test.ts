@@ -5,11 +5,12 @@ import {
   evaluateQuests,
   matchAlchemyRecipe,
   parseQuestFile,
+  sanitizeUserFlags,
 } from "./quests.js";
 
 describe("pred", () => {
   const base = {
-    flags: { "q.a": true } as Record<string, boolean | number | string>,
+    flags: { "q.a": true },
     badges: new Set<string>(["q.badge"]),
     inventoryIds: new Set([1, 2]),
     artefactTags: new Map<number, readonly string[]>([[1, ["key"]], [2, ["orb"]]]),
@@ -57,6 +58,39 @@ describe("quest eval", () => {
         rules: [{ id: "x", when: { holds: 1 }, then: [{ grantBadge: "demo.x" }] }],
       }),
     ).toThrow(/setFlag\/clearFlag/);
+  });
+
+  it("rejects numeric or string setFlag to", () => {
+    expect(() =>
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "x", when: { holds: 1 }, then: [{ setFlag: "demo.x", to: 2 }] }],
+      }),
+    ).toThrow(/setFlag to must be a boolean/);
+    expect(() =>
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "x", when: { holds: 1 }, then: [{ setFlag: "demo.x", to: "calm" }] }],
+      }),
+    ).toThrow(/setFlag to must be a boolean/);
+  });
+
+  it("rejects non-boolean flag is", () => {
+    expect(() =>
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "x", when: { flag: "demo.x", is: "calm" }, then: [{ setFlag: "demo.x" }] }],
+      }),
+    ).toThrow(/flag is must be a boolean/);
+  });
+
+  it("sanitizeUserFlags drops non-booleans", () => {
+    expect(sanitizeUserFlags({ "q.a": true, "q.n": 2, "q.s": "calm", "q.f": false })).toEqual({
+      "q.a": true,
+      "q.f": false,
+    });
+    expect(sanitizeUserFlags(null)).toEqual({});
+    expect(sanitizeUserFlags(["nope"])).toEqual({});
   });
 
   it("cascades flag rules and grants badge once per transition", () => {

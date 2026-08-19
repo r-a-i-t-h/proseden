@@ -121,7 +121,7 @@ are treated as false / skipped and logged.
 | Shape | True when |
 |---|---|
 | `{ "flag": "demo.x" }` | Stored value equals `true` (default `is`). |
-| `{ "flag": "demo.x", "is": <value> }` | Stored value strictly equals `is`. `is` may be boolean, number, or string. |
+| `{ "flag": "demo.x", "is": false }` | Stored value is `false` (distinct from a missing key). |
 | `{ "holds": 12 }` | Inventory contains artefact id `12`. |
 | `{ "holdsTag": "key" }` | Some held artefact lists that tag. |
 | `{ "hasBadge": "demo.winner" }` | Reader’s badge list includes that id. |
@@ -155,6 +155,10 @@ Combinators nest freely. Example:
 }
 ```
 
+Atoms do not grow comparison operators except where a fact defines them
+(`scenesOwned.gte`). There is no expression language and no stored
+number/string flags — stages are extra boolean flags, not integers.
+
 World gates on **exits, scene access, details, and artefacts** are a different
 surface: a **FlagRef** condition string (`"flag.id"`, `"holds:12"`,
 `"badge:demo.x"`), not quest Pred. They are not part of quest JSON. See
@@ -168,23 +172,24 @@ Each `then` entry is exactly one of:
 
 ```json
 { "setFlag": "demo.hasKey", "to": true }
-{ "setFlag": "demo.stage", "to": 2 }
-{ "setFlag": "demo.mood", "to": "calm" }
+{ "setFlag": "demo.hasKey" }
+{ "setFlag": "demo.unlocked", "to": false }
 { "clearFlag": "demo.hasKey" }
 ```
 
 | Field | Meaning |
 |---|---|
 | `setFlag` | Flag id in this quest’s namespace. |
-| `to` | Optional. Boolean, number, or string. **Default `true`.** |
+| `to` | Optional boolean. **Default `true`.** |
 | `clearFlag` | Remove the key from the reader’s flag map. |
 
 Setting a flag to the value it already has is a **no-op** (no `onFlag`).
 `clearFlag` is a no-op if the key is already absent.
 
-Stored values are JSON booleans, numbers, or strings. A missing key is
-not `false`; predicates treat it as false, but `onFlag.onFalse` runs only
-when the stored value **changes** to `false` or the key is cleared.
+Stored values are JSON booleans only. A missing key is not `false`;
+predicates treat it as false, but `onFlag.onFalse` runs only when the
+stored value **changes** to `false` or the key is cleared. Use `is: false`
+to match a stored false; `{ "flag": "demo.x" }` matches only `true`.
 
 ---
 
@@ -208,7 +213,7 @@ Keys must be namespaced flag ids. Each value is an object:
 
 | Field | Type | When it runs |
 |---|---|---|
-| `onTrue` | array of knock-ons | After a change whose new value is **not** `false` and **not** cleared (`true`, a number, or a string). |
+| `onTrue` | array of knock-ons | After a change whose new value is `true`. |
 | `onFalse` | array of knock-ons | After `clearFlag`, or `setFlag` with `"to": false`. |
 
 Knock-ons run **once per actual transition**, not while the flag stays
@@ -304,16 +309,20 @@ other user actions. A bad rule is skipped; other rules still run.
 - `name` missing, empty after trim, or not a simple identifier
 - `rules` not an array
 - Rule not an object, missing `when`, or `then` missing / empty / not an array
-- `then` entry that is not `setFlag` / `clearFlag`
+- `then` entry that is not `setFlag` / `clearFlag`, or `to` that is not a boolean
 - Flag, badge, or `onFlag` key not prefixed with `name.`
 - `onFlag` not an object, or a handler not an object
 - Knock-on that is not `grantBadge` / `giveArtefact`, or a non-finite artefact id
 - `badges` not an array, or an entry not an object / missing namespaced `id`
 - `when` not an object, `all`/`any` not arrays, or an unrecognised predicate key
+- `{ "flag": …, "is": … }` where `is` is present and not a boolean
 
-Predicate **atom** fields are not type-checked beyond shape (`"flag" in
-object`, etc.). A saved `{ "holds": "12" }` will not match inventory id
-`12`.
+Predicate **atom** fields other than `flag.is` are not type-checked beyond
+shape (`"holds" in object`, etc.). A saved `{ "holds": "12" }` will not
+match inventory id `12`.
+
+On load, `*.flags.json` keeps only boolean values; leftover numbers or
+strings are dropped.
 
 ---
 
@@ -422,10 +431,9 @@ the badge when `demo.done` changes to true.
 
 ## Authoring notes
 
-- Prefer `setFlag` defaults (`to` omitted ⇒ `true`) unless you need
-  numbers or strings for staged flags.
-- Keep local names unique within the quest (`demo.stage` not a second
-  `demo.stage` with a different meaning).
+- Prefer `setFlag` defaults (`to` omitted ⇒ `true`). Use extra boolean
+  flags for stages (`demo.sawA`, `demo.sawAthenB`), not integers or strings.
+- Prefer omitting `is` on `{ "flag": … }` unless you need `is: false`.
 - Do not put reader-facing story in `description`; put it in scene
   details gated by flags.
 - Alchemy (`data/alchemy/recipes.json`) is a separate file and does not

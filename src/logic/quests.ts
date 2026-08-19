@@ -19,6 +19,16 @@ export class QuestValidationError extends Error {
   }
 }
 
+/** Keep only boolean flag values; drop numbers, strings, and other leftovers. */
+export function sanitizeUserFlags(raw: unknown): Record<string, FlagValue> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, FlagValue> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "boolean") out[k] = v;
+  }
+  return out;
+}
+
 export function parseQuestFile(raw: unknown): QuestFile {
   if (!raw || typeof raw !== "object") throw new QuestValidationError("Quest must be an object");
   const o = raw as Record<string, unknown>;
@@ -62,7 +72,10 @@ function parseFlagEffect(raw: unknown, questName: string, label: string): FlagEf
   if ("setFlag" in o) {
     const flag = String(o.setFlag);
     assertNamespace(flag, questName, label);
-    const to = o.to !== undefined ? (o.to as FlagValue) : true;
+    const to = o.to !== undefined ? o.to : true;
+    if (typeof to !== "boolean") {
+      throw new QuestValidationError(`${label}: setFlag to must be a boolean`);
+    }
     return { setFlag: flag, to };
   }
   if ("clearFlag" in o) {
@@ -150,7 +163,13 @@ function assertPredShape(pred: Pred, label: string): void {
     pred.any.forEach((p, i) => assertPredShape(p, `${label}.any[${i}]`));
     return;
   }
-  if ("flag" in pred || "holds" in pred || "holdsTag" in pred || "hasBadge" in pred || "atScene" in pred || "scenesOwned" in pred) {
+  if ("flag" in pred) {
+    if (pred.is !== undefined && typeof pred.is !== "boolean") {
+      throw new QuestValidationError(`${label}: flag is must be a boolean`);
+    }
+    return;
+  }
+  if ("holds" in pred || "holdsTag" in pred || "hasBadge" in pred || "atScene" in pred || "scenesOwned" in pred) {
     return;
   }
   throw new QuestValidationError(`${label}: unknown predicate shape`);

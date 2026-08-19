@@ -13,6 +13,7 @@ import {
   questFileForDisk,
   questGiveArtefactIds,
   QuestValidationError,
+  sanitizeUserFlags,
 } from "../logic/quests.js";
 import type {
   ArtefactMeta,
@@ -182,8 +183,8 @@ export class WorldStore implements AccessWorld {
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".flags.json")) {
       const username = file.replace(/\.flags\.json$/, "");
-      const raw = await readJson<Record<string, FlagValue>>(join(this.dataDir, "users", file));
-      this.userFlags.set(username, raw && typeof raw === "object" ? raw : {});
+      const raw = await readJson<unknown>(join(this.dataDir, "users", file));
+      this.userFlags.set(username, sanitizeUserFlags(raw));
     }
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".badges.json")) {

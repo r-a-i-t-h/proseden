@@ -1,6 +1,6 @@
 /** Quest / flag / alchemy types (see docs/QUESTS.md and docs/PUZZLES.md). */
 
-export type FlagValue = boolean | number | string;
+export type FlagValue = boolean;
 
 /**
  * World-gate condition string. No colon → flag scheme (`quest.local`);
