@@ -72,11 +72,11 @@ describe("questor / multi-user quests", () => {
   it("merges manager quests before user quests", async () => {
     await world.saveQuest({
       name: "zebra",
-      rules: [{ id: "z", when: { holds: 1 }, then: [{ setFlag: "zebra.a", to: true }] }],
+      rules: [{ id: "z", when: { holds: 1 }, then: [{ setFlag: "zebra.a" }] }],
     });
     await world.saveUserQuest("bob", {
       name: "bob",
-      rules: [{ id: "b", when: { holds: 1 }, then: [{ setFlag: "bob.a", to: true }] }],
+      rules: [{ id: "b", when: { holds: 1 }, then: [{ setFlag: "bob.a" }] }],
     });
 
     expect(world.masterQuests.map((q) => q.name)).toEqual(["zebra"]);
@@ -116,7 +116,7 @@ describe("questor / multi-user quests", () => {
     await expect(
       world.saveUserQuest("bob", {
         name: "bob",
-        rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x", to: true }] }],
+        rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x" }] }],
         onFlag: {
           "bob.x": { onTrue: [{ giveArtefact: aliceArt }] },
         },
@@ -141,7 +141,7 @@ describe("questor / multi-user quests", () => {
       join(dataDir, "quests", "users", "bob.json"),
       JSON.stringify({
         name: "bob",
-        rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x", to: true }] }],
+        rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x" }] }],
       }),
       "utf8",
     );
@@ -160,7 +160,7 @@ describe("questor / multi-user quests", () => {
       join(dataDir, "quests", "users", "bob.json"),
       JSON.stringify({
         name: "bob",
-        rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x", to: true }] }],
+        rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x" }] }],
         onFlag: {
           "bob.x": { onTrue: [{ giveArtefact: aliceArt }] },
         },
@@ -175,7 +175,7 @@ describe("questor / multi-user quests", () => {
   it("cold-loads user quests with giveArtefact after restart", async () => {
     await world.saveUserQuest("bob", {
       name: "bob",
-      rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x", to: true }] }],
+      rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x" }] }],
       onFlag: {
         "bob.x": { onTrue: [{ giveArtefact: bobArt }] },
       },
@@ -251,7 +251,7 @@ describe("questor / multi-user quests", () => {
         {
           id: "seed",
           when: { holds: bobArt },
-          then: [{ setFlag: "alpha.go", to: true }],
+          then: [{ setFlag: "alpha.go" }],
         },
       ],
     });
@@ -261,7 +261,7 @@ describe("questor / multi-user quests", () => {
         {
           id: "follow",
           when: { flag: "alpha.go" },
-          then: [{ setFlag: "bob.seen", to: true }],
+          then: [{ setFlag: "bob.seen" }],
         },
       ],
     });

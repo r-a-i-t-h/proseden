@@ -13,7 +13,7 @@ export type FlagRef = string;
 export type QuestTrigger = "always" | "use" | "input";
 
 export type Pred =
-  | { flag: string; is?: FlagValue }
+  | { flag: string }
   | { holds: number }
   | { holdsTag: string }
   | { hasBadge: string }
@@ -26,7 +26,7 @@ export type Pred =
   | { any: Pred[] };
 
 export type FlagEffect =
-  | { setFlag: string; to?: FlagValue }
+  | { setFlag: string }
   | { clearFlag: string };
 
 export type KnockOn = { grantBadge: string } | { giveArtefact: number };

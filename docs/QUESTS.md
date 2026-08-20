@@ -20,12 +20,12 @@ facts (holds, atScene, uses, input, …)
         ↓  when
    setFlag / clearFlag     ← the only `then`
         ↓
-   per-reader flags (true / false / missing)
+   per-reader flags (set / clear)
         ↓                  ↓
   world FlagRef         onFlag (badge / artefact)
 ```
 
-Flags are **booleans**. Missing is treated as false in `when` and FlagRef.
+Flags are **set or clear**. Missing is clear (false) in `when` and FlagRef.
 There is no variable store, no numbers/strings in the flag file, and no
 expression language. Stages are extra flags (`demo.sawA`, `demo.sawAthenB`).
 New puzzle needs are a new named fact on `when` (like `scenesOwned`), not
@@ -126,14 +126,14 @@ POST response.
 ## Predicates
 
 `when` is one object with **one** recognised shape. Combinators nest;
-atoms do not grow arithmetic. Missing flag is false.
+atoms do not grow arithmetic. A missing flag is clear (false).
 
 ### Atoms (quest `when` only)
 
 | Shape | True when |
 |---|---|
-| `{ "flag": "demo.x" }` | Stored value is `true`. |
-| `{ "flag": "demo.x", "is": false }` | Stored value is `false` (not the same as missing). |
+| `{ "flag": "demo.x" }` | Flag is set. |
+| `{ "flag": "not.demo.x" }` | Flag is clear (missing or not set). |
 | `{ "holds": 12 }` | Inventory contains artefact `12`. |
 | `{ "holdsTag": "key" }` | Some held artefact has that tag. |
 | `{ "hasBadge": "demo.winner" }` | Badge list includes that id. |
@@ -167,11 +167,13 @@ World records do **not** use this tree. Their Condition field is a FlagRef
 {
   "all": [
     { "holds": 12 },
-    { "not": { "flag": "demo.used" } },
+    { "flag": "not.demo.used" },
     { "any": [{ "atScene": 5 }, { "atScene": 6 }] }
   ]
 }
 ```
+
+`{ "not": { "flag": "demo.used" } }` is equivalent to `{ "flag": "not.demo.used" }`.
 
 ### Input phrases
 
@@ -186,17 +188,15 @@ same way: Unicode NFKC, trim, collapse internal whitespace to one space,
 
 ```json
 { "setFlag": "demo.hasKey" }
-{ "setFlag": "demo.hasKey", "to": true }
-{ "setFlag": "demo.unlocked", "to": false }
 { "clearFlag": "demo.hasKey" }
 ```
 
-`to` is optional boolean, default `true`. Same-value set and clearing an
-absent key are no-ops (no `onFlag`). Prefer omitting `to`. Prefer omitting
-`is` on `{ "flag": … }` unless you need stored-false vs missing.
+`setFlag` sets the flag; `clearFlag` clears it. Same-value set and clearing an
+absent key are no-ops (no `onFlag`). A legacy `"to": true` on `setFlag` is
+accepted and ignored; `"to": false` is rejected — use `clearFlag`.
 
-On load, `*.flags.json` keeps only booleans; leftover numbers or strings are
-dropped.
+On load, `*.flags.json` keeps only set flags (`true`); `false` and leftover
+numbers or strings are dropped.
 
 ---
 
@@ -211,10 +211,9 @@ dropped.
 }
 ```
 
-`onTrue` runs when the stored value **changes** to `true`. `onFalse` runs
-when it changes to `false` or the key is cleared. Knock-ons run once per
-transition. Dropping a badge or uncollecting a granted artefact does not
-re-grant until the flag goes away and comes back.
+`onTrue` runs when the flag **changes** to set. `onFalse` runs when it is
+cleared. Knock-ons run once per transition. Dropping a badge or uncollecting
+a granted artefact does not re-grant until the flag goes away and comes back.
 
 | Knock-on | Effect |
 |---|---|
@@ -387,11 +386,12 @@ the next), then grant the badge when `demo.done` becomes true.
 
 `parseQuestFile` throws `QuestValidationError` on: non-object root; bad or
 missing `name`; `rules` not an array; rule missing `when` or empty `then`;
-`then` that is not `setFlag`/`clearFlag` or non-boolean `to`; ids not
-prefixed with `name.`; bad `onFlag` / knock-ons / `badges`; unknown `when`
-shape; `all`/`any` not arrays; non-boolean `flag.is`; `on` not
-always/use/input; `uses`/`input` on the wrong `on` or missing from a
-use/input rule; bad `uses` id; empty `input` after normalize.
+`then` that is not `setFlag`/`clearFlag` or invalid `to` (`false` or
+non-true); ids not prefixed with `name.`; bad `onFlag` / knock-ons /
+`badges`; unknown `when` shape; `all`/`any` not arrays; `flag` with `"is"`
+or empty/`not.`-only id; `on` not always/use/input; `uses`/`input` on the
+wrong `on` or missing from a use/input rule; bad `uses` id; empty `input`
+after normalize.
 
 Other atom fields are not type-checked beyond shape. `{ "holds": "12" }`
 will not match inventory id `12`.

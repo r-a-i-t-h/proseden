@@ -151,10 +151,12 @@ function evaluatePredUnsafe(pred: Pred, ctx: PredContext): boolean {
     return pred.any.some((p) => evaluatePredUnsafe(p, ctx));
   }
   if ("flag" in pred) {
-    const cur = ctx.flags[pred.flag];
-    if (cur === undefined) return false;
-    const expect = pred.is !== undefined ? pred.is : true;
-    return cur === expect;
+    const raw = String(pred.flag).trim();
+    const invert = raw.startsWith(NOT_PREFIX);
+    const id = invert ? raw.slice(NOT_PREFIX.length).trim() : raw;
+    if (!id) return false;
+    const set = flagIsTrue(ctx.flags, id);
+    return invert ? !set : set;
   }
   if ("holds" in pred) return ctx.inventoryIds.has(pred.holds);
   if ("holdsTag" in pred) {

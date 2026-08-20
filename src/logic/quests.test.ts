@@ -23,6 +23,15 @@ describe("pred", () => {
     expect(evaluatePred({ flag: "q.missing" }, base)).toBe(false);
   });
 
+  it("flag not. prefix inverts set/clear", () => {
+    expect(evaluatePred({ flag: "not.q.a" }, base)).toBe(false);
+    expect(evaluatePred({ flag: "not.q.missing" }, base)).toBe(true);
+    expect(evaluatePred({ flag: "not.q.a" }, base)).toBe(
+      evaluatePred({ not: { flag: "q.a" } }, base),
+    );
+    expect(evaluatePred({ flag: "not." }, base)).toBe(false);
+  });
+
   it("all / any / not", () => {
     expect(evaluatePred({ all: [{ flag: "q.a" }, { holds: 1 }] }, base)).toBe(true);
     expect(evaluatePred({ any: [{ flag: "q.missing" }, { holds: 1 }] }, base)).toBe(true);
@@ -61,34 +70,61 @@ describe("quest eval", () => {
     ).toThrow(/setFlag\/clearFlag/);
   });
 
-  it("rejects numeric or string setFlag to", () => {
+  it("rejects setFlag to false; strips to true; rejects other to", () => {
+    expect(() =>
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "x", when: { holds: 1 }, then: [{ setFlag: "demo.x", to: false }] }],
+      }),
+    ).toThrow(/use clearFlag/);
     expect(() =>
       parseQuestFile({
         name: "demo",
         rules: [{ id: "x", when: { holds: 1 }, then: [{ setFlag: "demo.x", to: 2 }] }],
       }),
-    ).toThrow(/setFlag to must be a boolean/);
+    ).toThrow(/setFlag to must be true/);
     expect(() =>
       parseQuestFile({
         name: "demo",
         rules: [{ id: "x", when: { holds: 1 }, then: [{ setFlag: "demo.x", to: "calm" }] }],
       }),
-    ).toThrow(/setFlag to must be a boolean/);
+    ).toThrow(/setFlag to must be true/);
+    const q = parseQuestFile({
+      name: "demo",
+      rules: [{ id: "x", when: { holds: 1 }, then: [{ setFlag: "demo.x", to: true }] }],
+    });
+    expect(q.rules[0]!.then).toEqual([{ setFlag: "demo.x" }]);
   });
 
-  it("rejects non-boolean flag is", () => {
+  it("rejects flag is and bare not. flag id", () => {
     expect(() =>
       parseQuestFile({
         name: "demo",
-        rules: [{ id: "x", when: { flag: "demo.x", is: "calm" }, then: [{ setFlag: "demo.x" }] }],
+        rules: [{ id: "x", when: { flag: "demo.x", is: true }, then: [{ setFlag: "demo.x" }] }],
       }),
-    ).toThrow(/flag is must be a boolean/);
+    ).toThrow(/flag "is" is not allowed/);
+    expect(() =>
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "x", when: { flag: "demo.x", is: false }, then: [{ setFlag: "demo.x" }] }],
+      }),
+    ).toThrow(/flag "is" is not allowed/);
+    expect(() =>
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "x", when: { flag: "not." }, then: [{ setFlag: "demo.x" }] }],
+      }),
+    ).toThrow(/flag id must be non-empty/);
+    const q = parseQuestFile({
+      name: "demo",
+      rules: [{ id: "x", when: { flag: "not.demo.y" }, then: [{ setFlag: "demo.x" }] }],
+    });
+    expect(q.rules[0]!.when).toEqual({ flag: "not.demo.y" });
   });
 
-  it("sanitizeUserFlags drops non-booleans", () => {
+  it("sanitizeUserFlags keeps only true; drops false and non-booleans", () => {
     expect(sanitizeUserFlags({ "q.a": true, "q.n": 2, "q.s": "calm", "q.f": false })).toEqual({
       "q.a": true,
-      "q.f": false,
     });
     expect(sanitizeUserFlags(null)).toEqual({});
     expect(sanitizeUserFlags(["nope"])).toEqual({});
@@ -214,11 +250,11 @@ describe("quest eval", () => {
     const quest = parseQuestFile({
       name: "demo",
       rules: [
-        { id: "a", when: { holds: 1 }, then: [{ setFlag: "demo.has", to: true }] },
+        { id: "a", when: { holds: 1 }, then: [{ setFlag: "demo.has" }] },
         {
           id: "b",
           when: { flag: "demo.has" },
-          then: [{ setFlag: "demo.done", to: true }],
+          then: [{ setFlag: "demo.done" }],
         },
       ],
       onFlag: {
@@ -261,7 +297,7 @@ describe("quest eval", () => {
           name: "broken",
           rules: [
             { id: "bad", when: { all: "nope" as unknown as [] }, then: [{ setFlag: "broken.x" }] },
-            { id: "ok", when: { holds: 1 }, then: [{ setFlag: "broken.y", to: true }] },
+            { id: "ok", when: { holds: 1 }, then: [{ setFlag: "broken.y" }] },
           ],
         },
       ],
@@ -278,7 +314,7 @@ describe("quest eval", () => {
   });
 
   it("applyFlagEffects no-ops same value", () => {
-    const { changes } = applyFlagEffects({ "q.a": true }, [{ setFlag: "q.a", to: true }]);
+    const { changes } = applyFlagEffects({ "q.a": true }, [{ setFlag: "q.a" }]);
     expect(changes).toEqual([]);
   });
 });

@@ -20,12 +20,12 @@ export class QuestValidationError extends Error {
   }
 }
 
-/** Keep only boolean flag values; drop numbers, strings, and other leftovers. */
+/** Keep only set flags (`true`); drop false, numbers, strings, and other leftovers. */
 export function sanitizeUserFlags(raw: unknown): Record<string, FlagValue> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const out: Record<string, FlagValue> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof v === "boolean") out[k] = v;
+    if (v === true) out[k] = true;
   }
   return out;
 }
@@ -145,11 +145,15 @@ function parseFlagEffect(raw: unknown, questName: string, label: string): FlagEf
   if ("setFlag" in o) {
     const flag = String(o.setFlag);
     assertNamespace(flag, questName, label);
-    const to = o.to !== undefined ? o.to : true;
-    if (typeof to !== "boolean") {
-      throw new QuestValidationError(`${label}: setFlag to must be a boolean`);
+    if (o.to !== undefined) {
+      if (o.to === false) {
+        throw new QuestValidationError(`${label}: use clearFlag instead of setFlag to false`);
+      }
+      if (o.to !== true) {
+        throw new QuestValidationError(`${label}: setFlag to must be true if present`);
+      }
     }
-    return { setFlag: flag, to };
+    return { setFlag: flag };
   }
   if ("clearFlag" in o) {
     const flag = String(o.clearFlag);
@@ -237,8 +241,17 @@ function assertPredShape(pred: Pred, label: string): void {
     return;
   }
   if ("flag" in pred) {
-    if (pred.is !== undefined && typeof pred.is !== "boolean") {
-      throw new QuestValidationError(`${label}: flag is must be a boolean`);
+    const rawFlag = pred as { flag: string; is?: unknown };
+    if ("is" in rawFlag) {
+      throw new QuestValidationError(
+        `${label}: flag "is" is not allowed; use "not." prefix or { not: { flag } }`,
+      );
+    }
+    const raw = String(rawFlag.flag).trim();
+    const invert = raw.startsWith("not.");
+    const id = invert ? raw.slice("not.".length).trim() : raw;
+    if (!id) {
+      throw new QuestValidationError(`${label}: flag id must be non-empty`);
     }
     return;
   }
@@ -317,11 +330,10 @@ export function applyFlagEffects(
   const changes: FlagChange[] = [];
   for (const effect of effects) {
     if ("setFlag" in effect) {
-      const to = effect.to !== undefined ? effect.to : true;
       const from = next[effect.setFlag];
-      if (from !== to) {
-        next[effect.setFlag] = to;
-        changes.push({ flag: effect.setFlag, from, to });
+      if (from !== true) {
+        next[effect.setFlag] = true;
+        changes.push({ flag: effect.setFlag, from, to: true });
       }
     } else {
       const from = next[effect.clearFlag];
@@ -443,8 +455,7 @@ function evaluateQuestsUnsafe(opts: {
         const quest = quests.find((q) => q.name === questName);
         const handlers = quest?.onFlag?.[change.flag];
         if (!handlers) continue;
-        const knocks =
-          change.to === undefined || change.to === false ? handlers.onFalse : handlers.onTrue;
+        const knocks = change.to === undefined ? handlers.onFalse : handlers.onTrue;
         if (!knocks) continue;
         for (const k of knocks) {
           if ("grantBadge" in k) {

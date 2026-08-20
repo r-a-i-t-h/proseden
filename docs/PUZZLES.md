@@ -14,7 +14,7 @@ Quest file fields, predicates, knock-ons, and evaluation: **[QUESTS.md](QUESTS.m
 | Keep | Add | Refuse |
 |---|---|---|
 | Prose-first scenes & artefacts | Flag-gated exits, details, artefacts | Free-form parser |
-| HTTP as the interaction model | Quests that only set/clear **boolean** flags | Platform missions / quest journal |
+| HTTP as the interaction model | Quests that only set/clear flags | Platform missions / quest journal |
 | Collect-as-link inventory | Flag onChange → badge / artefact | Nested inventory |
 | Multi-writer shared graph | Standalone N-ary alchemy | JS / embedded scripting / expression DSL |
 | File-backed, portable | Manager JSON textareas | Player variables, coercion, per-quest flag silos |
@@ -44,7 +44,7 @@ Rewards are prose (artefacts) and public badges — not a win screen.
 
 ## Flag bus
 
-Stored flags are **booleans** (set, clear, or set-to-false). Counts and
+Stored flags are **set or clear** (presence of `true`). Counts and
 strings are not a second map: live facts sit outside the flag file
 (`holds`, `atScene`, `scenesOwned`, …). New needs are a **named predicate**
 (and a trigger if the fact is not already computed) — the `scenesOwned`
@@ -54,14 +54,14 @@ Quest rules may use rich antecedents (holds, location, badges, other flags,
 profile facts, …). Their `then` may **only** `setFlag` / `clearFlag` under
 that quest’s namespace (`questName.local`).
 
-When a flag’s stored value **actually changes**, declared `onFlag` knock-ons
+When a flag **actually changes** (set or clear), declared `onFlag` knock-ons
 run once for that transition (`grantBadge`, `giveArtefact`).
 
 The prose world does **not** evaluate quest Pred trees. Exits, scene access,
 details, and artefacts use a **FlagRef** condition string. The default is a
 flag (`quest.local` / `not.quest.local`, or explicit `flag:`). Two live
 reader facts are also allowed: current inventory (`holds:<id>`) and current
-badges (`badge:<id>`). **Missing flag == false** for a positive flag ref.
+badges (`badge:<id>`). **Missing flag == clear** for a positive flag ref.
 Unknown schemes are false.
 
 Tag checks (`holdsTag`), location (`atScene`), ownership counts, Use, Input,
@@ -89,7 +89,7 @@ when you want sticky unlocks or rewards.
 
 ```ts
 type Pred =
-  | { flag: string; is?: boolean } // default is: true
+  | { flag: string }            // set; invert with "not." prefix on the id
   | { holds: number }           // artefact id
   | { holdsTag: string }
   | { hasBadge: string }
@@ -102,8 +102,9 @@ type Pred =
   | { any: Pred[] };
 ```
 
-Boolean `all` / `any` / `not` nest freely. Atoms do not grow arithmetic or
-generic comparisons; a numeric fact carries its own fields (`scenesOwned.gte`).
+Boolean `all` / `any` / `not` nest freely. `{ flag: "not.demo.x" }` means the
+flag is clear. Atoms do not grow arithmetic or generic comparisons; a numeric
+fact carries its own fields (`scenesOwned.gte`).
 
 **World gates** use FlagRef condition strings on world objects (see World
 gates below), not Pred trees. `holdsTag` / `atScene` / `scenesOwned` /
@@ -155,7 +156,7 @@ interface QuestRule {
   on?: "always" | "use" | "input";  // default always
   ok?: string;                      // Use/Input notice copy
   when: Pred;                       // rich
-  then: Array<{ setFlag: string; to?: boolean } | { clearFlag: string }>;
+  then: Array<{ setFlag: string } | { clearFlag: string }>;
 }
 
 type KnockOn =

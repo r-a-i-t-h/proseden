@@ -42,21 +42,21 @@ export const QUEST_EXAMPLE = `{
     {
       "id": "found-key",
       "when": { "holds": 12 },
-      "then": [{ "setFlag": "YOUR_USERNAME.hasKey", "to": true }]
+      "then": [{ "setFlag": "YOUR_USERNAME.hasKey" }]
     },
     {
       "id": "use-key",
       "on": "use",
       "ok": "The lock yields.",
       "when": { "all": [{ "uses": 12 }, { "atScene": 5 }] },
-      "then": [{ "setFlag": "YOUR_USERNAME.unlocked", "to": true }]
+      "then": [{ "setFlag": "YOUR_USERNAME.unlocked" }]
     },
     {
       "id": "riddle",
       "on": "input",
       "ok": "The wall slides aside.",
       "when": { "all": [{ "input": "open sesame" }, { "atScene": 5 }] },
-      "then": [{ "setFlag": "YOUR_USERNAME.spoke", "to": true }]
+      "then": [{ "setFlag": "YOUR_USERNAME.spoke" }]
     }
   ],
   "onFlag": {
