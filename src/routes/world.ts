@@ -36,6 +36,7 @@ import {
 } from "../logic/world-view.js";
 import { gateFactsFor, normalizeInputPhrase, parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
 import { matchAlchemyRecipe, parseAlchemyRecipes, parseQuestFile, QuestValidationError } from "../logic/quests.js";
+import { requestSessionToken } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import type { InboxMessage, StaffRole } from "../model/types.js";
 import {
@@ -205,8 +206,7 @@ worldRoutes.get("/s/:id", (c) => {
   if (user) c.get("locations").noteVisit(user.username, scene.id);
 
   const subscriberCount = world.getSubscribers(id).length;
-  const inputOk = c.req.query("input");
-  const inputErr = c.req.query("input-error");
+  const notice = c.get("sessions").takeActionMessage(requestSessionToken(c));
 
   return page(
     c,
@@ -221,8 +221,7 @@ worldRoutes.get("/s/:id", (c) => {
       subscribed: user ? world.isSubscribed(id, user.username) : undefined,
       subscriberCount: user ? subscriberCount : undefined,
       showInput: Boolean(user),
-      notice: inputOk,
-      noticeError: inputErr,
+      notice,
     }),
     {
       kind: "scene",
@@ -318,7 +317,7 @@ worldRoutes.post("/s/:id/input", async (c) => {
     trigger: "input",
     inputPhrase: phrase,
   });
-  return questActionReply(c, `/s/${id}`, "input", "input-error", outcome);
+  return questActionReply(c, `/s/${id}`, outcome);
 });
 
 worldRoutes.get("/a/:id", (c) => {
@@ -402,8 +401,7 @@ worldRoutes.get("/a/:id", (c) => {
       detail,
       collected: user ? collected : undefined,
       back,
-      notice: c.req.query("use"),
-      noticeError: c.req.query("use-error"),
+      notice: c.get("sessions").takeActionMessage(requestSessionToken(c)),
     }),
     {
       kind: "artefact",
@@ -759,16 +757,12 @@ function alchemyFail(c: Context, message: string) {
 function questActionReply(
   c: Context,
   path: string,
-  okQuery: string,
-  errQuery: string,
   outcome: { actionMatched: boolean; actionOk?: string },
 ) {
   const message = questActionMessage(outcome);
   if (wantsJson(c)) return c.json({ ok: outcome.actionMatched, message });
-  const q = outcome.actionMatched ? okQuery : errQuery;
-  return c.redirect(
-    `${c.get("assetBase")}${path}?${q}=${encodeURIComponent(message)}`,
-  );
+  c.get("sessions").setActionMessage(requestSessionToken(c), message);
+  return c.redirect(`${c.get("assetBase")}${path}`);
 }
 
 const EXIT_REQUEST_NOTE_MAX = 500;
@@ -2110,7 +2104,7 @@ worldRoutes.post("/a/:id/use", async (c) => {
     trigger: "use",
     usesArtefactId: id,
   });
-  return questActionReply(c, `/a/${id}`, "use", "use-error", outcome);
+  return questActionReply(c, `/a/${id}`, outcome);
 });
 
 async function dropCollect(c: Context) {

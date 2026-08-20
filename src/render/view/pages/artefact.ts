@@ -35,7 +35,6 @@ export function artefactPageView(opts: {
   /** Prefer Live-bound scene (inventory/profile style); defaults to home. */
   back?: PageBackLink;
   notice?: string;
-  noticeError?: string;
 }): PageView {
   const { artefact, detail } = opts;
   const title = artefact.title ?? `Artefact ${artefact.id}`;
@@ -48,6 +47,7 @@ export function artefactPageView(opts: {
       owner: artefact.owner,
       detail,
       text: artefact.details[detail],
+      notice: opts.notice,
     });
   }
 
@@ -94,11 +94,9 @@ export function artefactPageView(opts: {
           );
 
   const flash =
-    opts.noticeError !== undefined
-      ? fragment(htmlOnly(notice(opts.noticeError, "error")), textOnly(rawText([opts.noticeError, ""])))
-      : opts.notice !== undefined
-        ? fragment(htmlOnly(notice(opts.notice)), textOnly(rawText([opts.notice, ""])))
-        : undefined;
+    opts.notice !== undefined
+      ? fragment(htmlOnly(notice(opts.notice)), textOnly(rawText([opts.notice, ""])))
+      : undefined;
 
   const textNav: string[] = [];
   if (opts.back) {

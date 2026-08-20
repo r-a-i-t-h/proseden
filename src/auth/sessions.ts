@@ -48,6 +48,8 @@ function parseFallbackRow(row: unknown): FallbackRecord | undefined {
 export class SessionStore {
   private sessions = new Map<string, SessionRecord>();
   private fallback = new Map<string, FallbackRecord>();
+  /** One-shot HTML flash after Use/Input; not persisted in handoff. */
+  private actionMessages = new Map<string, string>();
 
   constructor(private file?: string) {}
 
@@ -72,6 +74,7 @@ export class SessionStore {
     if (live) {
       if (isExpired(live.expiresAt)) {
         this.sessions.delete(token);
+        this.actionMessages.delete(token);
         return undefined;
       }
       return live;
@@ -93,9 +96,27 @@ export class SessionStore {
     return session;
   }
 
+  /** Store a one-shot Use/Input result for the next HTML GET. */
+  setActionMessage(token: string | undefined | null, message: string): void {
+    if (!token) return;
+    const trimmed = message.trim();
+    if (!trimmed) return;
+    this.actionMessages.set(token, trimmed);
+  }
+
+  /** Consume and clear the pending Use/Input result, if any. */
+  takeActionMessage(token: string | undefined | null): string | undefined {
+    if (!token) return undefined;
+    const message = this.actionMessages.get(token);
+    if (message === undefined) return undefined;
+    this.actionMessages.delete(token);
+    return message;
+  }
+
   destroy(token: string | undefined | null): void {
     if (!token) return;
     this.sessions.delete(token);
+    this.actionMessages.delete(token);
     this.fallback.delete(hashSessionToken(token));
   }
 
@@ -103,6 +124,7 @@ export class SessionStore {
     for (const [token, session] of this.sessions) {
       if (session.username === username && token !== exceptToken) {
         this.sessions.delete(token);
+        this.actionMessages.delete(token);
       }
     }
     const exceptHash = exceptToken ? hashSessionToken(exceptToken) : undefined;

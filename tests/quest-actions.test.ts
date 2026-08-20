@@ -191,4 +191,113 @@ describe("quest Use and Input", () => {
     });
     expect(res.status).toBe(401);
   });
+
+  it("HTML Input redirects cleanly and shows ok as a notice", async () => {
+    const { app, tokens, hallId } = harness;
+    const res = await app.request(`/s/${hallId}/input`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.bob}`,
+        Accept: "text/html",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ phrase: "open sesame" }),
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toMatch(new RegExp(`/s/${hallId}$`));
+    expect(location).not.toMatch(/[?&](input|input-error|ok|_action_message_)=/);
+
+    const follow = await app.request(`/s/${hallId}`, {
+      headers: {
+        Authorization: `Bearer ${tokens.bob}`,
+        Accept: "text/html",
+      },
+    });
+    expect(follow.status).toBe(200);
+    const html = await follow.text();
+    expect(html).toContain("The wall slides.");
+    expect(html).toContain('class="notice"');
+    expect(html).not.toContain("No detail named");
+    expect(html).toContain("A public hall.");
+  });
+
+  it("HTML Input miss shows Nothing happens. without detail collision", async () => {
+    const { app, tokens, hallId } = harness;
+    const res = await app.request(`/s/${hallId}/input`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.bob}`,
+        Accept: "text/html",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ phrase: "wrong guess" }),
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toMatch(new RegExp(`/s/${hallId}$`));
+
+    const follow = await app.request(`/s/${hallId}`, {
+      headers: {
+        Authorization: `Bearer ${tokens.bob}`,
+        Accept: "text/html",
+      },
+    });
+    const html = await follow.text();
+    expect(html).toContain("Nothing happens.");
+    expect(html).not.toContain("No detail named");
+    expect(html).toContain("A public hall.");
+  });
+
+  it("HTML Use redirects cleanly and shows ok as a notice", async () => {
+    const { app, tokens, world, lampId, hallId } = harness;
+    await world.collectArtefact("bob", lampId);
+    await app.request(`/s/${hallId}`, {
+      headers: { Authorization: `Bearer ${tokens.bob}`, Accept: "text/html" },
+    });
+
+    const res = await app.request(`/a/${lampId}/use`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.bob}`,
+        Accept: "text/html",
+      },
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toMatch(new RegExp(`/a/${lampId}$`));
+    expect(location).not.toMatch(/[?&](use|use-error)=/);
+
+    const follow = await app.request(`/a/${lampId}`, {
+      headers: {
+        Authorization: `Bearer ${tokens.bob}`,
+        Accept: "text/html",
+      },
+    });
+    const html = await follow.text();
+    expect(html).toContain("The lamp flares.");
+    expect(html).toContain('class="notice"');
+    expect(html).not.toContain("No detail named");
+    expect(html).toContain("Brass.");
+  });
+
+  it("scene details still open by query key", async () => {
+    const { app, tokens, world, hallId } = harness;
+    await world.updateScene(hallId, {
+      details: { card: "A painted card." },
+    });
+    const res = await app.request(`/s/${hallId}?card`, {
+      headers: {
+        Authorization: `Bearer ${tokens.bob}`,
+        Accept: "text/html",
+      },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("A painted card.");
+    expect(html).not.toContain("No detail named");
+  });
 });

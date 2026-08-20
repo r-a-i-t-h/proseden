@@ -116,7 +116,10 @@ gate, entrance group); submitting counts as being in that room.
 A matching Use/Input `when` (even if `then` is already a no-op) shows that
 rule’s `ok`, or **Done.** If no Use/Input rule matched: **Nothing happens.**
 Wrong phrase and wrong room look the same. Always side effects do not change
-that notice.
+that notice. HTML form posts redirect to the scene or artefact page and show
+the message in a notice above the page body (not via query keys or specially
+named details). JSON clients get `{ "ok": boolean, "message": "…" }` on the
+POST response.
 
 ---
 

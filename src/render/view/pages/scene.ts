@@ -93,17 +93,26 @@ export function entityDetailView(opts: {
   owner: string;
   detail: string;
   text?: string;
+  notice?: string;
 }): PageView {
   const path = entityPath(opts.kind, opts.id);
   const htmlText = opts.text ?? `No detail named “${opts.detail}”.`;
   const plainText = opts.text ?? `(No detail named "${opts.detail}".)`;
-  return pageView(`${entityKindLabel(opts.kind)} ${opts.id}`, [
-    crumb(path, `← ${entityKindLabel(opts.kind)} ${opts.id}`),
-    entityTitle(opts.kind, opts.id, opts.title, opts.detail),
-    byline(opts.owner),
-    htmlOnly(prose(htmlText)),
-    textOnly(rawText(["", plainText])),
-  ]);
+  const flash =
+    opts.notice !== undefined
+      ? fragment(htmlOnly(notice(opts.notice)), textOnly(rawText([opts.notice, ""])))
+      : undefined;
+  return pageView(
+    `${entityKindLabel(opts.kind)} ${opts.id}`,
+    nodes(
+      crumb(path, `← ${entityKindLabel(opts.kind)} ${opts.id}`),
+      flash,
+      entityTitle(opts.kind, opts.id, opts.title, opts.detail),
+      byline(opts.owner),
+      htmlOnly(prose(htmlText)),
+      textOnly(rawText(["", plainText])),
+    ),
+  );
 }
 
 export function scenePageView(opts: {
@@ -120,7 +129,6 @@ export function scenePageView(opts: {
   /** Signed-in readers get a private phrase box (not Live chat). */
   showInput?: boolean;
   notice?: string;
-  noticeError?: string;
 }): PageView {
   const { scene, exits, artefacts, detail, isEntrance } = opts;
   const title = scene.title ?? `Scene ${scene.id}`;
@@ -133,6 +141,7 @@ export function scenePageView(opts: {
       owner: scene.owner,
       detail,
       text: scene.details[detail],
+      notice: opts.notice,
     });
   }
 
@@ -209,11 +218,9 @@ export function scenePageView(opts: {
   }
 
   const flash =
-    opts.noticeError !== undefined
-      ? fragment(htmlOnly(notice(opts.noticeError, "error")), textOnly(rawText([opts.noticeError, ""])))
-      : opts.notice !== undefined
-        ? fragment(htmlOnly(notice(opts.notice)), textOnly(rawText([opts.notice, ""])))
-        : undefined;
+    opts.notice !== undefined
+      ? fragment(htmlOnly(notice(opts.notice)), textOnly(rawText([opts.notice, ""])))
+      : undefined;
 
   const inputForm = opts.showInput
     ? form(
