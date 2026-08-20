@@ -231,6 +231,36 @@ describe("questor / multi-user quests", () => {
     expect(world.getUserQuest("bob")?.badges?.[0]?.id).toBe("bob.form");
   });
 
+  it("preserves compact quest JSON formatting on save and reload", async () => {
+    const compact = `{
+  "name": "bob",
+  "rules": [
+    { "id": "r", "when": { "holds": 1 }, "then": [{ "setFlag": "bob.x" }] }
+  ]
+}
+`;
+    const post = await app().request("/quests", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${bobToken}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ questJson: compact }),
+    });
+    expect(post.status).toBe(302);
+
+    const onDisk = await readFile(join(dataDir, "quests", "users", "bob.json"), "utf8");
+    expect(onDisk).toContain(`{ "id": "r", "when": { "holds": 1 }, "then": [{ "setFlag": "bob.x" }] }`);
+    expect(onDisk).not.toContain(`"when": {\n`);
+
+    const get = await app().request("/quests", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${bobToken}` },
+    });
+    expect(get.status).toBe(200);
+    const html = await get.text();
+    expect(html).toContain(`{ &quot;id&quot;: &quot;r&quot;, &quot;when&quot;: { &quot;holds&quot;: 1 }, &quot;then&quot;: [{ &quot;setFlag&quot;: &quot;bob.x&quot; }] }`);
+  });
+
   it("manager may edit personal quests and lists only master under /data/quests", async () => {
     await world.saveUserQuest("alice", {
       name: "alice",

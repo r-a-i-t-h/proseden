@@ -154,12 +154,12 @@ function enhanceProse(textarea: HTMLTextAreaElement): void {
   insertBeforeTextarea(textarea, toolbar);
 }
 
-type JsonTextarea = HTMLTextAreaElement & { __jsonFormatBlur?: () => void };
+type JsonTextarea = HTMLTextAreaElement & { __jsonValidateBlur?: () => void };
 
 function stripJsonChrome(textarea: JsonTextarea): void {
-  if (textarea.__jsonFormatBlur) {
-    textarea.removeEventListener("blur", textarea.__jsonFormatBlur);
-    delete textarea.__jsonFormatBlur;
+  if (textarea.__jsonValidateBlur) {
+    textarea.removeEventListener("blur", textarea.__jsonValidateBlur);
+    delete textarea.__jsonValidateBlur;
   }
   const prev = textarea.previousElementSibling;
   if (prev?.classList.contains("editor-toolbar")) prev.remove();
@@ -216,21 +216,37 @@ function syncJsonToolbar(textarea: JsonTextarea, formatOn: boolean): void {
     bar.append(editorBtn);
   }
 
+  const clearStatus = (): void => {
+    status.hidden = true;
+    status.textContent = "";
+    status.dataset.kind = "";
+  };
+  const showError = (err: unknown): void => {
+    status.hidden = false;
+    status.dataset.kind = "err";
+    status.textContent = err instanceof Error ? err.message : "Invalid JSON";
+  };
+  /** Validate only — do not rewrite the textarea (save must preserve layout). */
+  const validate = (): void => {
+    try {
+      JSON.parse(prepareJsonTextarea(textarea.value));
+      clearStatus();
+    } catch (err) {
+      showError(err);
+    }
+  };
+  /** Pretty-print — only via the format button. */
   const format = (): void => {
     try {
       const parsed = JSON.parse(prepareJsonTextarea(textarea.value));
       textarea.value = formatJsonTextarea(parsed);
-      status.hidden = true;
-      status.textContent = "";
-      status.dataset.kind = "";
+      clearStatus();
     } catch (err) {
-      status.hidden = false;
-      status.dataset.kind = "err";
-      status.textContent = err instanceof Error ? err.message : "Invalid JSON";
+      showError(err);
     }
   };
-  textarea.__jsonFormatBlur = format;
-  textarea.addEventListener("blur", format);
+  textarea.__jsonValidateBlur = validate;
+  textarea.addEventListener("blur", validate);
   const formatBtn = el(
     "button",
     { type: "button", class: "editor-tool", title: "Format JSON", tabindex: "-1" },

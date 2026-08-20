@@ -662,7 +662,10 @@ function renderJsonFieldHtml(
   value: unknown,
   example: string,
   note: string,
+  /** When set, use this source text instead of pretty-printing `value`. */
+  text?: string,
 ): string {
+  const body = text !== undefined ? text : formatJsonTextarea(value);
   return `<div class="json-field">
       <div class="json-field-label">
         <span>${escapeHtml(label)}</span>
@@ -674,7 +677,7 @@ function renderJsonFieldHtml(
           </div>
         </details>
       </div>
-      <textarea name="${escapeAttr(name)}" rows="${rows}" data-editor="json"${dataJsonKindAttr(name)}>${escapeHtml(formatJsonTextarea(value))}</textarea>
+      <textarea name="${escapeAttr(name)}" rows="${rows}" data-editor="json"${dataJsonKindAttr(name)}>${escapeHtml(body)}</textarea>
     </div>`;
 }
 

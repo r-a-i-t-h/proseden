@@ -213,7 +213,7 @@ Even with JS enabled, a user may prefer old-school JSON/prose editing. Capabilit
 ### Highest-value upgrades
 
 1. **Prose** — toolbar/shortcuts for Proseden adornments (`_em_`, `*bold*`, links, headings) matching `formatProse`
-2. **JSON** — validate/format on blur; keep the existing “i” help `<details>`; reuse `formatJsonTextarea` / `prepareJsonTextarea`
+2. **JSON** — validate on blur (do not rewrite); optional **format** button for pretty-print; keep the existing “i” help `<details>`; reuse `formatJsonTextarea` / `prepareJsonTextarea` / `displayJsonTextarea`
 
 Do **not** turn crumbs, username links, or prose *output* into custom elements. Those stay ordinary HTML from `toHtml`.
 

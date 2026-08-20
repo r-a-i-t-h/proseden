@@ -24,7 +24,7 @@ import {
   listBackups,
   type BackupInfo,
 } from "../store/backup.js";
-import { formatJsonTextarea, prepareJsonTextarea } from "../json-textarea.js";
+import { displayJsonTextarea, formatJsonTextarea, prepareJsonTextarea } from "../json-textarea.js";
 import { parseAlchemyRecipes, parseQuestFile, QuestValidationError } from "../logic/quests.js";
 import { timedAsync } from "../observe.js";
 import { ALCHEMY_EXAMPLE, ALCHEMY_HELP, QUEST_EXAMPLE, QUEST_HELP } from "../render/view/examples.js";
@@ -245,7 +245,16 @@ adminRoutes.get("/quests/:name", async (c) => {
   const notice = c.req.query("saved") ? "Saved." : "";
   const example = QUEST_EXAMPLE.replaceAll("YOUR_USERNAME", name);
   const help = `${QUEST_HELP} Manager file: flags/badges/vars use this quest’s name prefix.`;
-  const field = renderJsonFieldHtml("Quest JSON", "json", 28, quest, example, help);
+  const raw = await world.readMasterQuestText(name);
+  const field = renderJsonFieldHtml(
+    "Quest JSON",
+    "json",
+    28,
+    quest,
+    example,
+    help,
+    raw !== undefined ? displayJsonTextarea(raw) : undefined,
+  );
   return page(
     c,
     200,
@@ -277,7 +286,7 @@ adminRoutes.post("/quests/:name", async (c) => {
     if (parsed.name !== name) {
       return apiError(c, 400, `JSON name must remain "${name}"`);
     }
-    await world.saveQuest(parsed);
+    await world.saveQuest(parsed, prepared);
   } catch (err) {
     const msg =
       err instanceof QuestValidationError || err instanceof SyntaxError
@@ -303,6 +312,7 @@ adminRoutes.get("/alchemy", async (c) => {
   const world = c.get("world");
   const back = sceneBackLink(c.get("user")!, world);
   const notice = c.req.query("saved") ? "Recipes saved." : "";
+  const raw = await world.readAlchemyRecipesText();
   const field = renderJsonFieldHtml(
     "Recipes",
     "recipesJson",
@@ -310,6 +320,7 @@ adminRoutes.get("/alchemy", async (c) => {
     world.masterAlchemyRecipes,
     ALCHEMY_EXAMPLE,
     ALCHEMY_HELP,
+    raw !== undefined ? displayJsonTextarea(raw) : undefined,
   );
   return page(
     c,
@@ -335,7 +346,7 @@ adminRoutes.post("/alchemy", async (c) => {
   try {
     const prepared = prepareJsonTextarea(String(body.recipesJson ?? body.json ?? ""));
     const recipes = parseAlchemyRecipes(JSON.parse(prepared));
-    await world.saveAlchemyRecipes(recipes);
+    await world.saveAlchemyRecipes(recipes, prepared);
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Save failed");
   }

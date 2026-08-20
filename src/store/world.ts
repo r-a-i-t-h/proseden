@@ -427,6 +427,34 @@ export class WorldStore implements AccessWorld {
     return this.masterQuests.find((q) => q.name === name);
   }
 
+  /** Raw on-disk text for a manager quest file (preserves author formatting). */
+  async readMasterQuestText(name: string): Promise<string | undefined> {
+    const path = join(this.dataDir, "quests", `${name}.json`);
+    if (!(await exists(path))) return undefined;
+    return readText(path);
+  }
+
+  /** Raw on-disk text for a user quest file. */
+  async readUserQuestText(username: string): Promise<string | undefined> {
+    const path = join(this.dataDir, "quests", "users", `${username}.json`);
+    if (!(await exists(path))) return undefined;
+    return readText(path);
+  }
+
+  /** Raw on-disk text for master alchemy recipes. */
+  async readAlchemyRecipesText(): Promise<string | undefined> {
+    const path = join(this.dataDir, "alchemy", "recipes.json");
+    if (!(await exists(path))) return undefined;
+    return readText(path);
+  }
+
+  /** Raw on-disk text for a user alchemy file. */
+  async readUserAlchemyText(username: string): Promise<string | undefined> {
+    const path = join(this.dataDir, "alchemy", "users", `${username}.json`);
+    if (!(await exists(path))) return undefined;
+    return readText(path);
+  }
+
   badgeTitle(id: string): string {
     return badgeDefsById(this.quests).get(id)?.title ?? id;
   }
@@ -637,9 +665,10 @@ export class WorldStore implements AccessWorld {
     }
   }
 
-  async saveQuest(quest: QuestFile): Promise<void> {
+  async saveQuest(quest: QuestFile, sourceText?: string): Promise<void> {
     const parsed = questFileForDisk(parseQuestFile(quest));
-    await writeJsonAtomic(join(this.dataDir, "quests", `${parsed.name}.json`), parsed);
+    const path = join(this.dataDir, "quests", `${parsed.name}.json`);
+    await writeQuestOrAlchemySource(path, parsed, sourceText);
     await this.loadLogicFiles();
   }
 
@@ -650,7 +679,7 @@ export class WorldStore implements AccessWorld {
   }
 
   /** Persist one user's quest file (namespace + ACL-checked) and rebuild the merge. */
-  async saveUserQuest(username: string, quest: QuestFile): Promise<void> {
+  async saveUserQuest(username: string, quest: QuestFile, sourceText?: string): Promise<void> {
     const parsed = questFileForDisk(parseQuestFile(quest));
     if (parsed.name !== username) {
       throw new QuestValidationError(
@@ -664,23 +693,26 @@ export class WorldStore implements AccessWorld {
     }
     this.assertUserQuestGrants(username, parsed);
     await mkdir(join(this.dataDir, "quests", "users"), { recursive: true });
-    await writeJsonAtomic(join(this.dataDir, "quests", "users", `${username}.json`), parsed);
+    const path = join(this.dataDir, "quests", "users", `${username}.json`);
+    await writeQuestOrAlchemySource(path, parsed, sourceText);
     await this.loadLogicFiles();
   }
 
   /** Persist master alchemy file and rebuild the in-memory merge. */
-  async saveAlchemyRecipes(recipes: AlchemyRecipe[]): Promise<void> {
+  async saveAlchemyRecipes(recipes: AlchemyRecipe[], sourceText?: string): Promise<void> {
     const parsed = alchemyRecipesForDisk(parseAlchemyRecipes(recipes));
-    await writeJsonAtomic(join(this.dataDir, "alchemy", "recipes.json"), parsed);
+    const path = join(this.dataDir, "alchemy", "recipes.json");
+    await writeQuestOrAlchemySource(path, parsed, sourceText);
     await this.loadAlchemyFiles();
   }
 
   /** Persist one user's alchemy file (ACL-checked) and rebuild the in-memory merge. */
-  async saveUserAlchemy(username: string, recipes: AlchemyRecipe[]): Promise<void> {
+  async saveUserAlchemy(username: string, recipes: AlchemyRecipe[], sourceText?: string): Promise<void> {
     const parsed = alchemyRecipesForDisk(parseAlchemyRecipes(recipes));
     this.assertUserAlchemyGrants(username, parsed);
     await mkdir(join(this.dataDir, "alchemy", "users"), { recursive: true });
-    await writeJsonAtomic(join(this.dataDir, "alchemy", "users", `${username}.json`), parsed);
+    const path = join(this.dataDir, "alchemy", "users", `${username}.json`);
+    await writeQuestOrAlchemySource(path, parsed, sourceText);
     await this.loadAlchemyFiles();
   }
 
@@ -2368,6 +2400,20 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Prefer validated source text so compact author formatting is preserved. */
+async function writeQuestOrAlchemySource(
+  path: string,
+  value: unknown,
+  sourceText?: string,
+): Promise<void> {
+  if (sourceText !== undefined) {
+    const body = sourceText.endsWith("\n") ? sourceText : `${sourceText}\n`;
+    await writeTextAtomic(path, body);
+    return;
+  }
+  await writeJsonAtomic(path, value);
 }
 
 async function listFiles(dir: string, ext: string): Promise<string[]> {

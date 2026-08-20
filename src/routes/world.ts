@@ -21,7 +21,7 @@ import {
 } from "../access/permissions.js";
 import { bypassesSceneFlagGate } from "../access/scene-gate.js";
 import { apiError, liveSceneIdForUser, page, sceneBackLink, wantsJson } from "../http.js";
-import { prepareJsonTextarea } from "../json-textarea.js";
+import { displayJsonTextarea, prepareJsonTextarea } from "../json-textarea.js";
 import { triggerQuestEval } from "../logic/trigger.js";
 import { questActionMessage } from "../logic/quests.js";
 import { INPUT_PHRASE_MAX } from "../model/logic.js";
@@ -550,7 +550,7 @@ worldRoutes.get("/inv", (c) => {
   );
 });
 
-worldRoutes.get("/alchemy", (c) => {
+worldRoutes.get("/alchemy", async (c) => {
   const world = c.get("world");
   const user = c.get("user");
   if (!user) {
@@ -566,6 +566,7 @@ worldRoutes.get("/alchemy", (c) => {
   const back = sceneBackLink(user, world);
   const notice = c.req.query("saved") ? "Recipes saved." : "";
   const help = `${ALCHEMY_HELP} You may only give artefacts homed in scenes you own or manage. This file is yours alone — not shared via scene ACL.`;
+  const raw = await world.readUserAlchemyText(user.username);
   const field = renderJsonFieldHtml(
     "Recipes",
     "recipesJson",
@@ -573,6 +574,7 @@ worldRoutes.get("/alchemy", (c) => {
     recipes,
     ALCHEMY_EXAMPLE,
     help,
+    raw !== undefined ? displayJsonTextarea(raw) : undefined,
   );
   return page(
     c,
@@ -601,14 +603,14 @@ worldRoutes.post("/alchemy", async (c) => {
   try {
     const prepared = prepareJsonTextarea(String(body.recipesJson ?? body.json ?? ""));
     const recipes = parseAlchemyRecipes(JSON.parse(prepared));
-    await world.saveUserAlchemy(user.username, recipes);
+    await world.saveUserAlchemy(user.username, recipes, prepared);
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Save failed");
   }
   return c.redirect(`${c.get("assetBase")}/alchemy?saved=1`);
 });
 
-worldRoutes.get("/quests", (c) => {
+worldRoutes.get("/quests", async (c) => {
   const world = c.get("world");
   const user = c.get("user");
   if (!user) {
@@ -628,7 +630,16 @@ worldRoutes.get("/quests", (c) => {
   const notice = c.req.query("saved") ? "Quest saved." : "";
   const example = QUEST_EXAMPLE.replaceAll("YOUR_USERNAME", user.username);
   const help = `${QUEST_HELP} This file is yours alone — not shared via scene ACL.`;
-  const field = renderJsonFieldHtml("Quest JSON", "questJson", 28, quest, example, help);
+  const raw = await world.readUserQuestText(user.username);
+  const field = renderJsonFieldHtml(
+    "Quest JSON",
+    "questJson",
+    28,
+    quest,
+    example,
+    help,
+    raw !== undefined ? displayJsonTextarea(raw) : undefined,
+  );
   return page(
     c,
     200,
@@ -657,7 +668,7 @@ worldRoutes.post("/quests", async (c) => {
   try {
     const prepared = prepareJsonTextarea(String(body.questJson ?? body.json ?? ""));
     const quest = parseQuestFile(JSON.parse(prepared));
-    await world.saveUserQuest(user.username, quest);
+    await world.saveUserQuest(user.username, quest, prepared);
   } catch (err) {
     const msg =
       err instanceof QuestValidationError || err instanceof SyntaxError
