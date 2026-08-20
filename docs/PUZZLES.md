@@ -1,11 +1,11 @@
 # Puzzle logic (quests, flags, alchemy)
 
 Proseden remains a **shared prose world**, not an adventure-game engine.
-This document is the canonical design for **quests**, **flags**, **badges**,
-**flag-gated prose**, and **artefact alchemy**.
+This document is the design summary for **quests**, **flags**, **vars**,
+**badges**, **flag-gated prose**, and **artefact alchemy**.
 
 Related: [SPEC.md](SPEC.md), [PLAN.md](PLAN.md), [NAVIGATION.md](NAVIGATION.md).
-Quest file fields, predicates, knock-ons, and evaluation: **[QUESTS.md](QUESTS.md)**.
+Author guide for quest JSON: **[QUESTS.md](QUESTS.md)**.
 
 ---
 
@@ -14,19 +14,17 @@ Quest file fields, predicates, knock-ons, and evaluation: **[QUESTS.md](QUESTS.m
 | Keep | Add | Refuse |
 |---|---|---|
 | Prose-first scenes & artefacts | Flag-gated exits, details, artefacts | Free-form parser |
-| HTTP as the interaction model | Quests that only set/clear flags | Platform missions / quest journal |
-| Collect-as-link inventory | Flag onChange → badge / artefact | Nested inventory |
+| HTTP as the interaction model | Quests that set flags, vars, badges, artefacts | Platform missions / quest journal |
+| Collect-as-link inventory | Use / input / gain / drop edges | Nested inventory |
 | Multi-writer shared graph | Standalone N-ary alchemy | JS / embedded scripting / expression DSL |
-| File-backed, portable | Manager JSON textareas | Player variables, coercion, per-quest flag silos |
-
-Extension is named Pred atoms when a puzzle needs a new fact — not a variable store.
+| File-backed, portable | Manager JSON textareas | String vars, increment ops, fixpoint cascade |
 
 **No mission.** Players free-roam. Unfolding is woven into the world.
 Rewards are prose (artefacts) and public badges — not a win screen.
 
 **Two systems:**
 
-1. **Quest + flag bus** — rich conditions → flags → world gates & knock-ons.
+1. **Quest evaluation** — rich `when` → `then` (flags, vars, badges, artefacts) → world Conditions.
 2. **Artefact alchemy** — explicit combine of 2+ collected artefacts → grant result (not via flags).
 
 ---
@@ -37,88 +35,67 @@ Rewards are prose (artefacts) and public badges — not a win screen.
 |---|---|
 | Quests (`data/quests/<name>.json`) | Scenes, artefacts, exits |
 | Flags (`data/users/<name>.flags.json`) — invisible | Scene **body** — never conditional |
-| Badges (`data/users/<name>.badges.json`) — profile | **Details** — hide by FlagRef condition |
-| Alchemy recipes (`data/alchemy/recipes.json` + `alchemy/users/*.json`) | Scene **access** — FlagRef condition (teleport bypass lock) |
+| Vars (`data/users/<name>.vars.json`) — numeric | **Details** — hide by FlagRef condition |
+| Badges (`data/users/<name>.badges.json`) — profile | Scene **access** — FlagRef condition (teleport bypass lock) |
+| Alchemy recipes (`data/alchemy/recipes.json` + `alchemy/users/*.json`) | |
 
 ---
 
-## Flag bus
+## Flag bus and vars
 
-Stored flags are **set or clear** (presence of `true`). Counts and
-strings are not a second map: live facts sit outside the flag file
-(`holds`, `atScene`, `scenesOwned`, …). New needs are a **named predicate**
-(and a trigger if the fact is not already computed) — the `scenesOwned`
-model, not `vars.foo += 1`.
+**Flags** are set or clear (presence of `true`). Missing ≡ clear.
 
-Quest rules may use rich antecedents (holds, location, badges, other flags,
-profile facts, …). Their `then` may **only** `setFlag` / `clearFlag` under
-that quest’s namespace (`questName.local`).
+**Vars** are namespaced numbers (`quest.local`). Unset reads as **0**.
+Authors set absolute values with `setVar` (stages, counters-as-enums). No
+increment/decrement language.
 
-When a flag **actually changes** (set or clear), declared `onFlag` knock-ons
-run once for that transition (`grantBadge`, `giveArtefact`).
+Live facts also sit outside those files (`holds`, `atScene`, `scenesOwned`,
+use/input/gain/drop edges). Quest rules use rich `when`; `then` may
+`setFlag` / `clearFlag` / `setVar` / `grantBadge` / `giveArtefact` under the
+quest namespace.
+
+One **quest evaluation** walks rules once in document order. Later rules see
+earlier effects. Flag-edge and gain-edge rules (`on: { flag }` / `on: "gain"`)
+react to changes earlier in the **same** evaluation — not a second run.
 
 The prose world does **not** evaluate quest Pred trees. Exits, scene access,
-details, and artefacts use a **FlagRef** condition string. The default is a
-flag (`quest.local` / `not.quest.local`, or explicit `flag:`). Two live
-reader facts are also allowed: current inventory (`holds:<id>`) and current
-badges (`badge:<id>`). **Missing flag == clear** for a positive flag ref.
-Unknown schemes are false.
-
-Tag checks (`holdsTag`), location (`atScene`), ownership counts, Use, Input,
-and combinators stay in quest JSON. `holdsTag` is too general for world
-records — it would encourage obscure category gates. Name a specific
-artefact or badge, or set a flag from quest logic.
+details, and artefacts use a **FlagRef** condition string: flags,
+`holds:<id>`, `badge:<id>`, `var:<id>=N` (and `>` / `<`). Unknown schemes are
+false.
 
 ```
-rich when  →  setFlag/clearFlag  →  onChange knock-ons
+rich when  →  then (flags / vars / badges / artefacts)
                  ↓
-         world FlagRef (flag / holds / badge)
+         world FlagRef (flag / holds / badge / var)
 ```
-
-Same-value set is a no-op (no knock-on). Dropping a badge or uncollecting a
-granted artefact does **not** re-grant while the flag stays true. Unset then
-set again → knock-ons may fire again (re-earn). Live `holds:` / `badge:`
-gates track **current** possession and do not fire knock-ons; use a flag
-when you want sticky unlocks or rewards.
 
 ---
 
 ## Predicates
 
-**Rich** (quest rules only):
+See [QUESTS.md](QUESTS.md) for the full table. Sketch:
 
 ```ts
 type Pred =
-  | { flag: string }            // set; invert with "not." prefix on the id
-  | { holds: number }           // artefact id
+  | { flag: string }
+  | { holds: number }
   | { holdsTag: string }
   | { hasBadge: string }
   | { atScene: number }
-  | { scenesOwned: { gte: number } }  // formal facts as added
-  | { uses: number }            // Use eval only
-  | { input: string }           // Input eval only
-  | { not: Pred }
-  | { all: Pred[] }
-  | { any: Pred[] };
+  | { scenesOwned: number }       // ≥ N
+  | { var: string; "=" | ">" | "<": number }
+  | { use: number } | { input: string } | { gain: number } | { drop: number }
+  | { not: Pred } | { all: Pred[] } | { any: Pred[] };
 ```
 
-Boolean `all` / `any` / `not` nest freely. `{ flag: "not.demo.x" }` means the
-flag is clear. Atoms do not grow arithmetic or generic comparisons; a numeric
-fact carries its own fields (`scenesOwned.gte`).
-
-**World gates** use FlagRef condition strings on world objects (see World
-gates below), not Pred trees. `holdsTag` / `atScene` / `scenesOwned` /
-`uses` / `input` stay quest-only.
-
-New puzzle support is a new Pred atom and/or eval trigger, documented in
-[QUESTS.md](QUESTS.md) when added. Authors do not get a DSL to invent facts.
+**World gates** use FlagRef strings (below), not Pred trees.
 
 ---
 
 ## Quests
 
-The JSON shape, validation, and evaluation rules are specified in
-**[QUESTS.md](QUESTS.md)** (this section is the design summary).
+The JSON shape, `on` / `when` / `then`, order, and wakes are specified in
+**[QUESTS.md](QUESTS.md)**.
 
 One file per manager quest: `data/quests/<name>.json`. The `name` is the write
 namespace. Managers edit via a giant JSON textarea (no fancy builder in v1).
@@ -141,57 +118,8 @@ no hard-coded reserved-name list in the engine — presence of the manager quest
 file owns the namespace. Release migration **`003-default-quests`** installs those
 two quests (and empty alchemy recipes) into existing worlds when missing.
 
-```ts
-interface QuestFile {
-  name: string;
-  title?: string;
-  description?: string;      // docs only
-  rules: QuestRule[];
-  onFlag?: Record<string, { onTrue?: KnockOn[]; onFalse?: KnockOn[] }>;
-  badges?: BadgeDef[];       // ids must be name.*
-}
-
-interface QuestRule {
-  id: string;
-  on?: "always" | "use" | "input";  // default always
-  ok?: string;                      // Use/Input notice copy
-  when: Pred;                       // rich
-  then: Array<{ setFlag: string } | { clearFlag: string }>;
-}
-
-type KnockOn =
-  | { grantBadge: string }
-  | { giveArtefact: number };
-```
-
-**Quest ≠ mission.** Always evaluable; never “started.”
-
-### Evaluation triggers
-
-Event-driven (no timer). Per authenticated user:
-
-1. Login / session established
-2. Successful go (`GET /s/:id/go/:exit`)
-3. Collect / uncollect
-4. Successful alchemy combine
-5. Badge drop
-6. **Use** (`POST /a/:id/use`) — Always rules plus `on: "use"`
-7. **Input** (`POST /s/:id/input`) — Always rules plus `on: "input"`
-
-After any flag change: run knock-ons, then evaluate again until quiet or max
-iterations (16). Manager edits to quest/alchemy JSON are **lazy** — users
-catch up on their next trigger.
-
-**Faults:** invalid quest files are skipped at load; eval/gate failures are
-logged as `[proseden:quest] …` for operators and never fail login, go, collect,
-or other user actions.
-
-Not triggers: anonymous views, heartbeats, `GET /s/:id` teleport, scene
-create/delete, Live chat.
-
-Within one pass: all quests in load order (manager files sorted by name, then
-questor personal files), all matching rules may fire.
-Alchemy recipes remain first-match-wins on combine.
+**Quest ≠ mission.** Always evaluable; never “started.” One evaluation = one
+ordered pass (see QUESTS.md). Bad rules are skipped at load.
 
 ---
 
@@ -200,7 +128,7 @@ Alchemy recipes remain first-match-wins on combine.
 World objects use a **FlagRef** string — not quest Pred trees. Empty = ungated.
 First `:` splits `scheme` / payload. No colon → `flag` scheme (`flag:` is
 optional). Invert with `not.` on the payload (`not.x`, `flag:not.x`,
-`holds:not.1`). Unknown schemes are false.
+`holds:not.1`, `var:not.x=0`). Unknown schemes are false.
 
 | Written | True when |
 |---|---|
@@ -210,13 +138,16 @@ optional). Invert with `not.` on the payload (`not.x`, `flag:not.x`,
 | `holds:not.12` | inventory does not contain that id |
 | `badge:demo.x` | reader holds badge `demo.x` |
 | `badge:not.demo.x` | reader does not hold that badge |
+| `var:demo.n=3` | var equals 3 (unset reads as 0) |
+| `var:demo.n>1` / `var:demo.n<5` | strict greater / less |
 
 **Lists:** `,` is AND within a group; `;` is OR between groups.
 `a,b,c;d,e` means `(a AND b AND c) OR (d AND e)`. Empty pieces fail closed.
-Do not put `,` or `;` inside flag or badge ids.
+Do not put `,` or `;` inside flag, badge, or var ids.
 
-`holdsTag`, `atScene`, `scenesOwned`, `uses`, and `input` are not world-gate
-schemes (quest Pred only). Tag gates are too general for world records.
+`holdsTag`, `atScene`, `scenesOwned`, `use`, `input`, `gain`, and `drop` are
+not world-gate schemes (quest Pred only). Tag gates are too general for world
+records.
 
 ```ts
 type FlagRef = string; // atom | "a,b" (AND) | "a;b" (OR of groups)
@@ -244,17 +175,17 @@ scene so teleport cannot bypass a locked door — never auto-copied.
 Edit UI: optional **Condition** (or **Conditions** for detail maps) disclosure,
 closed by default. Quests still flip flags via manager JSON. Live `holds:` /
 `badge:` on the world record is enough when the gate should track current
-possession; use a flag when you need sticky state or `onFlag` knock-ons.
+possession; use a flag or var when you want sticky unlocks or rewards.
 
-Anonymous readers: empty flags, inventory, and badges → positive refs fail;
-`not.*` / `holds:not.` / `badge:not.` succeed.
+Anonymous readers: empty flags, inventory, badges, and vars → positive refs fail;
+`not.*` / `holds:not.` / `badge:not.` / unset `var:…=0` succeed as appropriate.
 
 ---
 
 ## Badges
 
-Public; listed and dropped **only on profile**. Granted only via flag
-`onTrue` knock-on. Ids are `quest.local`. Held as `{ badge, grantTime }`
+Public; listed and dropped **only on profile**. Granted via `{ "grantBadge" }`
+in a rule’s `then`. Ids are `quest.local`. Held as `{ badge, grantTime }`
 (`grantTime` is ISO; omitted displays as **unknown**). Each newly granted
 badge also places a `notice` in the earner’s inbox (`You've earned a
 badge …`, body = catalogue description when set).
@@ -313,6 +244,7 @@ data/quests/users/<username>.json
 data/alchemy/recipes.json
 data/alchemy/users/<username>.json
 data/users/<name>.flags.json
+data/users/<name>.vars.json
 data/users/<name>.badges.json
 ```
 
@@ -320,10 +252,11 @@ data/users/<name>.badges.json
 
 ## Phased delivery
 
-- **A** — Flags, quest load/eval/cascade, gated exits
+- **A** — Flags, single-pass quest eval, gated exits
 - **B** — Detail + artefact visibility by flag
 - **C** — Alchemy + Inventory panel + manager recipes editor
-- **D** — Badges, profile drop, onFlag knock-ons, manager quest editor
+- **D** — Badges, profile drop, manager quest editor
+- **E** — Vars, gain/drop edges, then rewards (no onFlag)
 
 Migration: missing files/fields = behaviour as before this feature.
 
@@ -344,33 +277,32 @@ examine details, Use, Input):
 - **Threshold mark** — `scenesOwned` → flag → badge (seed `builders`)
 - **Hidden until** — `when` + `hidden` on exits/artefacts; `detailWhen` on details
 - **Being there with an item** — `{ "all": [{ "atScene": N }, { "holds": id }] }` → flag
-- **Use an artefact** — `on: "use"` + `{ "uses": id }` (and other preds); button
+- **Use an artefact** — `on: "use"` + `{ "use": id }` (and other preds); button
   next to Drop; does not consume the artefact
 - **Riddle / password** — `on: "input"` + `{ "input": "phrase" }` on a scene;
   private POST, not Live chat
-- **Ordered rooms / levers** — a chain of boolean flags (`sawA`, `sawAthenB`),
-  not a stage integer
+- **Ordered stages** — numeric `setVar` + order of rules (higher step first for
+  shared triggers); or a chain of boolean flags
 - **Badge-gated prose** — `badge:quest.local`
+- **Gain reaction** — `giveArtefact` then later `on: "gain"` / `{ "gain": id }`
+  in the same evaluation
 
-**Would need a named primitive** (not implemented until a puzzle wants it):
+**Still rare / prefer facts over inventing ops:**
 
-- **Visit N times** — engine-maintained fact + something like
-  `{ "visitCount": { "scene": N, "gte": 3 } }` — not a quest-authored
-  counter variable
-- **Qualities / reputation** — usually milestone flags or artefacts, not a
-  mutable number; only add a counter fact if a real puzzle cannot be told
-  that way
+- **Visit N times** — usually flags or a var you advance on enter-like edges;
+  no automatic visit counter yet
 
 **Out of scope:** parser, NPC dialogue, inventory quantities/weight, timers,
-shared mutable world flags, mission journal, JS in JSON.
+shared mutable world flags, mission journal, JS in JSON, string vars,
+increment/decrement, fixpoint cascade.
 
 ---
 
 ## Non-goals
 
-Parser, JS in data, expression DSL, player variables, nested inventory,
-give/trade, conditional scene body, mission journal, per-quest private flag
-stores, shared mutable world flags.
+Parser, JS in data, expression DSL, string vars, increment ops, nested
+inventory, give/trade, conditional scene body, mission journal, per-quest
+private flag stores, shared mutable world flags, fixpoint cascade.
 
 ---
 
@@ -378,6 +310,6 @@ stores, shared mutable world flags.
 
 Managers edit official quest JSON and the master alchemy file; hand-picked
 questors edit their personal quest file; every signed-in user may edit their own
-alchemy file. Readers see flag-gated prose, use Inventory Alchemy, earn/drop
+alchemy file. Readers see flag- and var-gated prose, use Inventory Alchemy, earn/drop
 badges on profile, and never see flags. Quest logic wakes on agreed events and
-cascades when flags change — without a mission to start.
+runs one ordered pass — without a mission to start.

@@ -5,25 +5,20 @@
   "rules": [
     {
       "id": "hamlet",
-      "when": { "all": [{ "scenesOwned": { "gte": 5 } }, { "flag": "not.builders.hamlet" }] },
-      "then": [{ "setFlag": "builders.hamlet" }]
+      "when": { "all": [{ "scenesOwned": 5 }, { "flag": "not.builders.hamlet" }] },
+      "then": [{ "setFlag": "builders.hamlet" }, { "grantBadge": "builders.hamlet" }]
     },
     {
       "id": "city",
-      "when": { "all": [{ "scenesOwned": { "gte": 20 } }, { "flag": "not.builders.city" }] },
-      "then": [{ "setFlag": "builders.city" }]
+      "when": { "all": [{ "scenesOwned": 20 }, { "flag": "not.builders.city" }] },
+      "then": [{ "setFlag": "builders.city" }, { "grantBadge": "builders.city" }]
     },
     {
       "id": "world",
-      "when": { "all": [{ "scenesOwned": { "gte": 100 } }, { "flag": "not.builders.world" }] },
-      "then": [{ "setFlag": "builders.world" }]
+      "when": { "all": [{ "scenesOwned": 100 }, { "flag": "not.builders.world" }] },
+      "then": [{ "setFlag": "builders.world" }, { "grantBadge": "builders.world" }]
     }
   ],
-  "onFlag": {
-    "builders.hamlet": { "onTrue": [{ "grantBadge": "builders.hamlet" }] },
-    "builders.city": { "onTrue": [{ "grantBadge": "builders.city" }] },
-    "builders.world": { "onTrue": [{ "grantBadge": "builders.world" }] }
-  },
   "badges": [
     { "id": "builders.hamlet", "title": "Hamlet builder", "description": "Own 5 scenes." },
     { "id": "builders.city", "title": "City builder", "description": "Own 20 scenes." },

@@ -4,13 +4,26 @@ export type FlagValue = boolean;
 
 /**
  * World-gate condition string. No colon → flag scheme (`quest.local`);
- * `flag:` is optional. Also `holds:<id>` and `badge:<id>`. Invert with
- * `not.` on the payload (`not.x`, `flag:not.x`, `holds:not.1`). Unknown
- * schemes are false. Empty = ungated.
+ * `flag:` is optional. Also `holds:<id>`, `badge:<id>`, and
+ * `var:<id>=N` / `>` / `<` (unset var reads as 0). Invert with `not.` on the
+ * payload. Unknown schemes are false. Empty = ungated.
  */
 export type FlagRef = string;
 
-export type QuestTrigger = "always" | "use" | "input";
+/** Why a quest evaluation started (wake). Internal `"always"` = omit-on wakes. */
+export type QuestWake = "always" | "use" | "input" | "gain" | "drop";
+
+/**
+ * Rule eligibility (`on` field). Omit for always. Never write `"always"` on disk.
+ * String events require a matching `when` atom (`use` / `input` / `gain` / `drop`).
+ */
+export type QuestRuleOn =
+  | "use"
+  | "input"
+  | "gain"
+  | "drop"
+  | { flag: string }
+  | { clearFlag: string };
 
 export type Pred =
   | { flag: string }
@@ -18,26 +31,32 @@ export type Pred =
   | { holdsTag: string }
   | { hasBadge: string }
   | { atScene: number }
-  | { scenesOwned: { gte: number } }
-  | { uses: number }
+  | { scenesOwned: number }
+  | { use: number }
   | { input: string }
+  | { gain: number }
+  | { drop: number }
+  | { var: string; "=": number }
+  | { var: string; ">": number }
+  | { var: string; "<": number }
   | { not: Pred }
   | { all: Pred[] }
   | { any: Pred[] };
 
-export type FlagEffect =
+export type ThenEffect =
   | { setFlag: string }
-  | { clearFlag: string };
-
-export type KnockOn = { grantBadge: string } | { giveArtefact: number };
+  | { clearFlag: string }
+  | { setVar: string; to: number }
+  | { grantBadge: string }
+  | { giveArtefact: number };
 
 export interface QuestRule {
   id: string;
   when: Pred;
-  then: FlagEffect[];
-  /** Default `always`. Omit on disk when always. */
-  on?: QuestTrigger;
-  /** Reader prose for Use/Input notices; ignored for Always. */
+  then: ThenEffect[];
+  /** Omit for always. */
+  on?: QuestRuleOn;
+  /** Reader prose for Use/Input notices only. */
   ok?: string;
 }
 
@@ -52,7 +71,6 @@ export interface QuestFile {
   title?: string;
   description?: string;
   rules: QuestRule[];
-  onFlag?: Record<string, { onTrue?: KnockOn[]; onFalse?: KnockOn[] }>;
   badges?: BadgeDef[];
   /**
    * In-memory only: set when loaded from `quests/users/<author>.json`.
@@ -73,5 +91,4 @@ export interface AlchemyRecipe {
   author?: string;
 }
 
-export const QUEST_EVAL_MAX_ITERATIONS = 16;
 export const INPUT_PHRASE_MAX = 200;

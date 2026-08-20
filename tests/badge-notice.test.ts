@@ -21,12 +21,9 @@ describe("badge earn inbox notice", () => {
         {
           id: "done",
           when: { holds: 1 },
-          then: [{ setFlag: "demo.done" }],
+          then: [{ setFlag: "demo.done" }, { grantBadge: "demo.winner" }],
         },
       ],
-      onFlag: {
-        "demo.done": { onTrue: [{ grantBadge: "demo.winner" }] },
-      },
       badges: [
         {
           id: "demo.winner",

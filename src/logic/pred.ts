@@ -3,13 +3,15 @@ import { logQuestFault } from "./log.js";
 
 const NOT_PREFIX = "not.";
 const HOLDS_ID = /^[1-9]\d*$/;
-const GATE_SCHEMES = new Set(["flag", "holds", "badge"]);
+const VAR_COMPARE = /^(.+?)(=|<(?!=)|>(?!=))(-?\d+)$/;
+const GATE_SCHEMES = new Set(["flag", "holds", "badge", "var"]);
 
 /** Reader facts for world-gate FlagRef evaluation (not quest Pred trees). */
 export type GateFacts = {
   flags: Record<string, FlagValue>;
   inventoryIds: ReadonlySet<number>;
   badges: ReadonlySet<string>;
+  vars: Record<string, number>;
 };
 
 export function gateFacts(partial?: Partial<GateFacts>): GateFacts {
@@ -17,6 +19,7 @@ export function gateFacts(partial?: Partial<GateFacts>): GateFacts {
     flags: partial?.flags ?? {},
     inventoryIds: partial?.inventoryIds ?? new Set(),
     badges: partial?.badges ?? new Set(),
+    vars: partial?.vars ?? {},
   };
 }
 
@@ -24,11 +27,12 @@ export function emptyGateFacts(): GateFacts {
   return gateFacts();
 }
 
-/** Build GateFacts for a reader (anonymous → empty flags / inventory / badges). */
+/** Build GateFacts for a reader (anonymous → empty flags / inventory / badges / vars). */
 export function gateFactsFor(
   world: {
     getUserFlags(username: string): Record<string, FlagValue>;
     getUserBadges(username: string): ReadonlyArray<{ badge: string }>;
+    getUserVars?(username: string): Record<string, number>;
   },
   user: { username: string; inventory: ReadonlyArray<{ artefactId: number }> } | undefined,
 ): GateFacts {
@@ -37,12 +41,25 @@ export function gateFactsFor(
     flags: world.getUserFlags(user.username),
     inventoryIds: new Set(user.inventory.map((i) => i.artefactId)),
     badges: new Set(world.getUserBadges(user.username).map((b) => b.badge)),
+    vars: world.getUserVars?.(user.username) ?? {},
   });
 }
 
 /** True when `flags[id] === true`. Empty / whitespace ref is treated as ungated by callers. */
 export function flagIsTrue(flags: Record<string, FlagValue>, flagId: string): boolean {
   return flags[flagId] === true;
+}
+
+/** Unset var reads as 0. */
+export function readVar(vars: Record<string, number>, id: string): number {
+  const v = vars[id];
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+export function compareVar(value: number, op: "=" | ">" | "<", target: number): boolean {
+  if (op === "=") return value === target;
+  if (op === ">") return value > target;
+  return value < target;
 }
 
 /**
@@ -104,6 +121,14 @@ function evaluateFlagRefAtom(trimmed: string, facts: GateFacts): boolean {
     ok = facts.inventoryIds.has(id);
   } else if (scheme === "badge") {
     ok = facts.badges.has(payload);
+  } else if (scheme === "var") {
+    const m = VAR_COMPARE.exec(payload);
+    if (!m) return false;
+    const id = m[1]!.trim();
+    const op = m[2] as "=" | ">" | "<";
+    const target = Number(m[3]);
+    if (!id || !Number.isFinite(target)) return false;
+    ok = compareVar(readVar(facts.vars, id), op, target);
   } else {
     return false;
   }
@@ -139,9 +164,13 @@ export interface PredContext {
   artefactTags: ReadonlyMap<number, readonly string[]>;
   atSceneId?: number;
   scenesOwned: number;
-  usesArtefactId?: number;
+  vars: Record<string, number>;
+  /** Use wake artefact id. */
+  useArtefactId?: number;
   /** Already normalized (`normalizeInputPhrase`). */
   inputPhrase?: string;
+  gainedIds?: ReadonlySet<number>;
+  droppedIds?: ReadonlySet<number>;
 }
 
 /** Trim, NFKC, collapse whitespace, en-US lower case. */
@@ -187,15 +216,28 @@ function evaluatePredUnsafe(pred: Pred, ctx: PredContext): boolean {
   }
   if ("hasBadge" in pred) return ctx.badges.has(pred.hasBadge);
   if ("atScene" in pred) return ctx.atSceneId === pred.atScene;
-  if ("uses" in pred) return ctx.usesArtefactId === pred.uses;
+  if ("use" in pred) {
+    return ctx.useArtefactId === pred.use;
+  }
+  if ("gain" in pred) return ctx.gainedIds?.has(pred.gain) === true;
+  if ("drop" in pred) return ctx.droppedIds?.has(pred.drop) === true;
   if ("input" in pred) {
     if (ctx.inputPhrase === undefined) return false;
     return ctx.inputPhrase === normalizeInputPhrase(pred.input);
   }
   if ("scenesOwned" in pred) {
-    const gte = pred.scenesOwned?.gte;
-    if (typeof gte !== "number") return false;
-    return ctx.scenesOwned >= gte;
+    const n = pred.scenesOwned;
+    if (typeof n !== "number" || !Number.isFinite(n)) return false;
+    return ctx.scenesOwned >= n;
+  }
+  if ("var" in pred) {
+    const id = String(pred.var).trim();
+    if (!id) return false;
+    const value = readVar(ctx.vars, id);
+    if ("=" in pred) return compareVar(value, "=", Number(pred["="]));
+    if (">" in pred) return compareVar(value, ">", Number(pred[">"]));
+    if ("<" in pred) return compareVar(value, "<", Number(pred["<"]));
+    return false;
   }
   return false;
 }
@@ -234,6 +276,7 @@ export function evaluateFlagPred(pred: Pred | undefined, flags: Record<string, F
       inventoryIds: new Set(),
       artefactTags: new Map(),
       scenesOwned: 0,
+      vars: {},
     });
   } catch (err) {
     logQuestFault("evaluateFlagPred", err);

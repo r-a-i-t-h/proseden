@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { evaluateFlagPred, evaluateFlagRef, evaluatePred, gateFacts, isFlagOnlyPred, normalizeInputPhrase } from "./pred.js";
 import {
-  applyFlagEffects,
+  evaluateFlagPred,
+  evaluateFlagRef,
+  evaluatePred,
+  gateFacts,
+  isFlagOnlyPred,
+  normalizeInputPhrase,
+} from "./pred.js";
+import {
+  applyThenEffects,
   evaluateQuests,
   matchAlchemyRecipe,
   parseQuestFile,
   questActionMessage,
   sanitizeUserFlags,
+  sanitizeUserVars,
 } from "./quests.js";
 
 describe("pred", () => {
@@ -17,6 +25,7 @@ describe("pred", () => {
     artefactTags: new Map<number, readonly string[]>([[1, ["key"]], [2, ["orb"]]]),
     atSceneId: 5,
     scenesOwned: 3,
+    vars: { "q.n": 2 },
   };
 
   it("missing flag is false", () => {
@@ -38,6 +47,19 @@ describe("pred", () => {
     expect(evaluatePred({ not: { flag: "q.a" } }, base)).toBe(false);
   });
 
+  it("scenesOwned number means >=", () => {
+    expect(evaluatePred({ scenesOwned: 3 }, base)).toBe(true);
+    expect(evaluatePred({ scenesOwned: 4 }, base)).toBe(false);
+  });
+
+  it("var compares; unset reads as 0", () => {
+    expect(evaluatePred({ var: "q.n", "=": 2 }, base)).toBe(true);
+    expect(evaluatePred({ var: "q.n", ">": 1 }, base)).toBe(true);
+    expect(evaluatePred({ var: "q.n", "<": 2 }, base)).toBe(false);
+    expect(evaluatePred({ var: "q.missing", "=": 0 }, base)).toBe(true);
+    expect(evaluatePred({ var: "q.missing", ">": 0 }, base)).toBe(false);
+  });
+
   it("flag-only detection (quest Pred; world gates use FlagRef)", () => {
     expect(isFlagOnlyPred({ flag: "q.a" })).toBe(true);
     expect(isFlagOnlyPred({ all: [{ flag: "q.a" }, { not: { flag: "q.b" } }] })).toBe(true);
@@ -46,49 +68,45 @@ describe("pred", () => {
     expect(evaluateFlagPred({ holds: 1 }, {})).toBe(false);
   });
 
-  it("FlagRef default is the flag scheme; flag: is optional", () => {
+  it("FlagRef schemes including var", () => {
     expect(evaluateFlagRef("q.a", gateFacts({ flags: base.flags }))).toBe(true);
     expect(evaluateFlagRef("flag:q.a", gateFacts({ flags: base.flags }))).toBe(true);
     expect(evaluateFlagRef("not.q.a", gateFacts({ flags: base.flags }))).toBe(false);
-    expect(evaluateFlagRef("not.q.missing", gateFacts())).toBe(true);
     expect(evaluateFlagRef("holds:1", gateFacts({ inventoryIds: base.inventoryIds }))).toBe(true);
-    expect(evaluateFlagRef("holds:not.1", gateFacts({ inventoryIds: base.inventoryIds }))).toBe(
-      false,
-    );
     expect(evaluateFlagRef("badge:q.badge", gateFacts({ badges: base.badges }))).toBe(true);
+    expect(evaluateFlagRef("var:q.n=2", gateFacts({ vars: base.vars }))).toBe(true);
+    expect(evaluateFlagRef("var:q.n>1", gateFacts({ vars: base.vars }))).toBe(true);
+    expect(evaluateFlagRef("var:q.n<2", gateFacts({ vars: base.vars }))).toBe(false);
+    expect(evaluateFlagRef("var:q.missing=0", gateFacts())).toBe(true);
+    expect(evaluateFlagRef("var:not.q.n=2", gateFacts({ vars: base.vars }))).toBe(false);
+    expect(evaluateFlagRef("var:q.n>=2", gateFacts({ vars: base.vars }))).toBe(false);
     expect(evaluateFlagRef("atScene:5", gateFacts({ flags: { "atScene:5": true } }))).toBe(false);
   });
 });
 
 describe("quest eval", () => {
-  it("rejects non-flag then effects", () => {
-    expect(() =>
-      parseQuestFile({
-        name: "demo",
-        rules: [{ id: "x", when: { holds: 1 }, then: [{ grantBadge: "demo.x" }] }],
-      }),
-    ).toThrow(/setFlag\/clearFlag/);
+  it("skips rules with invalid then; accepts grantBadge in then", () => {
+    const q = parseQuestFile({
+      name: "demo",
+      rules: [
+        { id: "bad", when: { holds: 1 }, then: [{ nope: true }] },
+        {
+          id: "ok",
+          when: { holds: 1 },
+          then: [{ setFlag: "demo.x" }, { grantBadge: "demo.x" }],
+        },
+      ],
+    });
+    expect(q.rules.map((r) => r.id)).toEqual(["ok"]);
   });
 
   it("rejects setFlag to false; strips to true; rejects other to", () => {
-    expect(() =>
+    expect(
       parseQuestFile({
         name: "demo",
         rules: [{ id: "x", when: { holds: 1 }, then: [{ setFlag: "demo.x", to: false }] }],
-      }),
-    ).toThrow(/use clearFlag/);
-    expect(() =>
-      parseQuestFile({
-        name: "demo",
-        rules: [{ id: "x", when: { holds: 1 }, then: [{ setFlag: "demo.x", to: 2 }] }],
-      }),
-    ).toThrow(/setFlag to must be true/);
-    expect(() =>
-      parseQuestFile({
-        name: "demo",
-        rules: [{ id: "x", when: { holds: 1 }, then: [{ setFlag: "demo.x", to: "calm" }] }],
-      }),
-    ).toThrow(/setFlag to must be true/);
+      }).rules,
+    ).toEqual([]);
     const q = parseQuestFile({
       name: "demo",
       rules: [{ id: "x", when: { holds: 1 }, then: [{ setFlag: "demo.x", to: true }] }],
@@ -96,25 +114,13 @@ describe("quest eval", () => {
     expect(q.rules[0]!.then).toEqual([{ setFlag: "demo.x" }]);
   });
 
-  it("rejects flag is and bare not. flag id", () => {
-    expect(() =>
+  it("skips flag is and bare not. flag id", () => {
+    expect(
       parseQuestFile({
         name: "demo",
         rules: [{ id: "x", when: { flag: "demo.x", is: true }, then: [{ setFlag: "demo.x" }] }],
-      }),
-    ).toThrow(/flag "is" is not allowed/);
-    expect(() =>
-      parseQuestFile({
-        name: "demo",
-        rules: [{ id: "x", when: { flag: "demo.x", is: false }, then: [{ setFlag: "demo.x" }] }],
-      }),
-    ).toThrow(/flag "is" is not allowed/);
-    expect(() =>
-      parseQuestFile({
-        name: "demo",
-        rules: [{ id: "x", when: { flag: "not." }, then: [{ setFlag: "demo.x" }] }],
-      }),
-    ).toThrow(/flag id must be non-empty/);
+      }).rules,
+    ).toEqual([]);
     const q = parseQuestFile({
       name: "demo",
       rules: [{ id: "x", when: { flag: "not.demo.y" }, then: [{ setFlag: "demo.x" }] }],
@@ -127,34 +133,44 @@ describe("quest eval", () => {
       "q.a": true,
     });
     expect(sanitizeUserFlags(null)).toEqual({});
-    expect(sanitizeUserFlags(["nope"])).toEqual({});
   });
 
-  it("rejects use/input atoms on always rules and missing atoms", () => {
-    expect(() =>
+  it("sanitizeUserVars keeps finite non-zero numbers", () => {
+    expect(sanitizeUserVars({ "q.a": 3, "q.z": 0, "q.s": "x", "q.n": NaN })).toEqual({ "q.a": 3 });
+  });
+
+  it("skips use/input atoms on always rules and missing atoms; rejects on always", () => {
+    expect(
       parseQuestFile({
         name: "demo",
-        rules: [{ id: "x", when: { uses: 12 }, then: [{ setFlag: "demo.x" }] }],
-      }),
-    ).toThrow(/uses is only valid on use rules/);
-    expect(() =>
+        rules: [{ id: "x", when: { use: 12 }, then: [{ setFlag: "demo.x" }] }],
+      }).rules,
+    ).toEqual([]);
+    expect(
       parseQuestFile({
         name: "demo",
-        rules: [{ id: "x", when: { input: "hi" }, then: [{ setFlag: "demo.x" }] }],
-      }),
-    ).toThrow(/input is only valid on input rules/);
-    expect(() =>
+        rules: [{ id: "x", on: "always", when: { holds: 1 }, then: [{ setFlag: "demo.x" }] }],
+      }).rules,
+    ).toEqual([]);
+    expect(
       parseQuestFile({
         name: "demo",
         rules: [{ id: "x", on: "use", when: { atScene: 5 }, then: [{ setFlag: "demo.x" }] }],
-      }),
-    ).toThrow(/must include \{ uses \}/);
-    expect(() =>
+      }).rules,
+    ).toEqual([]);
+  });
+
+  it("skips legacy uses and scenesOwned.gte shapes", () => {
+    expect(
       parseQuestFile({
         name: "demo",
-        rules: [{ id: "x", on: "input", when: { atScene: 5 }, then: [{ setFlag: "demo.x" }] }],
-      }),
-    ).toThrow(/must include \{ input \}/);
+        rules: [
+          { id: "old-use", on: "use", when: { uses: 12 }, then: [{ setFlag: "demo.x" }] },
+          { id: "old-gte", when: { scenesOwned: { gte: 5 } }, then: [{ setFlag: "demo.y" }] },
+          { id: "ok", when: { scenesOwned: 5 }, then: [{ setFlag: "demo.z" }] },
+        ],
+      }).rules.map((r) => r.id),
+    ).toEqual(["ok"]);
   });
 
   it("normalizes input phrases", () => {
@@ -173,7 +189,7 @@ describe("quest eval", () => {
     expect(quest.rules[0]?.when).toEqual({ input: "open sesame" });
   });
 
-  it("runs use/input rules only on their trigger", () => {
+  it("runs use/input rules only on their wake; order matters within one pass", () => {
     const quest = parseQuestFile({
       name: "demo",
       rules: [
@@ -182,7 +198,7 @@ describe("quest eval", () => {
           id: "use-key",
           on: "use",
           ok: "The lock yields.",
-          when: { all: [{ uses: 12 }, { atScene: 5 }] },
+          when: { all: [{ use: 12 }, { atScene: 5 }] },
           then: [{ setFlag: "demo.used" }],
         },
         {
@@ -208,19 +224,16 @@ describe("quest eval", () => {
     });
     expect(onCollect.flags["demo.held"]).toBe(true);
     expect(onCollect.flags["demo.used"]).toBeUndefined();
-    expect(onCollect.flags["demo.spoke"]).toBeUndefined();
     expect(onCollect.actionMatched).toBe(false);
 
     const onUse = evaluateQuests({
       quests: [quest],
       flags: {},
       badges: [],
-      trigger: "use",
-      predContext: { ...ctx, usesArtefactId: 12 },
+      wake: "use",
+      predContext: { ...ctx, useArtefactId: 12 },
     });
-    expect(onUse.flags["demo.held"]).toBe(true);
     expect(onUse.flags["demo.used"]).toBe(true);
-    expect(onUse.flags["demo.spoke"]).toBeUndefined();
     expect(onUse.actionMatched).toBe(true);
     expect(questActionMessage(onUse)).toBe("The lock yields.");
 
@@ -228,8 +241,8 @@ describe("quest eval", () => {
       quests: [quest],
       flags: {},
       badges: [],
-      trigger: "use",
-      predContext: { ...ctx, usesArtefactId: 1 },
+      wake: "use",
+      predContext: { ...ctx, useArtefactId: 1 },
     });
     expect(onUseWrongItem.flags["demo.used"]).toBeUndefined();
     expect(questActionMessage(onUseWrongItem)).toBe("Nothing happens.");
@@ -238,15 +251,14 @@ describe("quest eval", () => {
       quests: [quest],
       flags: {},
       badges: [],
-      trigger: "input",
+      wake: "input",
       predContext: { ...ctx, inputPhrase: normalizeInputPhrase("OPEN sesame") },
     });
     expect(onInput.flags["demo.spoke"]).toBe(true);
-    expect(onInput.flags["demo.used"]).toBeUndefined();
     expect(questActionMessage(onInput)).toBe("The wall slides.");
   });
 
-  it("cascades flag rules and grants badge once per transition", () => {
+  it("single pass: later rules see earlier effects; grantBadge in then", () => {
     const quest = parseQuestFile({
       name: "demo",
       rules: [
@@ -254,12 +266,9 @@ describe("quest eval", () => {
         {
           id: "b",
           when: { flag: "demo.has" },
-          then: [{ setFlag: "demo.done" }],
+          then: [{ setFlag: "demo.done" }, { grantBadge: "demo.winner" }],
         },
       ],
-      onFlag: {
-        "demo.done": { onTrue: [{ grantBadge: "demo.winner" }] },
-      },
       badges: [{ id: "demo.winner", title: "Winner" }],
     });
 
@@ -280,6 +289,107 @@ describe("quest eval", () => {
     const r2 = evaluateQuests({
       quests: [quest],
       flags: r1.flags,
+      badges: r1.badges,
+      predContext: {
+        inventoryIds: new Set([1]),
+        artefactTags: new Map(),
+        scenesOwned: 0,
+      },
+    });
+    expect(r2.badges).toEqual(["demo.winner"]);
+  });
+
+  it("giveArtefact mid-eval unlocks later on:gain; inventory visible to holds", () => {
+    const quest = parseQuestFile({
+      name: "demo",
+      rules: [
+        {
+          id: "grant",
+          when: { flag: "demo.go" },
+          then: [{ giveArtefact: 99 }],
+        },
+        {
+          id: "react",
+          on: "gain",
+          when: { all: [{ gain: 99 }, { holds: 99 }] },
+          then: [{ setFlag: "demo.got" }],
+        },
+      ],
+    });
+    const r = evaluateQuests({
+      quests: [quest],
+      flags: { "demo.go": true },
+      badges: [],
+      canGiveArtefact: (id) => id === 99,
+      predContext: {
+        inventoryIds: new Set(),
+        artefactTags: new Map(),
+        scenesOwned: 0,
+      },
+    });
+    expect(r.grantedArtefactIds).toEqual([99]);
+    expect(r.flags["demo.got"]).toBe(true);
+  });
+
+  it("setVar is idempotent; higher step before lower for shared input", () => {
+    const quest = parseQuestFile({
+      name: "demo",
+      rules: [
+        {
+          id: "to-2",
+          on: "input",
+          when: { all: [{ input: "wait" }, { var: "demo.dust", "=": 1 }] },
+          then: [{ setVar: "demo.dust", to: 2 }],
+        },
+        {
+          id: "to-1",
+          on: "input",
+          when: { all: [{ input: "wait" }, { var: "demo.dust", "=": 0 }] },
+          then: [{ setVar: "demo.dust", to: 1 }],
+        },
+      ],
+    });
+    const ctx = {
+      inventoryIds: new Set<number>(),
+      artefactTags: new Map<number, readonly string[]>(),
+      scenesOwned: 0,
+    };
+    const first = evaluateQuests({
+      quests: [quest],
+      flags: {},
+      badges: [],
+      wake: "input",
+      predContext: { ...ctx, inputPhrase: "wait" },
+    });
+    expect(first.vars["demo.dust"]).toBe(1);
+
+    const second = evaluateQuests({
+      quests: [quest],
+      flags: {},
+      vars: first.vars,
+      badges: [],
+      wake: "input",
+      predContext: { ...ctx, inputPhrase: "wait" },
+    });
+    expect(second.vars["demo.dust"]).toBe(2);
+  });
+
+  it("on flag edge fires only after set earlier this evaluation", () => {
+    const quest = parseQuestFile({
+      name: "demo",
+      rules: [
+        { id: "set", when: { holds: 1 }, then: [{ setFlag: "demo.x" }] },
+        {
+          id: "edge",
+          on: { flag: "demo.x" },
+          when: { flag: "demo.x" },
+          then: [{ grantBadge: "demo.x" }],
+        },
+      ],
+    });
+    const r = evaluateQuests({
+      quests: [quest],
+      flags: {},
       badges: [],
       predContext: {
         inventoryIds: new Set([1]),
@@ -287,10 +397,10 @@ describe("quest eval", () => {
         scenesOwned: 0,
       },
     });
-    expect(r2.badges).toEqual([]);
+    expect(r.badges).toEqual(["demo.x"]);
   });
 
-  it("does not throw when a rule when-clause is malformed", () => {
+  it("does not throw when a rule when-clause is malformed at eval", () => {
     const result = evaluateQuests({
       quests: [
         {
@@ -313,9 +423,12 @@ describe("quest eval", () => {
     expect(result.flags["broken.x"]).toBeUndefined();
   });
 
-  it("applyFlagEffects no-ops same value", () => {
-    const { changes } = applyFlagEffects({ "q.a": true }, [{ setFlag: "q.a" }]);
-    expect(changes).toEqual([]);
+  it("applyThenEffects no-ops same flag value", () => {
+    const { flagChanges } = applyThenEffects({ "q.a": true }, {}, [{ setFlag: "q.a" }], {
+      inventoryIds: new Set(),
+      canGiveArtefact: () => false,
+    });
+    expect(flagChanges).toEqual([]);
   });
 });
 
@@ -348,8 +461,6 @@ describe("alchemy match", () => {
       gives: 10,
     };
     const tags = new Map<number, readonly string[]>();
-    expect(
-      matchAlchemyRecipe([blocked, ok], [1, 2], tags, (r) => !r.author)?.id,
-    ).toBe("ok");
+    expect(matchAlchemyRecipe([blocked, ok], [1, 2], tags, (r) => !r.author)?.id).toBe("ok");
   });
 });

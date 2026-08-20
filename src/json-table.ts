@@ -167,7 +167,7 @@ registerJsonTableSchema({
   emptyValue: {},
   columns: [
     { key: "key", label: "Key", type: "text", placeholder: "slug" },
-    { key: "value", label: "Condition", type: "text", placeholder: "quest.flag, holds:1; badge:quest.x" },
+    { key: "value", label: "Condition", type: "text", placeholder: "quest.flag, holds:1; badge:quest.x; var:quest.n=1" },
   ],
   toRows: (parsed) => stringMapToRows(parsed, "Detail conditions must be a JSON object of named conditions."),
   fromRows: (rows) => stringMapFromRows(rows, "detail condition"),

@@ -1,35 +1,33 @@
 # Quest JSON
 
-A **quest** is a named bundle of rules. It is not a mission: readers never
-start or complete it. Rules watch live facts (inventory, location, badges,
-ownership, Use, Input) and **only set or clear boolean flags**. When a flag
-actually changes, `onFlag` may grant a badge or artefact. The prose world
-never sees the rule tree — exits and details check a simpler
-[FlagRef](PUZZLES.md#world-gates) string (`demo.hasKey`, `holds:12`,
-`badge:demo.x`, or comma/semicolon lists).
+A **quest** is a named bundle of rules. Readers never start or finish it.
+Rules watch what is true for a person (what they hold, where they are, flags,
+vars, …) and can change that person’s flags, vars, badges, and inventory.
 
-Design intent: [PUZZLES.md](PUZZLES.md). This file matches
-`src/logic/quests.ts`, `src/logic/pred.ts`, and `src/model/logic.ts`.
+World prose — exits, details, scene locks — does not read the rule tree. It
+checks a short [Condition string](PUZZLES.md#world-gates) instead (`demo.hasKey`,
+`holds:12`, `badge:demo.x`, `var:demo.stage>1`, …).
+
+This file matches `src/logic/quests.ts`, `src/logic/pred.ts`, and
+`src/model/logic.ts`. Design notes: [PUZZLES.md](PUZZLES.md).
 
 ---
 
 ## Picture
 
 ```
-facts (holds, atScene, uses, input, …)
-        ↓  when
-   setFlag / clearFlag     ← the only `then`
+something happens (login, go, use, collect, …)
         ↓
-   per-reader flags (set / clear)
-        ↓                  ↓
-  world FlagRef         onFlag (badge / artefact)
+  one quest evaluation (rules in file order, once)
+        ↓
+  flags / vars / badges / inventory may change
+        ↓
+  later rules in the same evaluation see those changes
+        ↓
+  world Conditions (FlagRef) read the new state
 ```
 
-Flags are **set or clear**. Missing is clear (false) in `when` and FlagRef.
-There is no variable store, no numbers/strings in the flag file, and no
-expression language. Stages are extra flags (`demo.sawA`, `demo.sawAthenB`).
-New puzzle needs are a new named fact on `when` (like `scenesOwned`), not
-`vars.foo += 1`.
+There is **no cascade loop**. Order in the JSON is the order that matters.
 
 ---
 
@@ -38,21 +36,18 @@ New puzzle needs are a new named fact on `when` (like `scenesOwned`), not
 | Path | Who |
 |---|---|
 | `data/quests/<name>.json` | Managers — **Data → Quests** |
-| `data/quests/users/<username>.json` | Hand-picked **questors** — Edit toolbar **Quests** (`name` must be their username) |
-| `data/users/<username>.flags.json` | Engine — that reader’s flags (invisible) |
-| `data/users/<username>.badges.json` | Engine — `{ badge, grantTime }` on profile |
+| `data/quests/users/<username>.json` | Questors — Edit toolbar **Quests** (`name` must be their username) |
+| `data/users/<username>.flags.json` | Engine — that reader’s flags |
+| `data/users/<username>.vars.json` | Engine — that reader’s numeric vars |
+| `data/users/<username>.badges.json` | Engine — badges on their profile |
 
-Same split as alchemy: Data for the official set, toolbar for your personal
-file. Alchemy is open to every signed-in user; questor is not.
-
-`name` is the **write namespace**. Every flag, badge, and `onFlag` key must
-be `name.` plus a local part (`demo.found`, never `other.found`). Manager
-files are evaluated first. Invalid or unauthorized personal files are skipped
-at load (`[proseden:quest] …`) and do not block others.
+`name` is the **write namespace**. Flags, badges, and vars you set must look like
+`name.local` (for example `demo.hasKey`). Manager files run before personal
+ones. Rules that fail to parse are skipped (logged); leftover unknown keys such
+as old `onFlag` are ignored.
 
 Seed: `builders` (scene-count badges) and empty `proseden` (reserves
-`proseden.*`). The filename should match `name`; the loader uses `name` from
-JSON. Extra JSON keys are ignored on parse and dropped on save.
+`proseden.*`).
 
 ---
 
@@ -64,19 +59,16 @@ JSON. Extra JSON keys are ignored on parse and dropped on save.
   "title": "Demo quest",
   "description": "Manager notes only. Not shown to readers.",
   "rules": [],
-  "onFlag": {},
   "badges": []
 }
 ```
 
-| Field | Required | Meaning |
-|---|---|---|
-| `name` | yes | Identifier and namespace. `/^[A-Za-z][A-Za-z0-9_-]*$/`. |
-| `title` | no | Display label. |
-| `description` | no | Manager-facing notes. |
-| `rules` | yes | May be empty (reserves the prefix). |
-| `onFlag` | no | Flag id → knock-ons when that flag **changes**. |
-| `badges` | no | Catalogue copy for the profile shelf. Granting still needs `onFlag`. |
+| Field | Meaning |
+|---|---|
+| `name` | Identifier and namespace. `/^[A-Za-z][A-Za-z0-9_-]*$/`. |
+| `title` / `description` | Optional labels for editors. |
+| `rules` | May be empty (still reserves the prefix). |
+| `badges` | Catalogue copy for the profile shelf. Granting needs a `grantBadge` in some rule’s `then`. |
 
 ---
 
@@ -86,312 +78,166 @@ JSON. Extra JSON keys are ignored on parse and dropped on save.
 {
   "id": "found-key",
   "when": { "holds": 12 },
-  "then": [{ "setFlag": "demo.hasKey" }]
+  "then": [{ "setFlag": "demo.hasKey" }, { "grantBadge": "demo.keyholder" }]
 }
 ```
 
-| Field | Required | Meaning |
-|---|---|---|
-| `id` | no | For logs. Default `rule-<index>`. |
-| `on` | no | `always` (default, omit on disk), `use`, or `input`. |
-| `when` | yes | One [predicate](#predicates). If true, `then` runs. |
-| `then` | yes | Non-empty. Only `setFlag` / `clearFlag`. |
-| `ok` | no | Prose shown after a matching Use or Input. Ignored on Always. |
+| Field | Meaning |
+|---|---|
+| `id` | Optional; handy in logs. |
+| `on` | When this rule is allowed to run. **Omit** for always. |
+| `when` | Must be true for `then` to run. |
+| `then` | Non-empty list of effects. |
+| `ok` | Optional prose after a matching **use** or **input** (ignored otherwise). |
 
-`grantBadge` and `giveArtefact` belong on `onFlag`, not in `then`.
+### `on` — eligibility
 
-**Always** (omit `on`) runs on login, go, collect, uncollect, alchemy, badge
-drop — and also during Use and Input, so threshold rules can catch up.
+| Written | Runs when |
+|---|---|
+| *(omit)* | Every evaluation |
+| `"use"` | This evaluation is Use of an artefact — `when` must include `{ "use": <id> }` |
+| `"input"` | This evaluation is Input — `when` must include `{ "input": "…" }` |
+| `"gain"` | That artefact is in this evaluation’s **gained set** — `when` must include `{ "gain": <id> }` |
+| `"drop"` | That artefact is in this evaluation’s **dropped set** — `when` must include `{ "drop": <id> }` |
+| `{ "flag": "demo.x" }` | Flag `demo.x` **became set earlier in this evaluation** |
+| `{ "clearFlag": "demo.x" }` | Flag `demo.x` was **cleared earlier in this evaluation** |
 
-**Use** (`"on": "use"`) runs only on `POST /a/:id/use` (button next to Drop
-while held; the artefact is not dropped). The rule’s `when` must include
-`{ "uses": <that id> }`. `{ "atScene": N }` is `lastSceneId` (opening the
-artefact page does not move you).
+Do not write `"on": "always"`. There is no “any use” — name the artefact or phrase.
 
-**Input** (`"on": "input"`) runs only on `POST /s/:id/input` (signed-in
-phrase box on the scene — not Live chat). The rule’s `when` must include
-`{ "input": "…" }`. Standing matches a successful scene GET (read, flag
-gate, entrance group); submitting counts as being in that room.
+**Gained set:** starts with the artefact if the player just **collected** it (or
+alchemy gave it). Also grows mid-evaluation when a prior rule’s
+`giveArtefact` actually adds something new. Put gain-reactions **after** the
+granting rule in the list.
 
-A matching Use/Input `when` (even if `then` is already a no-op) shows that
-rule’s `ok`, or **Done.** If no Use/Input rule matched: **Nothing happens.**
-Wrong phrase and wrong room look the same. Always side effects do not change
-that notice. HTML form posts redirect to the scene or artefact page and show
-the message in a notice above the page body (not via query keys or specially
-named details). JSON clients get `{ "ok": boolean, "message": "…" }` on the
-POST response.
+**Dropped set:** starts with the artefact if the player just dropped it.
 
 ---
 
-## Predicates
+## Predicates (`when`)
 
-`when` is one object with **one** recognised shape. Combinators nest;
-atoms do not grow arithmetic. A missing flag is clear (false).
-
-### Atoms (quest `when` only)
+One object with one recognised shape. Nest with `all` / `any` / `not`.
 
 | Shape | True when |
 |---|---|
-| `{ "flag": "demo.x" }` | Flag is set. |
-| `{ "flag": "not.demo.x" }` | Flag is clear (missing or not set). |
-| `{ "holds": 12 }` | Inventory contains artefact `12`. |
-| `{ "holdsTag": "key" }` | Some held artefact has that tag. |
-| `{ "hasBadge": "demo.winner" }` | Badge list includes that id. |
-| `{ "atScene": 5 }` | This eval’s scene id is `5`. |
-| `{ "scenesOwned": { "gte": 5 } }` | Scenes owned by this username ≥ 5. |
-| `{ "uses": 12 }` | This eval is Use of artefact `12`. **Only on `on: "use"`.** |
-| `{ "input": "open sesame" }` | Phrase matches after [normalize](#input-phrases). **Only on `on: "input"`.** |
+| `{ "flag": "demo.x" }` | Flag is set |
+| `{ "flag": "not.demo.x" }` | Flag is clear |
+| `{ "holds": 12 }` | Inventory has artefact 12 |
+| `{ "holdsTag": "key" }` | Some held artefact has that tag |
+| `{ "hasBadge": "demo.winner" }` | Badge list includes that id |
+| `{ "atScene": 5 }` | This evaluation’s scene id is 5 |
+| `{ "scenesOwned": 5 }` | Scenes owned by this username ≥ 5 |
+| `{ "var": "demo.dust", "=": 1 }` | Var equals 1 (unset reads as **0**) |
+| `{ "var": "demo.dust", ">": 1 }` | Var strictly greater than 1 |
+| `{ "var": "demo.dust", "<": 3 }` | Var strictly less than 3 |
+| `{ "use": 12 }` | Use of artefact 12 (only on `on: "use"`) |
+| `{ "input": "open sesame" }` | Input phrase matches after normalize (only on `on: "input"`) |
+| `{ "gain": 12 }` | Artefact 12 is in the gained set (only on `on: "gain"`) |
+| `{ "drop": 12 }` | Artefact 12 is in the dropped set (only on `on: "drop"`) |
 
-`uses` / `input` on an Always rule are rejected (so `{ "not": { "uses": 12 } }`
-cannot become a tautology). `scenesOwned.gte` must be a number or the atom is
-false. Scene create/delete is not a trigger; a threshold catches up later.
+`use` / `input` / `gain` / `drop` atoms are only valid on matching `on` rules.
 
-`GET /s/:id` teleport does not evaluate quests. `atScene` is whatever scene
-id that eval was given (go destination, collect home, Input’s scene, Use’s
-`lastSceneId`).
+---
 
-World records do **not** use this tree. Their Condition field is a FlagRef
-(`demo.x`, `holds:12`, `badge:demo.x`, or `,` AND / `;` OR lists). See
-[PUZZLES.md](PUZZLES.md#world-gates). `holdsTag`, `atScene`, `scenesOwned`,
-`uses`, and `input` stay quest-only.
+## Effects (`then`)
 
-### Combinators
-
-| Shape | True when |
+| Effect | What it does |
 |---|---|
-| `{ "not": <pred> }` | Inner is false. |
-| `{ "all": [ … ] }` | Every element is true. Empty `all` is true. |
-| `{ "any": [ … ] }` | At least one is true. Empty `any` is false. |
+| `{ "setFlag": "demo.x" }` | Set the flag (no-op if already set) |
+| `{ "clearFlag": "demo.x" }` | Clear the flag (no-op if already clear) |
+| `{ "setVar": "demo.dust", "to": 2 }` | Set a numeric var (no-op if already that value; unset ≡ 0) |
+| `{ "grantBadge": "demo.winner" }` | Add badge if not already held |
+| `{ "giveArtefact": 99 }` | Collect artefact 99 if not held (and it exists); counts as a **gain** for later rules |
+
+Ids you write must stay under this quest’s `name.` prefix.
+
+---
+
+## Order
+
+Rules run **once**, top to bottom, across quest files (managers first, then
+personal), then within each file’s `rules` array.
+
+- Put **A before B** if A should feed B in the **same** evaluation.
+- For a shared use/input that should advance only **one** step per action, put
+  the higher step **first** (so the lower step still matches this time, and
+  the higher waits for the next action).
+
+Example — wait twice to raise a stage:
 
 ```json
 {
-  "all": [
-    { "holds": 12 },
-    { "flag": "not.demo.used" },
-    { "any": [{ "atScene": 5 }, { "atScene": 6 }] }
-  ]
-}
-```
-
-`{ "not": { "flag": "demo.used" } }` is equivalent to `{ "flag": "not.demo.used" }`.
-
-### Input phrases
-
-Submitted `phrase` and the `{ "input": "…" }` literal are normalized the
-same way: Unicode NFKC, trim, collapse internal whitespace to one space,
-`toLocaleLowerCase("en-US")`. Empty after that is not a match (POST returns
-400). Max raw POST length is 200. Live chat is not a trigger.
-
----
-
-## Flag effects
-
-```json
-{ "setFlag": "demo.hasKey" }
-{ "clearFlag": "demo.hasKey" }
-```
-
-`setFlag` sets the flag; `clearFlag` clears it. Same-value set and clearing an
-absent key are no-ops (no `onFlag`). A legacy `"to": true` on `setFlag` is
-accepted and ignored; `"to": false` is rejected — use `clearFlag`.
-
-On load, `*.flags.json` keeps only set flags (`true`); `false` and leftover
-numbers or strings are dropped.
-
----
-
-## `onFlag` and badges
-
-```json
-"onFlag": {
-  "demo.done": {
-    "onTrue": [{ "grantBadge": "demo.winner" }, { "giveArtefact": 99 }],
-    "onFalse": [{ "grantBadge": "demo.unfinished" }]
-  }
-}
-```
-
-`onTrue` runs when the flag **changes** to set. `onFalse` runs when it is
-cleared. Knock-ons run once per transition. Dropping a badge or uncollecting
-a granted artefact does not re-grant until the flag goes away and comes back.
-
-| Knock-on | Effect |
-|---|---|
-| `{ "grantBadge": "demo.winner" }` | Append `{ "badge", "grantTime" }` if not already held. Id must be `name.*`. |
-| `{ "giveArtefact": 99 }` | After eval, collect that artefact if it exists and is not held. |
-
-`giveArtefact` does not update inventory mid-cascade (`holds` will not see
-it until the next trigger). Flags and badges granted in this eval **are**
-visible on later passes. Missing artefact ids are logged and skipped.
-
-**Badges** in the file are catalogue copy (`id`, `title`, `description`).
-Granting still requires `onFlag` → `grantBadge`. Readers see them on
-profile (with grant time) and may drop them there. Each **new** grant also
-sends an inbox notice from `Proseden`. Re-eval while already held does not
-notice again or change `grantTime`.
-
----
-
-## When eval runs
-
-Authenticated readers only. No timer. Manager JSON edits are lazy — each
-reader catches up on their next trigger.
-
-| Event | `atScene` | Rules |
-|---|---|---|
-| Register / login | Resume `lastSceneId` if still readable | Always |
-| Successful go | Destination after entrance-group resolve | Always |
-| Collect | Artefact’s home scene | Always |
-| Uncollect | `lastSceneId` | Always |
-| Alchemy combine | `lastSceneId` | Always |
-| Badge drop | `lastSceneId` | Always |
-| Use | `lastSceneId` | Always + `on: "use"` |
-| Input | That scene | Always + `on: "input"` |
-
-Not triggers: anonymous views, heartbeats, `GET /s/:id` teleport, scene
-create/delete, Live chat.
-
-### Cascade
-
-Loaded quests: manager files sorted by `name`, then personal files. Up to
-**16** passes: each eligible rule in file order; later rules see updated
-flags. If nothing changed, stop; else run `onFlag` for each change (quest
-looked up from the first dotted segment of the flag id), then another pass.
-Then persist flags/badges, send new-badge notices, then collect
-`giveArtefact` ids.
-
-Faults are logged as `[proseden:quest] …` and never fail the reader action.
-A bad rule is skipped; others still run.
-
----
-
-## Examples
-
-### Threshold (seed `builders`)
-
-Always rule. Scene create does not eval; login/go/collect is enough.
-
-```json
-{
-  "name": "builders",
-  "title": "Builders",
   "rules": [
     {
-      "id": "hamlet",
-      "when": { "scenesOwned": { "gte": 5 } },
-      "then": [{ "setFlag": "builders.hamlet" }]
-    }
-  ],
-  "onFlag": {
-    "builders.hamlet": { "onTrue": [{ "grantBadge": "builders.hamlet" }] }
-  },
-  "badges": [
-    {
-      "id": "builders.hamlet",
-      "title": "Hamlet builder",
-      "description": "Own 5 scenes."
-    }
-  ]
-}
-```
-
-### Hold a key vs sticky unlock
-
-Live possession on the world record — no quest needed, no badge:
-
-```json
-"when": "holds:12"
-```
-
-(`badge:demo.x` is the same idea.) For a **sticky** unlock or an `onFlag`
-reward, mirror hold/drop into a flag:
-
-```json
-{
-  "name": "cellar",
-  "rules": [
-    { "id": "key", "when": { "holds": 12 }, "then": [{ "setFlag": "cellar.unlocked" }] },
-    { "id": "no-key", "when": { "not": { "holds": 12 } }, "then": [{ "clearFlag": "cellar.unlocked" }] }
-  ],
-  "onFlag": {
-    "cellar.unlocked": { "onTrue": [{ "grantBadge": "cellar.keyholder" }] }
-  },
-  "badges": [{ "id": "cellar.keyholder", "title": "Keyholder" }]
-}
-```
-
-Put `"when": "cellar.unlocked"` on the exit **and** the destination scene
-(not auto-copied). Uncollect clears the flag on the next uncollect eval; the
-badge stays until dropped on profile.
-
-### Use and Input
-
-```json
-{
-  "name": "cellar",
-  "rules": [
-    {
-      "id": "key",
-      "on": "use",
-      "ok": "The lock yields.",
-      "when": { "all": [{ "uses": 12 }, { "atScene": 5 }] },
-      "then": [{ "setFlag": "cellar.unlocked" }]
+      "on": "input",
+      "when": { "all": [{ "input": "wait" }, { "var": "demo.dust", "=": 1 }] },
+      "then": [{ "setVar": "demo.dust", "to": 2 }]
     },
     {
-      "id": "riddle",
       "on": "input",
-      "ok": "The wall slides aside.",
-      "when": { "all": [{ "input": "open sesame" }, { "atScene": 5 }] },
-      "then": [{ "setFlag": "cellar.spoke" }]
+      "when": { "all": [{ "input": "wait" }, { "var": "demo.dust", "=": 0 }] },
+      "then": [{ "setVar": "demo.dust", "to": 1 }],
+      "ok": "Dust has settled a little."
     }
   ]
 }
 ```
 
-Use the key in scene 5, or type the phrase there. Chat does not count.
+---
 
-### Chain in one eval
+## Vars and world gates
 
-```json
-{
-  "name": "demo",
-  "rules": [
-    { "id": "a", "when": { "holds": 1 }, "then": [{ "setFlag": "demo.has" }] },
-    { "id": "b", "when": { "flag": "demo.has" }, "then": [{ "setFlag": "demo.done" }] }
-  ],
-  "onFlag": {
-    "demo.done": { "onTrue": [{ "grantBadge": "demo.winner" }] }
-  },
-  "badges": [{ "id": "demo.winner", "title": "Winner" }]
-}
-```
+Vars are numbers only. Unset reads as **0**. Operators in Conditions are
+strict `=` / `<` / `>` (not ≤ / ≥):
 
-One collect can set `demo.has`, then `demo.done` later in the same pass (or
-the next), then grant the badge when `demo.done` becomes true.
+- `var:demo.dust=1`
+- `var:demo.dust>1` (stage 2 or beyond if stages are 0,1,2,…)
+- `var:not.demo.dust=0` (invert, same `not.` idea as flags)
+
+Flags remain the boolean bus for simple locks. Vars are for stages and other
+ordered state (you’ll want comments in the quest file — there are no string
+labels on the values).
 
 ---
 
-## Authoring notes
+## When evaluations run
 
-- Reader-facing story goes in scene details gated by flags, not in
-  `description`.
-- Alchemy does not set flags; notice a combine with `{ "holds": <id> }`
-  later.
-- Empty seed quest `proseden` exists so other files cannot claim
-  `proseden.*`.
+Signed-in readers only. No timer.
+
+| Event | Notes |
+|---|---|
+| Register / login | Always rules |
+| Successful go | Always rules |
+| Collect | Wake `gain` for that artefact |
+| Drop from inventory | Wake `drop` for that artefact |
+| Alchemy combine (new item) | Wake `gain` for new ids |
+| Badge drop | Always rules |
+| Use | Wake `use` |
+| Input | Wake `input` on that scene |
+
+Not wakes: anonymous views, heartbeats, teleport `GET /s/:id`, Live chat,
+scene create/delete.
+
+After Use or Input, the reader sees that rule’s `ok`, or **Done.**, or
+**Nothing happens.** if no matching use/input rule fired.
+
+---
+
+## Example: builders (seed)
+
+```json
+{
+  "when": { "all": [{ "scenesOwned": 5 }, { "flag": "not.builders.hamlet" }] },
+  "then": [
+    { "setFlag": "builders.hamlet" },
+    { "grantBadge": "builders.hamlet" }
+  ]
+}
+```
 
 ---
 
 ## Validation
 
-`parseQuestFile` throws `QuestValidationError` on: non-object root; bad or
-missing `name`; `rules` not an array; rule missing `when` or empty `then`;
-`then` that is not `setFlag`/`clearFlag` or invalid `to` (`false` or
-non-true); ids not prefixed with `name.`; bad `onFlag` / knock-ons /
-`badges`; unknown `when` shape; `all`/`any` not arrays; `flag` with `"is"`
-or empty/`not.`-only id; `on` not always/use/input; `uses`/`input` on the
-wrong `on` or missing from a use/input rule; bad `uses` id; empty `input`
-after normalize.
-
-Other atom fields are not type-checked beyond shape. `{ "holds": "12" }`
-will not match inventory id `12`.
+On save, bad rules are rejected for the editor path; on load, bad rules are
+skipped so the rest of the file still runs. Whole-file failures still apply
+for a missing/invalid `name` or non-object JSON.

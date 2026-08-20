@@ -73,7 +73,7 @@ async function createActionWorld(): Promise<{
         id: "use-lamp",
         on: "use",
         ok: "The lamp flares.",
-        when: { all: [{ uses: lamp.id }, { atScene: hall.id }] },
+        when: { all: [{ use: lamp.id }, { atScene: hall.id }] },
         then: [{ setFlag: "demo.lit" }],
       },
       {

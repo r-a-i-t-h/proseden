@@ -2,7 +2,7 @@ import { cp, mkdir, readdir, access, rename, rm, unlink } from "node:fs/promises
 import { join } from "node:path";
 import { canManage, canRead, type AccessWorld } from "../access/permissions.js";
 import { normalizeDenies, normalizeGrants, stripLegacyInvites } from "../access/acl.js";
-import type { AlchemyRecipe, FlagValue, QuestFile, QuestTrigger } from "../model/logic.js";
+import type { AlchemyRecipe, FlagValue, QuestFile, QuestWake } from "../model/logic.js";
 import {
   alchemyGivesIds,
   alchemyRecipesForDisk,
@@ -14,6 +14,7 @@ import {
   questGiveArtefactIds,
   QuestValidationError,
   sanitizeUserFlags,
+  sanitizeUserVars,
 } from "../logic/quests.js";
 import { normalizeInputPhrase } from "../logic/pred.js";
 import type {
@@ -88,6 +89,8 @@ export class WorldStore implements AccessWorld {
   settings: SettingsFile = { peerMessagingEnabled: true };
   /** username → flags */
   userFlags = new Map<string, Record<string, FlagValue>>();
+  /** username → numeric quest vars */
+  userVars = new Map<string, Record<string, number>>();
   /** username → held badges */
   userBadges = new Map<string, UserBadge[]>();
   /** Manager `quests/<name>.json` files (file content). */
@@ -176,7 +179,13 @@ export class WorldStore implements AccessWorld {
     }
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".json")) {
-      if (file.endsWith(".flags.json") || file.endsWith(".badges.json")) continue;
+      if (
+        file.endsWith(".flags.json") ||
+        file.endsWith(".badges.json") ||
+        file.endsWith(".vars.json")
+      ) {
+        continue;
+      }
       const raw = await readJson<Record<string, unknown>>(join(this.dataDir, "users", file));
       const user = normalizeUser(raw);
       this.users.set(user.username, user);
@@ -186,6 +195,12 @@ export class WorldStore implements AccessWorld {
       const username = file.replace(/\.flags\.json$/, "");
       const raw = await readJson<unknown>(join(this.dataDir, "users", file));
       this.userFlags.set(username, sanitizeUserFlags(raw));
+    }
+
+    for (const file of await listFiles(join(this.dataDir, "users"), ".vars.json")) {
+      const username = file.replace(/\.vars\.json$/, "");
+      const raw = await readJson<unknown>(join(this.dataDir, "users", file));
+      this.userVars.set(username, sanitizeUserVars(raw));
     }
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".badges.json")) {
@@ -371,6 +386,10 @@ export class WorldStore implements AccessWorld {
     return { ...(this.userFlags.get(username) ?? {}) };
   }
 
+  getUserVars(username: string): Record<string, number> {
+    return { ...(this.userVars.get(username) ?? {}) };
+  }
+
   getUserBadges(username: string): UserBadge[] {
     return (this.userBadges.get(username) ?? []).map((b) => ({ ...b }));
   }
@@ -378,6 +397,12 @@ export class WorldStore implements AccessWorld {
   async saveUserFlags(username: string, flags: Record<string, FlagValue>): Promise<void> {
     this.userFlags.set(username, flags);
     await writeJsonAtomic(join(this.dataDir, "users", `${username}.flags.json`), flags);
+  }
+
+  async saveUserVars(username: string, vars: Record<string, number>): Promise<void> {
+    const clean = sanitizeUserVars(vars);
+    this.userVars.set(username, clean);
+    await writeJsonAtomic(join(this.dataDir, "users", `${username}.vars.json`), clean);
   }
 
   async saveUserBadges(username: string, badges: UserBadge[]): Promise<void> {
@@ -662,7 +687,7 @@ export class WorldStore implements AccessWorld {
   predContextFor(
     username: string,
     atSceneId?: number,
-    extra?: { usesArtefactId?: number; inputPhrase?: string },
+    extra?: { useArtefactId?: number; inputPhrase?: string },
   ) {
     const user = this.getUser(username);
     const inventoryIds = new Set((user?.inventory ?? []).map((i) => i.artefactId));
@@ -673,33 +698,33 @@ export class WorldStore implements AccessWorld {
       artefactTags,
       atSceneId,
       scenesOwned: this.scenesOwned(username),
-      usesArtefactId: extra?.usesArtefactId,
+      useArtefactId: extra?.useArtefactId,
       inputPhrase: extra?.inputPhrase,
     };
   }
 
   /**
-   * Run quest evaluation for a user (cascade). Persists flags/badges and grants artefacts.
+   * Run a single-pass quest evaluation. Persists flags/vars/badges and grants artefacts.
    * Newly earned badges get an inbox notice. Never throws to callers — faults are logged.
    */
   async evaluateQuestsForUser(
     username: string,
     atSceneId?: number,
     evalOpts?: {
-      trigger?: QuestTrigger;
-      usesArtefactId?: number;
+      wake?: QuestWake;
+      useArtefactId?: number;
       inputPhrase?: string;
+      wakeGained?: number[];
+      wakeDropped?: number[];
     },
-  ): Promise<
-    { user: UserRecord; actionMatched: boolean; actionOk?: string } | undefined
-  > {
+  ): Promise<{ user: UserRecord; actionMatched: boolean; actionOk?: string } | undefined> {
     const user = this.getUser(username);
     if (!user) return undefined;
     try {
       const sceneId = atSceneId ?? user.lastSceneId;
       const priorBadges = this.getUserBadges(username);
       const priorIds = priorBadges.map((b) => b.badge);
-      const trigger = evalOpts?.trigger ?? "always";
+      const wake = evalOpts?.wake ?? "always";
       const inputPhrase =
         evalOpts?.inputPhrase !== undefined
           ? normalizeInputPhrase(evalOpts.inputPhrase)
@@ -707,14 +732,19 @@ export class WorldStore implements AccessWorld {
       const result = evaluateQuests({
         quests: this.quests,
         flags: this.getUserFlags(username),
+        vars: this.getUserVars(username),
         badges: priorIds,
-        trigger,
+        wake,
+        wakeGained: evalOpts?.wakeGained,
+        wakeDropped: evalOpts?.wakeDropped,
+        canGiveArtefact: (id) => Boolean(this.getArtefact(id)),
         predContext: this.predContextFor(username, sceneId, {
-          usesArtefactId: evalOpts?.usesArtefactId,
+          useArtefactId: evalOpts?.useArtefactId,
           inputPhrase,
         }),
       });
       await this.saveUserFlags(username, result.flags);
+      await this.saveUserVars(username, result.vars);
       await this.saveUserBadges(
         username,
         mergeGrantedBadges(priorBadges, result.badges, nowIso()),
@@ -728,7 +758,7 @@ export class WorldStore implements AccessWorld {
           logQuestFault(`badge notice ${badgeId} for ${username}`, err);
         }
       }
-      let updated = user;
+      let updated = this.getUser(username) ?? user;
       for (const artefactId of result.grantedArtefactIds) {
         try {
           if (!this.getArtefact(artefactId)) continue;
@@ -750,7 +780,7 @@ export class WorldStore implements AccessWorld {
     }
   }
 
-  /** Inbox notice when a badge is newly granted via quest knock-on. */
+  /** Inbox notice when a badge is newly granted via quest then. */
   async notifyBadgeEarned(username: string, badgeId: string): Promise<InboxMessage> {
     const def = badgeDefsById(this.quests).get(badgeId);
     const title = def?.title ?? badgeId;

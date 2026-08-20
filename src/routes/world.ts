@@ -314,7 +314,7 @@ worldRoutes.post("/s/:id/input", async (c) => {
 
   c.get("locations").noteVisit(user.username, scene.id);
   const outcome = await triggerQuestEval(c, user, scene.id, {
-    trigger: "input",
+    wake: "input",
     inputPhrase: phrase,
   });
   return questActionReply(c, `/s/${id}`, outcome);
@@ -722,16 +722,21 @@ worldRoutes.post("/alchemy/combine", async (c) => {
   if (already) {
     return alchemyFail(c, "You already hold the result.");
   }
+  const newlyGained: number[] = [];
   for (const gid of gives) {
     if (!world.getArtefact(gid)) {
       return alchemyFail(c, `Result artefact ${gid} is missing from the world.`);
     }
     if (!updated.inventory.some((i) => i.artefactId === gid)) {
       updated = await world.collectArtefact(updated.username, gid);
+      newlyGained.push(gid);
     }
   }
   c.set("user", updated);
-  await triggerQuestEval(c, updated, updated.lastSceneId);
+  await triggerQuestEval(c, updated, updated.lastSceneId, {
+    wake: newlyGained.length ? "gain" : "always",
+    wakeGained: newlyGained.length ? newlyGained : undefined,
+  });
   const ok = recipe.ok ?? "Something new settles into your keeping.";
   if (wantsJson(c)) {
     return c.json({
@@ -2082,7 +2087,10 @@ worldRoutes.post("/a/:id/collect", async (c) => {
 
   const updated = await world.collectArtefact(user.username, id);
   c.set("user", updated);
-  await triggerQuestEval(c, updated, home.id);
+  await triggerQuestEval(c, updated, home.id, {
+    wake: "gain",
+    wakeGained: [id],
+  });
   if (wantsJson(c)) return c.json({ ok: true, inventory: c.get("user")!.inventory });
   return c.redirect(`${c.get("assetBase")}/a/${id}`);
 });
@@ -2101,8 +2109,8 @@ worldRoutes.post("/a/:id/use", async (c) => {
     return apiError(c, 403, "You are not holding that artefact.");
   }
   const outcome = await triggerQuestEval(c, user, user.lastSceneId, {
-    trigger: "use",
-    usesArtefactId: id,
+    wake: "use",
+    useArtefactId: id,
   });
   return questActionReply(c, `/a/${id}`, outcome);
 });
@@ -2114,7 +2122,10 @@ async function dropCollect(c: Context) {
   const id = Number(c.req.param("id"));
   const updated = await world.dropArtefact(user.username, id);
   c.set("user", updated);
-  await triggerQuestEval(c, updated, updated.lastSceneId);
+  await triggerQuestEval(c, updated, updated.lastSceneId, {
+    wake: "drop",
+    wakeDropped: [id],
+  });
   if (wantsJson(c)) return c.json({ ok: true, inventory: c.get("user")!.inventory });
   return c.redirect(`${c.get("assetBase")}/a/${id}`);
 }

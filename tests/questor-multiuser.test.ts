@@ -116,10 +116,13 @@ describe("questor / multi-user quests", () => {
     await expect(
       world.saveUserQuest("bob", {
         name: "bob",
-        rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x" }] }],
-        onFlag: {
-          "bob.x": { onTrue: [{ giveArtefact: aliceArt }] },
-        },
+        rules: [
+          {
+            id: "r",
+            when: { holds: 1 },
+            then: [{ setFlag: "bob.x" }, { giveArtefact: aliceArt }],
+          },
+        ],
       }),
     ).rejects.toThrow(/own or manage its home scene/);
   });
@@ -160,25 +163,33 @@ describe("questor / multi-user quests", () => {
       join(dataDir, "quests", "users", "bob.json"),
       JSON.stringify({
         name: "bob",
-        rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x" }] }],
-        onFlag: {
-          "bob.x": { onTrue: [{ giveArtefact: aliceArt }] },
-        },
+        rules: [
+          {
+            id: "r",
+            when: { holds: 1 },
+            then: [{ setFlag: "bob.x" }, { giveArtefact: aliceArt }],
+          },
+        ],
       }),
       "utf8",
     );
     await world.loadLogicFiles();
     expect(world.quests.some((q) => q.name === "bob")).toBe(false);
-    expect(world.getUserQuest("bob")?.onFlag?.["bob.x"]).toBeTruthy();
+    expect(world.getUserQuest("bob")?.rules?.[0]?.then?.some((t) => "giveArtefact" in t)).toBe(
+      true,
+    );
   });
 
   it("cold-loads user quests with giveArtefact after restart", async () => {
     await world.saveUserQuest("bob", {
       name: "bob",
-      rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x" }] }],
-      onFlag: {
-        "bob.x": { onTrue: [{ giveArtefact: bobArt }] },
-      },
+      rules: [
+        {
+          id: "r",
+          when: { holds: 1 },
+          then: [{ setFlag: "bob.x" }, { giveArtefact: bobArt }],
+        },
+      ],
     });
     expect(world.quests.some((q) => q.name === "bob" && q.author === "bob")).toBe(true);
 
@@ -213,9 +224,6 @@ describe("questor / multi-user quests", () => {
           name: "bob",
           rules: [],
           badges: [{ id: "bob.form", title: "From form" }],
-          onFlag: {
-            // no giveArtefact — ACL not needed
-          },
         }),
       }),
     });

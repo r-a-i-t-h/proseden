@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import type { QuestTrigger } from "../model/logic.js";
+import type { QuestWake } from "../model/logic.js";
 import type { UserRecord } from "../model/types.js";
 import { timedAsync } from "../observe.js";
 import { logQuestFault } from "./log.js";
@@ -16,9 +16,11 @@ export async function triggerQuestEval(
   user: UserRecord,
   atSceneId?: number,
   evalOpts?: {
-    trigger?: QuestTrigger;
-    usesArtefactId?: number;
+    wake?: QuestWake;
+    useArtefactId?: number;
     inputPhrase?: string;
+    wakeGained?: number[];
+    wakeDropped?: number[];
   },
 ): Promise<QuestEvalOutcome> {
   const fallback: QuestEvalOutcome = { user, actionMatched: false };

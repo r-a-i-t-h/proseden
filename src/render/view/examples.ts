@@ -37,18 +37,21 @@ export const ALCHEMY_HELP =
 export const QUEST_EXAMPLE = `{
   "name": "YOUR_USERNAME",
   "title": "Your personal quests",
-  "description": "Flags and badges must use your username as prefix.",
+  "description": "Flags, badges, and vars must use your username as prefix.",
   "rules": [
     {
       "id": "found-key",
       "when": { "holds": 12 },
-      "then": [{ "setFlag": "YOUR_USERNAME.hasKey" }]
+      "then": [
+        { "setFlag": "YOUR_USERNAME.hasKey" },
+        { "grantBadge": "YOUR_USERNAME.keyholder" }
+      ]
     },
     {
       "id": "use-key",
       "on": "use",
       "ok": "The lock yields.",
-      "when": { "all": [{ "uses": 12 }, { "atScene": 5 }] },
+      "when": { "all": [{ "use": 12 }, { "atScene": 5 }] },
       "then": [{ "setFlag": "YOUR_USERNAME.unlocked" }]
     },
     {
@@ -56,14 +59,9 @@ export const QUEST_EXAMPLE = `{
       "on": "input",
       "ok": "The wall slides aside.",
       "when": { "all": [{ "input": "open sesame" }, { "atScene": 5 }] },
-      "then": [{ "setFlag": "YOUR_USERNAME.spoke" }]
+      "then": [{ "setVar": "YOUR_USERNAME.stage", "to": 1 }]
     }
   ],
-  "onFlag": {
-    "YOUR_USERNAME.hasKey": {
-      "onTrue": [{ "grantBadge": "YOUR_USERNAME.keyholder" }]
-    }
-  },
   "badges": [
     {
       "id": "YOUR_USERNAME.keyholder",
@@ -74,4 +72,4 @@ export const QUEST_EXAMPLE = `{
 }`;
 
 export const QUEST_HELP =
-  "One quest object. name must be your username (the write namespace for flags and badges). Optional on is always (default), use, or input. use rules need { uses: id }; input rules need { input: \"phrase\" }. Manager quests are evaluated first; invalid or unauthorized personal quests are skipped at load. giveArtefact only for artefacts homed in scenes you own or manage. For an official named quest, ask a manager to register it under Data → Quests.";
+  "One quest object. name must be your username (the write namespace for flags, badges, and vars). Omit on for always; or use / input / gain / drop (with a matching when atom). Manager quests are evaluated first; bad rules are skipped at load. giveArtefact only for artefacts homed in scenes you own or manage. For an official named quest, ask a manager to register it under Data → Quests.";
