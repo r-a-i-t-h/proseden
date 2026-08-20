@@ -81,7 +81,7 @@ describe("detailWhen schema", () => {
     expect(schema.columns.map((c) => c.label)).toEqual(["Key", "Condition"]);
     expect(schema.columns[1]).toMatchObject({
       type: "text",
-      placeholder: "quest.flag, holds:1, badge:quest.x",
+      placeholder: "quest.flag, holds:1; badge:quest.x",
     });
   });
 });

@@ -6,7 +6,7 @@ ownership, Use, Input) and **only set or clear boolean flags**. When a flag
 actually changes, `onFlag` may grant a badge or artefact. The prose world
 never sees the rule tree — exits and details check a simpler
 [FlagRef](PUZZLES.md#world-gates) string (`demo.hasKey`, `holds:12`,
-`badge:demo.x`).
+`badge:demo.x`, or comma/semicolon lists).
 
 Design intent: [PUZZLES.md](PUZZLES.md). This file matches
 `src/logic/quests.ts`, `src/logic/pred.ts`, and `src/model/logic.ts`.
@@ -151,7 +151,7 @@ id that eval was given (go destination, collect home, Input’s scene, Use’s
 `lastSceneId`).
 
 World records do **not** use this tree. Their Condition field is a FlagRef
-(`demo.x`, `holds:12`, `badge:demo.x`). See
+(`demo.x`, `holds:12`, `badge:demo.x`, or `,` AND / `;` OR lists). See
 [PUZZLES.md](PUZZLES.md#world-gates). `holdsTag`, `atScene`, `scenesOwned`,
 `uses`, and `input` stay quest-only.
 

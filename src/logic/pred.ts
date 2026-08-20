@@ -47,6 +47,7 @@ export function flagIsTrue(flags: Record<string, FlagValue>, flagId: string): bo
 
 /**
  * Evaluate a world-gate FlagRef. Empty string is ungated (true).
+ * `,` AND within a group; `;` OR between groups.
  * No colon → `flag` scheme. Unknown schemes are false.
  */
 export function evaluateFlagRef(
@@ -64,7 +65,25 @@ export function evaluateFlagRef(
   }
 }
 
+/** `;` separates OR groups; within a group `,` is AND. Empty pieces fail closed. */
 function evaluateFlagRefUnsafe(trimmed: string, facts: GateFacts): boolean {
+  const groups = trimmed.split(";");
+  for (const group of groups) {
+    if (evaluateFlagRefAndGroup(group, facts)) return true;
+  }
+  return false;
+}
+
+function evaluateFlagRefAndGroup(group: string, facts: GateFacts): boolean {
+  const atoms = group.split(",");
+  for (const atom of atoms) {
+    const piece = atom.trim();
+    if (!piece || !evaluateFlagRefAtom(piece, facts)) return false;
+  }
+  return true;
+}
+
+function evaluateFlagRefAtom(trimmed: string, facts: GateFacts): boolean {
   const colon = trimmed.indexOf(":");
   const scheme = colon < 0 ? "flag" : trimmed.slice(0, colon);
   const rest = colon < 0 ? trimmed : trimmed.slice(colon + 1);

@@ -86,6 +86,51 @@ describe("FlagRef", () => {
     expect(evaluateFlagRef("badge: demo.x", facts)).toBe(true);
   });
 
+  it("comma lists are AND of atoms", () => {
+    const facts = gateFacts({
+      flags: { "raith.flag1": true, "raith.flag2": true },
+      badges: new Set(["raith.badge1"]),
+      inventoryIds: new Set([3]),
+    });
+    expect(
+      evaluateFlagRef(
+        "raith.flag1, flag:raith.flag2, not.raith.flag3, badge:raith.badge1",
+        facts,
+      ),
+    ).toBe(true);
+    expect(evaluateFlagRef("raith.flag1, holds:3", facts)).toBe(true);
+    expect(evaluateFlagRef("raith.flag1, holds:9", facts)).toBe(false);
+    expect(evaluateFlagRef("raith.flag1, not.raith.flag1", facts)).toBe(false);
+    expect(evaluateFlagRef("missing, raith.flag1", facts)).toBe(false);
+  });
+
+  it("semicolon separates OR of AND groups", () => {
+    const facts = gateFacts({
+      flags: { a: true, b: true },
+      badges: new Set(["k"]),
+      inventoryIds: new Set([12]),
+    });
+    expect(evaluateFlagRef("holds:12; badge:k", facts)).toBe(true);
+    expect(evaluateFlagRef("holds:99; badge:k", facts)).toBe(true);
+    expect(evaluateFlagRef("holds:99; badge:missing", facts)).toBe(false);
+    expect(evaluateFlagRef("a,b; c", facts)).toBe(true);
+    expect(evaluateFlagRef("a, missing; holds:12", facts)).toBe(true);
+    expect(evaluateFlagRef("a, missing; holds:99", facts)).toBe(false);
+  });
+
+  it("trims around commas and semicolons; empty pieces fail closed", () => {
+    const facts = gateFacts({ flags: { a: true, b: true } });
+    expect(evaluateFlagRef(" a , b ", facts)).toBe(true);
+    expect(evaluateFlagRef(" a ; b ", facts)).toBe(true);
+    expect(evaluateFlagRef("a,", facts)).toBe(false);
+    expect(evaluateFlagRef("a,,b", facts)).toBe(false);
+    expect(evaluateFlagRef("a;;b", facts)).toBe(true);
+    expect(evaluateFlagRef(";a", facts)).toBe(true);
+    expect(evaluateFlagRef("a;", facts)).toBe(true);
+    expect(evaluateFlagRef(";", facts)).toBe(false);
+    expect(evaluateFlagRef(",", facts)).toBe(false);
+  });
+
   it("parseOptionalFlagRef keeps unprefixed flags and scheme forms as written", () => {
     expect(parseOptionalFlagRef("q.open")).toBe("q.open");
     expect(parseOptionalFlagRef("flag:q.open")).toBe("flag:q.open");

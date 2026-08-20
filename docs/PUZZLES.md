@@ -211,11 +211,15 @@ optional). Invert with `not.` on the payload (`not.x`, `flag:not.x`,
 | `badge:demo.x` | reader holds badge `demo.x` |
 | `badge:not.demo.x` | reader does not hold that badge |
 
+**Lists:** `,` is AND within a group; `;` is OR between groups.
+`a,b,c;d,e` means `(a AND b AND c) OR (d AND e)`. Empty pieces fail closed.
+Do not put `,` or `;` inside flag or badge ids.
+
 `holdsTag`, `atScene`, `scenesOwned`, `uses`, and `input` are not world-gate
 schemes (quest Pred only). Tag gates are too general for world records.
 
 ```ts
-type FlagRef = string; // "quest.local" | "flag:…" | "holds:12" | "badge:demo.x"
+type FlagRef = string; // atom | "a,b" (AND) | "a;b" (OR of groups)
 
 // ExitRecord
 when?: FlagRef;

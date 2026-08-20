@@ -170,7 +170,7 @@ function jsonField(label: string, name: string, rows: number, value: unknown, ex
   return wrap;
 }
 
-const FLAG_REF_PLACEHOLDER = "quest.flag, holds:1, badge:quest.x";
+const FLAG_REF_PLACEHOLDER = "quest.flag, holds:1; badge:quest.x";
 
 /** Closed-by-default opt-in for FlagRef gates. */
 function conditionCollapse(summary: string, ...children: Array<Node | string>): HTMLElement {
