@@ -39,12 +39,32 @@ export function sanitizeUserVars(raw: unknown): Record<string, number> {
   return out;
 }
 
+/** Write namespace for a personal questor file (`user.<username>.*`). */
+export function userQuestNamespace(username: string): string {
+  return `user.${username}`;
+}
+
+const MANAGER_QUEST_NAME = /^[a-z][a-z0-9_-]*$/i;
+const PERSONAL_QUEST_NAME = /^user\.[a-z0-9_-]+$/i;
+
+/** True when `name` is a valid manager quest id (not the reserved `user` root). */
+export function isManagerQuestName(name: string): boolean {
+  return MANAGER_QUEST_NAME.test(name) && name.toLowerCase() !== "user";
+}
+
+/** True when `name` is a personal-style quest id (`user.<id>`). */
+export function isPersonalQuestName(name: string): boolean {
+  return PERSONAL_QUEST_NAME.test(name);
+}
+
 export function parseQuestFile(raw: unknown): QuestFile {
   if (!raw || typeof raw !== "object") throw new QuestValidationError("Quest must be an object");
   const o = raw as Record<string, unknown>;
   const name = String(o.name ?? "").trim();
-  if (!name || !/^[a-z][a-z0-9_-]*$/i.test(name)) {
-    throw new QuestValidationError("Quest name must be a simple identifier");
+  if (!name || (!isManagerQuestName(name) && !isPersonalQuestName(name))) {
+    throw new QuestValidationError(
+      'Quest name must be a simple identifier, or personal form "user.<username>" (not "user")',
+    );
   }
   if (!Array.isArray(o.rules)) throw new QuestValidationError("Quest rules must be an array");
   const rules: QuestRule[] = [];

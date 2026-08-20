@@ -75,20 +75,20 @@ describe("questor / multi-user quests", () => {
       rules: [{ id: "z", when: { holds: 1 }, then: [{ setFlag: "zebra.a" }] }],
     });
     await world.saveUserQuest("bob", {
-      name: "bob",
-      rules: [{ id: "b", when: { holds: 1 }, then: [{ setFlag: "bob.a" }] }],
+      name: "user.bob",
+      rules: [{ id: "b", when: { holds: 1 }, then: [{ setFlag: "user.bob.a" }] }],
     });
 
     expect(world.masterQuests.map((q) => q.name)).toEqual(["zebra"]);
-    expect(world.quests.map((q) => q.name)).toEqual(["zebra", "bob"]);
+    expect(world.quests.map((q) => q.name)).toEqual(["zebra", "user.bob"]);
     expect(world.quests[1]?.author).toBe("bob");
   });
 
-  it("forces username namespace and isolates under quests/users/", async () => {
+  it("forces user.<username> namespace and isolates under quests/users/", async () => {
     await world.saveUserQuest("bob", {
-      name: "bob",
+      name: "user.bob",
       rules: [],
-      badges: [{ id: "bob.starter", title: "Starter" }],
+      badges: [{ id: "user.bob.starter", title: "Starter" }],
     });
 
     const masterList = await app().request("/data/quests", {
@@ -97,30 +97,35 @@ describe("questor / multi-user quests", () => {
     expect(masterList.status).toBe(200);
     const masterBody = (await masterList.json()) as { quests: string[] };
     expect(masterBody.quests).not.toContain("bob");
+    expect(masterBody.quests).not.toContain("user.bob");
 
     const raw = await readFile(join(dataDir, "quests", "users", "bob.json"), "utf8");
-    expect(JSON.parse(raw).name).toBe("bob");
-    expect(world.getUserQuest("bob")?.badges?.[0]?.id).toBe("bob.starter");
+    expect(JSON.parse(raw).name).toBe("user.bob");
+    expect(world.getUserQuest("bob")?.badges?.[0]?.id).toBe("user.bob.starter");
   });
 
-  it("rejects user save when name is not username", async () => {
+  it("rejects user save when name is not user.<username>", async () => {
     await expect(
       world.saveUserQuest("bob", {
         name: "sunset",
         rules: [],
       }),
-    ).rejects.toThrow(/must be your username/);
+    ).rejects.toThrow(/must be "user\.bob"/);
+  });
+
+  it("rejects manager quest named user", async () => {
+    await expect(world.saveQuest({ name: "user", rules: [] })).rejects.toThrow(/simple identifier|reserved/);
   });
 
   it("rejects user save that giveArtefacts outside manage", async () => {
     await expect(
       world.saveUserQuest("bob", {
-        name: "bob",
+        name: "user.bob",
         rules: [
           {
             id: "r",
             when: { holds: 1 },
-            then: [{ setFlag: "bob.x" }, { giveArtefact: aliceArt }],
+            then: [{ setFlag: "user.bob.x" }, { giveArtefact: aliceArt }],
           },
         ],
       }),
@@ -137,24 +142,15 @@ describe("questor / multi-user quests", () => {
     expect(world.getUserQuest("bob")).toBeUndefined();
   });
 
-  it("skips user quest when manager already owns the namespace", async () => {
+  it("allows manager bob and personal user.bob side by side", async () => {
     await world.saveQuest({ name: "bob", rules: [] });
-    await mkdir(join(dataDir, "quests", "users"), { recursive: true });
-    await writeFile(
-      join(dataDir, "quests", "users", "bob.json"),
-      JSON.stringify({
-        name: "bob",
-        rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x" }] }],
-      }),
-      "utf8",
-    );
-    await world.loadLogicFiles();
-    expect(world.quests.map((q) => q.name)).toEqual(["bob"]);
-    expect(world.quests[0]?.author).toBeUndefined();
+    await world.saveUserQuest("bob", {
+      name: "user.bob",
+      rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "user.bob.x" }] }],
+    });
+    expect(world.quests.map((q) => q.name)).toEqual(["bob", "user.bob"]);
+    expect(world.quests.find((q) => q.name === "user.bob")?.author).toBe("bob");
     expect(world.getUserQuest("bob")?.rules).toHaveLength(1);
-    await expect(
-      world.saveUserQuest("bob", { name: "bob", rules: [] }),
-    ).rejects.toThrow(/owned by a manager quest/);
   });
 
   it("skips unauthorized giveArtefact on load but keeps file for editing", async () => {
@@ -162,19 +158,19 @@ describe("questor / multi-user quests", () => {
     await writeFile(
       join(dataDir, "quests", "users", "bob.json"),
       JSON.stringify({
-        name: "bob",
+        name: "user.bob",
         rules: [
           {
             id: "r",
             when: { holds: 1 },
-            then: [{ setFlag: "bob.x" }, { giveArtefact: aliceArt }],
+            then: [{ setFlag: "user.bob.x" }, { giveArtefact: aliceArt }],
           },
         ],
       }),
       "utf8",
     );
     await world.loadLogicFiles();
-    expect(world.quests.some((q) => q.name === "bob")).toBe(false);
+    expect(world.quests.some((q) => q.name === "user.bob")).toBe(false);
     expect(world.getUserQuest("bob")?.rules?.[0]?.then?.some((t) => "giveArtefact" in t)).toBe(
       true,
     );
@@ -182,20 +178,20 @@ describe("questor / multi-user quests", () => {
 
   it("cold-loads user quests with giveArtefact after restart", async () => {
     await world.saveUserQuest("bob", {
-      name: "bob",
+      name: "user.bob",
       rules: [
         {
           id: "r",
           when: { holds: 1 },
-          then: [{ setFlag: "bob.x" }, { giveArtefact: bobArt }],
+          then: [{ setFlag: "user.bob.x" }, { giveArtefact: bobArt }],
         },
       ],
     });
-    expect(world.quests.some((q) => q.name === "bob" && q.author === "bob")).toBe(true);
+    expect(world.quests.some((q) => q.name === "user.bob" && q.author === "bob")).toBe(true);
 
     const reloaded = new WorldStore(dataDir);
     await reloaded.load();
-    expect(reloaded.quests.some((q) => q.name === "bob" && q.author === "bob")).toBe(true);
+    expect(reloaded.quests.some((q) => q.name === "user.bob" && q.author === "bob")).toBe(true);
   });
 
   it("questor may GET/POST /quests; non-questor is forbidden", async () => {
@@ -211,6 +207,7 @@ describe("questor / multi-user quests", () => {
     const html = await get.text();
     expect(html).toContain("Your quests");
     expect(html).toContain("quests/users/bob.json");
+    expect(html).toContain("user.bob.*");
     expect(html).toContain('name="questJson"');
 
     const post = await app().request("/quests", {
@@ -221,21 +218,21 @@ describe("questor / multi-user quests", () => {
       },
       body: new URLSearchParams({
         questJson: JSON.stringify({
-          name: "bob",
+          name: "user.bob",
           rules: [],
-          badges: [{ id: "bob.form", title: "From form" }],
+          badges: [{ id: "user.bob.form", title: "From form" }],
         }),
       }),
     });
     expect(post.status).toBe(302);
-    expect(world.getUserQuest("bob")?.badges?.[0]?.id).toBe("bob.form");
+    expect(world.getUserQuest("bob")?.badges?.[0]?.id).toBe("user.bob.form");
   });
 
   it("preserves compact quest JSON formatting on save and reload", async () => {
     const compact = `{
-  "name": "bob",
+  "name": "user.bob",
   "rules": [
-    { "id": "r", "when": { "holds": 1 }, "then": [{ "setFlag": "bob.x" }] }
+    { "id": "r", "when": { "holds": 1 }, "then": [{ "setFlag": "user.bob.x" }] }
   ]
 }
 `;
@@ -250,7 +247,9 @@ describe("questor / multi-user quests", () => {
     expect(post.status).toBe(302);
 
     const onDisk = await readFile(join(dataDir, "quests", "users", "bob.json"), "utf8");
-    expect(onDisk).toContain(`{ "id": "r", "when": { "holds": 1 }, "then": [{ "setFlag": "bob.x" }] }`);
+    expect(onDisk).toContain(
+      `{ "id": "r", "when": { "holds": 1 }, "then": [{ "setFlag": "user.bob.x" }] }`,
+    );
     expect(onDisk).not.toContain(`"when": {\n`);
 
     const get = await app().request("/quests", {
@@ -258,14 +257,16 @@ describe("questor / multi-user quests", () => {
     });
     expect(get.status).toBe(200);
     const html = await get.text();
-    expect(html).toContain(`{ &quot;id&quot;: &quot;r&quot;, &quot;when&quot;: { &quot;holds&quot;: 1 }, &quot;then&quot;: [{ &quot;setFlag&quot;: &quot;bob.x&quot; }] }`);
+    expect(html).toContain(
+      `{ &quot;id&quot;: &quot;r&quot;, &quot;when&quot;: { &quot;holds&quot;: 1 }, &quot;then&quot;: [{ &quot;setFlag&quot;: &quot;user.bob.x&quot; }] }`,
+    );
   });
 
   it("manager may edit personal quests and lists only master under /data/quests", async () => {
     await world.saveUserQuest("alice", {
-      name: "alice",
+      name: "user.alice",
       rules: [],
-      badges: [{ id: "alice.m", title: "M" }],
+      badges: [{ id: "user.alice.m", title: "M" }],
     });
     await world.saveQuest({ name: "official", rules: [] });
 
@@ -273,7 +274,7 @@ describe("questor / multi-user quests", () => {
       headers: { Accept: "text/html", Authorization: `Bearer ${aliceToken}` },
     });
     expect(personal.status).toBe(200);
-    expect(await personal.text()).toContain("alice.m");
+    expect(await personal.text()).toContain("user.alice.m");
 
     const data = await app().request("/data/quests", {
       headers: { Accept: "application/json", Authorization: `Bearer ${aliceToken}` },
@@ -294,12 +295,12 @@ describe("questor / multi-user quests", () => {
       ],
     });
     await world.saveUserQuest("bob", {
-      name: "bob",
+      name: "user.bob",
       rules: [
         {
           id: "follow",
           when: { flag: "alpha.go" },
-          then: [{ setFlag: "bob.seen" }],
+          then: [{ setFlag: "user.bob.seen" }],
         },
       ],
     });
@@ -307,6 +308,6 @@ describe("questor / multi-user quests", () => {
     await world.evaluateQuestsForUser("bob");
     const flags = world.getUserFlags("bob");
     expect(flags["alpha.go"]).toBe(true);
-    expect(flags["bob.seen"]).toBe(true);
+    expect(flags["user.bob.seen"]).toBe(true);
   });
 });

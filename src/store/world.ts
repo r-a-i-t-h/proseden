@@ -8,6 +8,7 @@ import {
   alchemyRecipesForDisk,
   badgeDefsById,
   evaluateQuests,
+  isManagerQuestName,
   parseAlchemyRecipes,
   parseQuestFile,
   questFileForDisk,
@@ -15,6 +16,7 @@ import {
   QuestValidationError,
   sanitizeUserFlags,
   sanitizeUserVars,
+  userQuestNamespace,
 } from "../logic/quests.js";
 import { normalizeInputPhrase } from "../logic/pred.js";
 import type {
@@ -93,11 +95,11 @@ export class WorldStore implements AccessWorld {
   userVars = new Map<string, Record<string, number>>();
   /** username → held badges */
   userBadges = new Map<string, UserBadge[]>();
-  /** Manager `quests/<name>.json` files (file content). */
+  /** Manager `quests/<name>.json` files (simple names; not `user` / `user.*`). */
   masterQuests: QuestFile[] = [];
-  /** Per-user `quests/users/<name>.json` file contents (no author field). */
+  /** Per-user `quests/users/<username>.json` file contents (name is `user.<username>`). */
   userQuestFiles = new Map<string, QuestFile>();
-  /** Merged manager-first + users for eval (user quests have author set). */
+  /** Merged manager-first + personal (`user.<username>.*`) for eval (user quests have author set). */
   quests: QuestFile[] = [];
   /** Master `alchemy/recipes.json` (file content; unrestricted gives). */
   masterAlchemyRecipes: AlchemyRecipe[] = [];
@@ -464,13 +466,18 @@ export class WorldStore implements AccessWorld {
     await mkdir(join(this.dataDir, "quests", "users"), { recursive: true });
 
     const master: QuestFile[] = [];
-    const masterNames = new Set<string>();
     for (const file of await listFiles(join(this.dataDir, "quests"), ".json")) {
       try {
         const raw = await readJson<unknown>(join(this.dataDir, "quests", file));
         const quest = parseQuestFile(raw);
+        if (!isManagerQuestName(quest.name)) {
+          logQuestFault(
+            `load quest ${file}`,
+            new Error(`manager quest name must be a simple identifier (got "${quest.name}")`),
+          );
+          continue;
+        }
         master.push(quest);
-        masterNames.add(quest.name);
       } catch (err) {
         logQuestFault(`load quest ${file}`, err);
       }
@@ -483,20 +490,14 @@ export class WorldStore implements AccessWorld {
     const usersDir = join(this.dataDir, "quests", "users");
     for (const file of await listFiles(usersDir, ".json")) {
       const username = file.replace(/\.json$/, "");
+      const expectedName = userQuestNamespace(username);
       try {
         const parsed = parseQuestFile(await readJson<unknown>(join(usersDir, file)));
         userFiles.set(username, parsed);
-        if (parsed.name !== username) {
+        if (parsed.name !== expectedName) {
           logQuestFault(
-            `quest user ${username}: name must be username`,
+            `quest user ${username}: name must be "${expectedName}"`,
             new Error(`got "${parsed.name}"`),
-          );
-          continue;
-        }
-        if (masterNames.has(parsed.name)) {
-          logQuestFault(
-            `quest user ${username}: skipped (manager quest owns namespace)`,
-            new Error(`manager quest "${parsed.name}" already exists`),
           );
           continue;
         }
@@ -650,23 +651,29 @@ export class WorldStore implements AccessWorld {
   }
 
   emptyUserQuest(username: string): QuestFile {
+    const name = userQuestNamespace(username);
     const shell = {
-      name: username,
+      name,
       title: `${username}'s quests`,
       description:
-        "Personal quest namespace. Flags and badges must use your username as prefix.",
+        "Personal quest namespace. Flags and badges must use user.<username> as prefix.",
       rules: [] as [],
     };
     try {
       return parseQuestFile(shell);
     } catch {
-      // Username may start with a digit (allowed for accounts, not for quest names).
+      // Username may contain characters invalid for personal quest names.
       return shell;
     }
   }
 
   async saveQuest(quest: QuestFile, sourceText?: string): Promise<void> {
     const parsed = questFileForDisk(parseQuestFile(quest));
+    if (!isManagerQuestName(parsed.name)) {
+      throw new QuestValidationError(
+        `Manager quest name must be a simple identifier (not "${parsed.name}"; "user" is reserved for personal quests)`,
+      );
+    }
     const path = join(this.dataDir, "quests", `${parsed.name}.json`);
     await writeQuestOrAlchemySource(path, parsed, sourceText);
     await this.loadLogicFiles();
@@ -681,15 +688,9 @@ export class WorldStore implements AccessWorld {
   /** Persist one user's quest file (namespace + ACL-checked) and rebuild the merge. */
   async saveUserQuest(username: string, quest: QuestFile, sourceText?: string): Promise<void> {
     const parsed = questFileForDisk(parseQuestFile(quest));
-    if (parsed.name !== username) {
-      throw new QuestValidationError(
-        `Quest name must be your username ("${username}")`,
-      );
-    }
-    if (this.getMasterQuest(username)) {
-      throw new QuestValidationError(
-        `Namespace "${username}" is owned by a manager quest; ask a manager to register an official name`,
-      );
+    const expected = userQuestNamespace(username);
+    if (parsed.name !== expected) {
+      throw new QuestValidationError(`Quest name must be "${expected}"`);
     }
     this.assertUserQuestGrants(username, parsed);
     await mkdir(join(this.dataDir, "quests", "users"), { recursive: true });

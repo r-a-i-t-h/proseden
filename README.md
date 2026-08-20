@@ -172,7 +172,7 @@ Managers can create, download, and delete archives from **Data**. `proseden-upda
 
 A planned stop (SIGTERM) writes SHA-256 hashes of live session tokens to `data/.sessions.json` (mode 0600). The next boot loads that file as a one-shot fallback and deletes it, so a save after an update still authenticates. Idle cookies, crashes, and a second restart without a visit may still log people out. The handoff file is not included in data tarballs.
 
-Staff roles: `moderator`, `topographer`, `manager`, `questor`. Questors edit personal quest JSON under `quests/users/`; managers register official named quests under Data → Quests.
+Staff roles: `moderator`, `topographer`, `manager`, `questor`. Questors edit personal quest JSON under `quests/users/` (namespace `user.<username>.*`); managers register official named quests under Data → Quests.
 
 Prose files use YAML frontmatter plus `## detail:<slug>` sections. Hash-leading lines in body/detail text are saved escaped (`\#`, `\##`) so they cannot be mistaken for section markers.
 

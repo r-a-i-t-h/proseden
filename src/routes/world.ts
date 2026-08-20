@@ -628,7 +628,7 @@ worldRoutes.get("/quests", async (c) => {
   const quest = world.getUserQuest(user.username) ?? world.emptyUserQuest(user.username);
   const back = sceneBackLink(user, world);
   const notice = c.req.query("saved") ? "Quest saved." : "";
-  const example = QUEST_EXAMPLE.replaceAll("YOUR_USERNAME", user.username);
+  const example = QUEST_EXAMPLE.replaceAll("YOUR_USERNAME", `user.${user.username}`);
   const help = `${QUEST_HELP} This file is yours alone — not shared via scene ACL.`;
   const raw = await world.readUserQuestText(user.username);
   const field = renderJsonFieldHtml(
@@ -645,7 +645,7 @@ worldRoutes.get("/quests", async (c) => {
     200,
     "Quests",
     `${renderPageBackCrumb(back)}<h1>Your quests</h1>
-      <p class="muted">Personal file <code>quests/users/${escapeHtml(user.username)}.json</code>. Namespace is <code>${escapeHtml(user.username)}.*</code>. Evaluated after manager quests.</p>
+      <p class="muted">Personal file <code>quests/users/${escapeHtml(user.username)}.json</code>. Namespace is <code>user.${escapeHtml(user.username)}.*</code>. Evaluated after manager quests.</p>
       ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
       <form method="post" action="quests" class="stack">
         ${field}

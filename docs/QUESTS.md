@@ -36,18 +36,19 @@ There is **no cascade loop**. Order in the JSON is the order that matters.
 | Path | Who |
 |---|---|
 | `data/quests/<name>.json` | Managers — **Data → Quests** |
-| `data/quests/users/<username>.json` | Questors — Edit toolbar **Quests** (`name` must be their username) |
+| `data/quests/users/<username>.json` | Questors — Edit toolbar **Quests** (`name` must be `user.<username>`) |
 | `data/users/<username>.flags.json` | Engine — that reader’s flags |
 | `data/users/<username>.vars.json` | Engine — that reader’s numeric vars |
 | `data/users/<username>.badges.json` | Engine — badges on their profile |
 
 `name` is the **write namespace**. Flags, badges, and vars you set must look like
-`name.local` (for example `demo.hasKey`). Manager files run before personal
-ones. Rules that fail to parse are skipped (logged); leftover unknown keys such
-as old `onFlag` are ignored.
+`name.local` (for example `demo.hasKey`, or `user.raith.hamlet` for a personal
+file). Manager files run before personal ones. Rules that fail to parse are
+skipped (logged); leftover unknown keys such as old `onFlag` are ignored.
 
 Seed: `builders` (scene-count badges) and empty `proseden` (reserves
-`proseden.*`).
+`proseden.*`). Manager name `user` is reserved so personal `user.<username>.*`
+namespaces cannot collide.
 
 ---
 
@@ -65,7 +66,7 @@ Seed: `builders` (scene-count badges) and empty `proseden` (reserves
 
 | Field | Meaning |
 |---|---|
-| `name` | Identifier and namespace. `/^[A-Za-z][A-Za-z0-9_-]*$/`. |
+| `name` | Identifier and namespace. Manager: `/^[A-Za-z][A-Za-z0-9_-]*$/` (not `user`). Personal: `user.<username>`. |
 | `title` / `description` | Optional labels for editors. |
 | `rules` | May be empty (still reserves the prefix). |
 | `badges` | Catalogue copy for the profile shelf. Granting needs a `grantBadge` in some rule’s `then`. |

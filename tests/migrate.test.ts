@@ -114,7 +114,7 @@ describe("schema migrate runner", () => {
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  it("001 then 002 then 003 then 004 stamp schemaVersion 4 and keep other meta keys", async () => {
+  it("001 through 005 stamp schemaVersion 5 and keep other meta keys", async () => {
     await writeMeta(dataDir, {
       nextSceneId: 4,
       nextArtefactId: 2,
@@ -130,9 +130,10 @@ describe("schema migrate runner", () => {
     expect(first.stdout).toMatch(/applying 002-rewrite-link-schemes\.sh/);
     expect(first.stdout).toMatch(/applying 003-default-quests\.sh/);
     expect(first.stdout).toMatch(/applying 004-badge-objects\.sh/);
+    expect(first.stdout).toMatch(/applying 005-user-quest-namespace\.sh/);
 
     const meta = await readMeta(dataDir);
-    expect(meta.schemaVersion).toBe(4);
+    expect(meta.schemaVersion).toBe(5);
     expect(meta.nextSceneId).toBe(4);
     expect(meta.nextArtefactId).toBe(2);
     expect(meta.nextGroupId).toBe(2);
@@ -158,7 +159,7 @@ describe("schema migrate runner", () => {
 
     const second = await runMigrate(dataDir);
     expect(second.code).toBe(0);
-    expect(second.stdout).toMatch(/already at schema 4/);
+    expect(second.stdout).toMatch(/already at schema 5/);
     expect(second.stdout).not.toMatch(/applying/);
     expect(await readFile(join(dataDir, "meta.json"), "utf8")).toBe(afterFirst);
   });
@@ -182,11 +183,12 @@ describe("schema migrate runner", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toMatch(/applying 003-default-quests\.sh/);
     expect(result.stdout).toMatch(/applying 004-badge-objects\.sh/);
+    expect(result.stdout).toMatch(/applying 005-user-quest-namespace\.sh/);
     const builders = JSON.parse(
       await readFile(join(dataDir, "quests", "builders.json"), "utf8"),
     ) as { description?: string };
     expect(builders.description).toBe("custom");
-    expect(await readMeta(dataDir)).toMatchObject({ schemaVersion: 4 });
+    expect(await readMeta(dataDir)).toMatchObject({ schemaVersion: 5 });
   });
 
   it("004 converts string badge files and leaves object files and grantTime alone", async () => {
@@ -214,14 +216,52 @@ describe("schema migrate runner", () => {
     const result = await runMigrate(dataDir);
     expect(result.code).toBe(0);
     expect(result.stdout).toMatch(/applying 004-badge-objects\.sh/);
-    expect(result.stdout).toMatch(/rewrote 1 file\(s\)/);
+    expect(result.stdout).toMatch(/applying 005-user-quest-namespace\.sh/);
+    expect(result.stdout).toMatch(/004-badge-objects: rewrote 1 file\(s\)/);
     expect(JSON.parse(await readFile(join(dataDir, "users", "alice.badges.json"), "utf8"))).toEqual([
       { badge: "builders.hamlet" },
       { badge: "demo.winner" },
     ]);
     expect(await readFile(join(dataDir, "users", "bob.badges.json"), "utf8")).toBe(bobBefore);
     expect(await readFile(join(dataDir, "users", "carol.badges.json"), "utf8")).toBe(carolBefore);
-    expect(await readMeta(dataDir)).toMatchObject({ schemaVersion: 4 });
+    expect(await readMeta(dataDir)).toMatchObject({ schemaVersion: 5 });
+  });
+
+  it("005 rewrites legacy personal quest namespaces", async () => {
+    await writeMeta(dataDir, {
+      nextSceneId: 4,
+      nextArtefactId: 2,
+      nextGroupId: 2,
+      nextEntranceGroupId: 2,
+      entranceSceneId: 1,
+      schemaVersion: 4,
+    });
+    await mkdir(join(dataDir, "quests", "users"), { recursive: true });
+    await mkdir(join(dataDir, "users"), { recursive: true });
+    await writeFile(
+      join(dataDir, "quests", "users", "bob.json"),
+      `${JSON.stringify({
+        name: "bob",
+        rules: [{ id: "r", when: { holds: 1 }, then: [{ setFlag: "bob.x" }] }],
+      })}\n`,
+    );
+    await writeFile(
+      join(dataDir, "users", "bob.flags.json"),
+      `${JSON.stringify({ "bob.x": true })}\n`,
+    );
+
+    const result = await runMigrate(dataDir);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toMatch(/applying 005-user-quest-namespace\.sh/);
+    const quest = JSON.parse(
+      await readFile(join(dataDir, "quests", "users", "bob.json"), "utf8"),
+    ) as { name: string; rules: Array<{ then: Array<{ setFlag: string }> }> };
+    expect(quest.name).toBe("user.bob");
+    expect(quest.rules[0]?.then[0]?.setFlag).toBe("user.bob.x");
+    expect(JSON.parse(await readFile(join(dataDir, "users", "bob.flags.json"), "utf8"))).toEqual({
+      "user.bob.x": true,
+    });
+    expect(await readMeta(dataDir)).toMatchObject({ schemaVersion: 5 });
   });
 
   it("applies 001 then 002 in order from v0", async () => {
@@ -311,6 +351,7 @@ Inline code \`[x](pedia:y)\` stays put.
     expect(result.stdout).toMatch(/applying 002-rewrite-link-schemes\.sh/);
     expect(result.stdout).toMatch(/applying 003-default-quests\.sh/);
     expect(result.stdout).toMatch(/applying 004-badge-objects\.sh/);
+    expect(result.stdout).toMatch(/applying 005-user-quest-namespace\.sh/);
     expect(result.stdout).toMatch(/rewrote 3 file\(s\)/);
 
     expect(await readFile(join(dataDir, "scenes", "1.md"), "utf8")).toBe(`---
@@ -327,7 +368,7 @@ Inline code \`[x](pedia:y)\` stays put.
       "A [clipping](search:deckle edge).\n",
     );
     expect(await readFile(join(dataDir, "scenes", "1.exits.json"), "utf8")).toBe("[]\n");
-    expect((await readMeta(dataDir)).schemaVersion).toBe(4);
+    expect((await readMeta(dataDir)).schemaVersion).toBe(5);
   });
 
   it("upgrades a sample scene file without mangling the rest", async () => {

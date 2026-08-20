@@ -237,7 +237,7 @@ function isGranted(
  * Staff roles:
  * - moderator: edit (prose) worldwide; may delete unacceptable content
  * - topographer: graph structure via isTopographer (not prose edit / ACL manage / delete)
- * - questor: edit own `quests/users/<username>.json` (personal flag/badge namespace)
+ * - questor: edit own `quests/users/<username>.json` (personal `user.<username>.*` namespace)
  * - manager: full manage + personnel APIs (superset of moderator + topographer + questor)
  */
 function staffCovers(user: UserRecord, right: Right, world: AccessWorld): boolean {

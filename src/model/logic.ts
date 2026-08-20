@@ -73,8 +73,8 @@ export interface QuestFile {
   rules: QuestRule[];
   badges?: BadgeDef[];
   /**
-   * In-memory only: set when loaded from `quests/users/<author>.json`.
-   * Absent on manager quests. Never persisted to disk.
+   * In-memory only: set when loaded from `quests/users/<author>.json`
+   * (`name` is `user.<author>`). Absent on manager quests. Never persisted to disk.
    */
   author?: string;
 }

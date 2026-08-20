@@ -105,18 +105,22 @@ Questors (staff role; managers included) edit a personal file at
 the official set via **Data → Quests** and their own file via the toolbar — same
 split as alchemy (**Data → Alchemy** vs toolbar **Alchemy**). Unlike alchemy
 (open to every signed-in user), questor is **hand-picked** — personal quests add
-more overhead and need elevated trust. The quest `name` must be their username;
-flags and badges use that prefix. Manager quests are evaluated before personal
-ones. Load faults in personal files are skipped silently (logged). Unauthorized
-`giveArtefact` (home scene not owned or managed) is rejected on save and omitted
-from the merge on load — same idea as user alchemy. For a named official quest,
-ask a manager to register it under Data → Quests.
+more overhead and need elevated trust. The personal quest `name` must be
+`user.<username>`; flags and badges use that prefix (for example
+`user.raith.hamlet`). Manager namespaces stay flat (`builders.hamlet`). Manager
+quests are evaluated before personal ones. Load faults in personal files are
+skipped silently (logged). Unauthorized `giveArtefact` (home scene not owned or
+managed) is rejected on save and omitted from the merge on load — same idea as
+user alchemy. For a named official quest, ask a manager to register it under
+Data → Quests.
 
 Seed ships **`builders`** (scene-count threshold badges) and **`proseden`**
-(empty shell that reserves the `proseden.*` prefix for the platform). There is
-no hard-coded reserved-name list in the engine — presence of the manager quest
-file owns the namespace. Release migration **`003-default-quests`** installs those
-two quests (and empty alchemy recipes) into existing worlds when missing.
+(empty shell that reserves the `proseden.*` prefix for the platform). Manager
+quest name **`user`** is reserved for the personal `user.<username>.*` tree.
+Release migration **`003-default-quests`** installs those two quests (and empty
+alchemy recipes) into existing worlds when missing. Migration
+**`005-user-quest-namespace`** rewrites legacy personal `username.*` ids to
+`user.<username>.*`.
 
 **Quest ≠ mission.** Always evaluable; never “started.” One evaluation = one
 ordered pass (see QUESTS.md). Bad rules are skipped at load.

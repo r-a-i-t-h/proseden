@@ -10,11 +10,15 @@ import {
 import {
   applyThenEffects,
   evaluateQuests,
+  isManagerQuestName,
+  isPersonalQuestName,
   matchAlchemyRecipe,
   parseQuestFile,
   questActionMessage,
   sanitizeUserFlags,
   sanitizeUserVars,
+  userQuestNamespace,
+  QuestValidationError,
 } from "./quests.js";
 
 describe("pred", () => {
@@ -81,6 +85,30 @@ describe("pred", () => {
     expect(evaluateFlagRef("var:not.q.n=2", gateFacts({ vars: base.vars }))).toBe(false);
     expect(evaluateFlagRef("var:q.n>=2", gateFacts({ vars: base.vars }))).toBe(false);
     expect(evaluateFlagRef("atScene:5", gateFacts({ flags: { "atScene:5": true } }))).toBe(false);
+  });
+});
+
+describe("quest names", () => {
+  it("accepts manager and personal forms; reserves bare user", () => {
+    expect(isManagerQuestName("builders")).toBe(true);
+    expect(isManagerQuestName("user")).toBe(false);
+    expect(isPersonalQuestName("user.raith")).toBe(true);
+    expect(isPersonalQuestName("user.9bob")).toBe(true);
+    expect(isPersonalQuestName("raith")).toBe(false);
+    expect(userQuestNamespace("raith")).toBe("user.raith");
+    expect(parseQuestFile({ name: "user.bob", rules: [] }).name).toBe("user.bob");
+    expect(() => parseQuestFile({ name: "user", rules: [] })).toThrow(QuestValidationError);
+  });
+
+  it("enforces user.<username> write prefix on personal quest effects", () => {
+    const q = parseQuestFile({
+      name: "user.bob",
+      rules: [
+        { id: "bad", when: { holds: 1 }, then: [{ setFlag: "bob.x" }] },
+        { id: "ok", when: { holds: 1 }, then: [{ setFlag: "user.bob.x" }] },
+      ],
+    });
+    expect(q.rules.map((r) => r.id)).toEqual(["ok"]);
   });
 });
 

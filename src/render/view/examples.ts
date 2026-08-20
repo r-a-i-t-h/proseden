@@ -37,7 +37,7 @@ export const ALCHEMY_HELP =
 export const QUEST_EXAMPLE = `{
   "name": "YOUR_USERNAME",
   "title": "Your personal quests",
-  "description": "Flags, badges, and vars use your username as prefix. Rules run once top to bottom.",
+  "description": "Flags, badges, and vars use this quest name as prefix (personal: user.<username>). Rules run once top to bottom.",
   "rules": [
     {
       "id": "found-key",
@@ -72,7 +72,7 @@ export const QUEST_EXAMPLE = `{
 }`;
 
 /** Shown in the quest JSON “i” hint (plain text; newlines preserved in the UI). */
-export const QUEST_HELP = `One quest object. name is the write namespace for flags, badges, and vars (your username on this page). Rules run once in document order each evaluation — later rules see earlier then effects. Omit on for always. Event ons need a matching when atom. Optional ok prose is for use/input only. Bad rules are skipped at load. giveArtefact only for artefacts you own or manage the home of.
+export const QUEST_HELP = `One quest object. name is the write namespace for flags, badges, and vars. Personal files use user.<username>; manager files use a simple name (not "user"). Rules run once in document order each evaluation — later rules see earlier then effects. Omit on for always. Event ons need a matching when atom. Optional ok prose is for use/input only. Bad rules are skipped at load. giveArtefact only for artefacts you own or manage the home of.
 
 on (eligibility — omit for always):
   "use" | "input" | "gain" | "drop"

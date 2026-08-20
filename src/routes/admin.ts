@@ -201,7 +201,7 @@ adminRoutes.get("/quests", async (c) => {
     200,
     "Quests",
     `${renderPageBackCrumb(back)}<h1>Quests</h1>
-      <p class="muted">Manager quest files in <code>quests/&lt;name&gt;.json</code>. Evaluated before questor personal files.</p>
+      <p class="muted">Manager quest files in <code>quests/&lt;name&gt;.json</code>. Evaluated before questor personal files (<code>user.&lt;username&gt;.*</code>). Name <code>user</code> is reserved.</p>
       ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
       ${links}
       <h2>New quest</h2>
@@ -244,7 +244,7 @@ adminRoutes.get("/quests/:name", async (c) => {
   const back = sceneBackLink(c.get("user")!, world);
   const notice = c.req.query("saved") ? "Saved." : "";
   const example = QUEST_EXAMPLE.replaceAll("YOUR_USERNAME", name);
-  const help = `${QUEST_HELP} Manager file: flags/badges/vars use this quest’s name prefix.`;
+  const help = `${QUEST_HELP} Manager file: flags/badges/vars use this quest’s name prefix (not "user").`;
   const raw = await world.readMasterQuestText(name);
   const field = renderJsonFieldHtml(
     "Quest JSON",
