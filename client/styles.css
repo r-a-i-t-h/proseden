@@ -761,17 +761,22 @@ details.live-online-wrap {
   z-index: 5;
   left: 0;
   top: calc(100% + 0.3rem);
-  width: min(16.5rem, calc(100vw - 3rem));
+  width: min(28rem, calc(100vw - 3rem));
+  max-height: min(70vh, 32rem);
+  overflow: auto;
   padding: 0.55rem 0.65rem;
   background: #f7faf5;
   border: 1px solid var(--line);
   color: var(--ink);
 }
 
-.json-format-example .muted {
+.json-format-example .muted,
+.json-format-example .json-format-note {
   margin: 0 0 0.4rem;
   font-size: 0.78rem;
   line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .json-format-example pre {

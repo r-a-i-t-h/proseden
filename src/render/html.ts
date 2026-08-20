@@ -669,7 +669,7 @@ function renderJsonFieldHtml(
         <details class="json-format-help">
           <summary class="json-format-info" title="Example ${escapeAttr(label)}">i</summary>
           <div class="json-format-example">
-            <p class="muted">${escapeHtml(note)}</p>
+            <p class="muted json-format-note">${escapeHtml(note)}</p>
             <pre>${escapeHtml(example)}</pre>
           </div>
         </details>

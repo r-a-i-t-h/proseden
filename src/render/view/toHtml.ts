@@ -107,7 +107,7 @@ function renderJsonField(node: Extract<Node, { type: "jsonField" }>): string {
         <details class="json-format-help">
           <summary class="json-format-info" title="Example ${escapeAttr(node.label)}">i</summary>
           <div class="json-format-example">
-            <p class="muted">${escapeHtml(node.note)}</p>
+            <p class="muted json-format-note">${escapeHtml(node.note)}</p>
             <pre>${escapeHtml(node.example)}</pre>
           </div>
         </details>

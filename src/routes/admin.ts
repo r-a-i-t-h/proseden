@@ -27,7 +27,7 @@ import {
 import { formatJsonTextarea, prepareJsonTextarea } from "../json-textarea.js";
 import { parseAlchemyRecipes, parseQuestFile, QuestValidationError } from "../logic/quests.js";
 import { timedAsync } from "../observe.js";
-import { ALCHEMY_EXAMPLE, ALCHEMY_HELP } from "../render/view/examples.js";
+import { ALCHEMY_EXAMPLE, ALCHEMY_HELP, QUEST_EXAMPLE, QUEST_HELP } from "../render/view/examples.js";
 
 export const adminRoutes = new Hono();
 
@@ -243,7 +243,9 @@ adminRoutes.get("/quests/:name", async (c) => {
   if (!quest) return apiError(c, 404, "Quest not found");
   const back = sceneBackLink(c.get("user")!, world);
   const notice = c.req.query("saved") ? "Saved." : "";
-  const json = formatJsonTextarea(quest);
+  const example = QUEST_EXAMPLE.replaceAll("YOUR_USERNAME", name);
+  const help = `${QUEST_HELP} Manager file: flags/badges/vars use this quest’s name prefix.`;
+  const field = renderJsonFieldHtml("Quest JSON", "json", 28, quest, example, help);
   return page(
     c,
     200,
@@ -251,9 +253,7 @@ adminRoutes.get("/quests/:name", async (c) => {
     `${renderPageBackCrumb(back)}<h1>Quest <code>${escapeHtml(name)}</code></h1>
       ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
       <form method="post" action="data/quests/${encodeURIComponent(name)}" class="stack">
-        <label>JSON
-          <textarea name="json" rows="28" data-editor="json">${escapeHtml(json)}</textarea>
-        </label>
+        ${field}
         <button type="submit">Save</button>
       </form>
       <form method="post" action="data/quests/${encodeURIComponent(name)}/delete" class="stack"
@@ -261,7 +261,7 @@ adminRoutes.get("/quests/:name", async (c) => {
         <button type="submit">Delete quest</button>
       </form>
       <p class="crumb"><a href="data/quests">← Quests</a></p>`,
-    renderMessageText(`Quest ${name}`, json),
+    renderMessageText(`Quest ${name}`, formatJsonTextarea(quest)),
   );
 });
 

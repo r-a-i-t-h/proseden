@@ -37,7 +37,7 @@ export const ALCHEMY_HELP =
 export const QUEST_EXAMPLE = `{
   "name": "YOUR_USERNAME",
   "title": "Your personal quests",
-  "description": "Flags, badges, and vars must use your username as prefix.",
+  "description": "Flags, badges, and vars use your username as prefix. Rules run once top to bottom.",
   "rules": [
     {
       "id": "found-key",
@@ -55,11 +55,11 @@ export const QUEST_EXAMPLE = `{
       "then": [{ "setFlag": "YOUR_USERNAME.unlocked" }]
     },
     {
-      "id": "riddle",
+      "id": "wait-once",
       "on": "input",
-      "ok": "The wall slides aside.",
-      "when": { "all": [{ "input": "open sesame" }, { "atScene": 5 }] },
-      "then": [{ "setVar": "YOUR_USERNAME.stage", "to": 1 }]
+      "ok": "Dust settles a little.",
+      "when": { "all": [{ "input": "wait" }, { "var": "YOUR_USERNAME.dust", "=": 0 }] },
+      "then": [{ "setVar": "YOUR_USERNAME.dust", "to": 1 }]
     }
   ],
   "badges": [
@@ -71,5 +71,25 @@ export const QUEST_EXAMPLE = `{
   ]
 }`;
 
-export const QUEST_HELP =
-  "One quest object. name must be your username (the write namespace for flags, badges, and vars). Omit on for always; or use / input / gain / drop (with a matching when atom). Manager quests are evaluated first; bad rules are skipped at load. giveArtefact only for artefacts homed in scenes you own or manage. For an official named quest, ask a manager to register it under Data → Quests.";
+/** Shown in the quest JSON “i” hint (plain text; newlines preserved in the UI). */
+export const QUEST_HELP = `One quest object. name is the write namespace for flags, badges, and vars (your username on this page). Rules run once in document order each evaluation — later rules see earlier then effects. Omit on for always. Event ons need a matching when atom. Optional ok prose is for use/input only. Bad rules are skipped at load. giveArtefact only for artefacts you own or manage the home of.
+
+on (eligibility — omit for always):
+  "use" | "input" | "gain" | "drop"
+  { "flag": "name.local" }          — became set earlier this evaluation
+  { "clearFlag": "name.local" }     — cleared earlier this evaluation
+
+when (one shape; nest with all / any / not):
+  flag, holds, holdsTag, hasBadge, atScene, scenesOwned
+  var (+ exactly one of "=", ">", "<")
+  use, input, gain, drop            — only with matching on
+  not, all, any
+
+then (non-empty list):
+  { "setFlag": "name.local" }
+  { "clearFlag": "name.local" }
+  { "setVar": "name.local", "to": N }
+  { "grantBadge": "name.local" }
+  { "giveArtefact": <artefactId> }
+
+Unset vars read as 0. scenesOwned: N means ≥ N. World Conditions may use var:name.local=3 (and > / <).`;
