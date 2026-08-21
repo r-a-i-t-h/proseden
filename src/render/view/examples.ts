@@ -89,7 +89,12 @@ then (non-empty list):
   { "setFlag": "name.local" }
   { "clearFlag": "name.local" }
   { "setVar": "name.local", "to": N }
+  { "incVar": "name.local" }            — by defaults to 1
+  { "incVar": "name.local", "by": N }   — N > 0
+  { "decVar": "name.local" }
+  { "decVar": "name.local", "by": N }
+  { "clearVar": "name.local" }
   { "grantBadge": "name.local" }
   { "giveArtefact": <artefactId> }
 
-Unset vars read as 0. scenesOwned: N means ≥ N. World Conditions may use var:name.local=3 (and != / > / <).`;
+Unset vars read as 0; setVar to 0 is stored; clearVar deletes the key. scenesOwned: N means ≥ N. World Conditions may use var:name.local=3 (and != / > / <).`;

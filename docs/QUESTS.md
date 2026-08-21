@@ -146,7 +146,12 @@ One object with one recognised shape. Nest with `all` / `any` / `not`.
 |---|---|
 | `{ "setFlag": "demo.x" }` | Set the flag (no-op if already set) |
 | `{ "clearFlag": "demo.x" }` | Clear the flag (no-op if already clear) |
-| `{ "setVar": "demo.dust", "to": 2 }` | Set a numeric var (no-op if already that value; unset ≡ 0) |
+| `{ "setVar": "demo.dust", "to": 2 }` | Set a numeric var (no-op if already that value; unset ≡ 0; `to: 0` is stored) |
+| `{ "incVar": "demo.dust" }` | Add 1 to a var (unset starts at 0) |
+| `{ "incVar": "demo.dust", "by": 3 }` | Add `by` (`by` must be > 0; default 1) |
+| `{ "decVar": "demo.dust" }` | Subtract 1 from a var |
+| `{ "decVar": "demo.dust", "by": 1 }` | Subtract `by` |
+| `{ "clearVar": "demo.dust" }` | Remove the var key (no-op if already unset); reads still as 0 |
 | `{ "grantBadge": "demo.winner" }` | Add badge if not already held |
 | `{ "giveArtefact": 99 }` | Collect artefact 99 if not held (and it exists); counts as a **gain** for later rules |
 

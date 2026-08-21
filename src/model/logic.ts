@@ -51,6 +51,9 @@ export type ThenEffect =
   | { setFlag: string }
   | { clearFlag: string }
   | { setVar: string; to: number }
+  | { incVar: string; by: number }
+  | { decVar: string; by: number }
+  | { clearVar: string }
   | { grantBadge: string }
   | { giveArtefact: number };
 

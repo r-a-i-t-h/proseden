@@ -170,8 +170,11 @@ describe("quest eval", () => {
     expect(sanitizeUserFlags(null)).toEqual({});
   });
 
-  it("sanitizeUserVars keeps finite non-zero numbers", () => {
-    expect(sanitizeUserVars({ "q.a": 3, "q.z": 0, "q.s": "x", "q.n": NaN })).toEqual({ "q.a": 3 });
+  it("sanitizeUserVars keeps finite numbers including zero", () => {
+    expect(sanitizeUserVars({ "q.a": 3, "q.z": 0, "q.s": "x", "q.n": NaN })).toEqual({
+      "q.a": 3,
+      "q.z": 0,
+    });
   });
 
   it("skips use/input atoms on always rules and missing atoms; rejects on always", () => {
@@ -407,6 +410,75 @@ describe("quest eval", () => {
       predContext: { ...ctx, inputPhrase: "wait" },
     });
     expect(second.vars["demo.dust"]).toBe(2);
+  });
+
+  it("setVar to 0 stores zero; clearVar deletes the key", () => {
+    const giveOpts = { inventoryIds: new Set<number>(), canGiveArtefact: () => false };
+    const setZero = applyThenEffects({}, { "demo.n": 3 }, [{ setVar: "demo.n", to: 0 }], giveOpts);
+    expect(setZero.vars).toEqual({ "demo.n": 0 });
+    expect(Object.hasOwn(setZero.vars, "demo.n")).toBe(true);
+
+    const fromUnset = applyThenEffects({}, {}, [{ setVar: "demo.n", to: 0 }], giveOpts);
+    expect(fromUnset.vars).toEqual({ "demo.n": 0 });
+
+    const cleared = applyThenEffects({}, { "demo.n": 0 }, [{ clearVar: "demo.n" }], giveOpts);
+    expect(cleared.vars).toEqual({});
+
+    const noopClear = applyThenEffects({}, {}, [{ clearVar: "demo.n" }], giveOpts);
+    expect(noopClear.vars).toEqual({});
+  });
+
+  it("incVar and decVar parse by default and apply once per matching rule", () => {
+    const quest = parseQuestFile({
+      name: "demo",
+      rules: [
+        {
+          id: "bump",
+          on: "input",
+          when: { input: "tick" },
+          then: [{ incVar: "demo.count" }, { incVar: "demo.count", by: 2 }],
+        },
+        {
+          id: "drop",
+          on: "input",
+          when: { all: [{ input: "tick" }, { var: "demo.count", ">": 10 }] },
+          then: [{ decVar: "demo.count", by: 1 }],
+        },
+      ],
+    });
+    expect(quest.rules[0]!.then).toEqual([
+      { incVar: "demo.count", by: 1 },
+      { incVar: "demo.count", by: 2 },
+    ]);
+
+    const r = evaluateQuests({
+      quests: [quest],
+      flags: {},
+      vars: { "demo.count": 1 },
+      badges: [],
+      wake: "input",
+      predContext: {
+        inventoryIds: new Set(),
+        artefactTags: new Map(),
+        scenesOwned: 0,
+        inputPhrase: "tick",
+      },
+    });
+    // +1 then +2 in the same rule; dec rule does not match (3 is not > 10)
+    expect(r.vars["demo.count"]).toBe(4);
+
+    expect(
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "bad", when: { holds: 1 }, then: [{ incVar: "demo.x", by: 0 }] }],
+      }).rules,
+    ).toEqual([]);
+    expect(
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "bad", when: { holds: 1 }, then: [{ decVar: "demo.x", by: -1 }] }],
+      }).rules,
+    ).toEqual([]);
   });
 
   it("on flag edge fires only after set earlier this evaluation", () => {

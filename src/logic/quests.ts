@@ -29,12 +29,12 @@ export function sanitizeUserFlags(raw: unknown): Record<string, FlagValue> {
   return out;
 }
 
-/** Keep finite numbers; drop non-numbers; omit zeros (unset ≡ 0). */
+/** Keep finite numbers (including 0); drop non-numbers. Unset keys still read as 0. */
 export function sanitizeUserVars(raw: unknown): Record<string, number> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof v === "number" && Number.isFinite(v) && v !== 0) out[k] = v;
+    if (typeof v === "number" && Number.isFinite(v)) out[k] = v;
   }
   return out;
 }
@@ -242,6 +242,29 @@ function parseThenEffect(raw: unknown, questName: string, label: string): ThenEf
     }
     return { setVar: id, to };
   }
+  if ("incVar" in o) {
+    const id = String(o.incVar);
+    assertNamespace(id, questName, label);
+    const by = o.by === undefined ? 1 : Number(o.by);
+    if (!Number.isFinite(by) || by <= 0) {
+      throw new QuestValidationError(`${label}: incVar by must be a finite number > 0`);
+    }
+    return { incVar: id, by };
+  }
+  if ("decVar" in o) {
+    const id = String(o.decVar);
+    assertNamespace(id, questName, label);
+    const by = o.by === undefined ? 1 : Number(o.by);
+    if (!Number.isFinite(by) || by <= 0) {
+      throw new QuestValidationError(`${label}: decVar by must be a finite number > 0`);
+    }
+    return { decVar: id, by };
+  }
+  if ("clearVar" in o) {
+    const id = String(o.clearVar);
+    assertNamespace(id, questName, label);
+    return { clearVar: id };
+  }
   if ("grantBadge" in o) {
     const id = String(o.grantBadge);
     assertNamespace(id, questName, label);
@@ -255,7 +278,7 @@ function parseThenEffect(raw: unknown, questName: string, label: string): ThenEf
     return { giveArtefact: id };
   }
   throw new QuestValidationError(
-    `${label}: only setFlag/clearFlag/setVar/grantBadge/giveArtefact allowed`,
+    `${label}: only setFlag/clearFlag/setVar/incVar/decVar/clearVar/grantBadge/giveArtefact allowed`,
   );
 }
 
@@ -463,11 +486,17 @@ export function applyThenEffects(
         flagsCleared.add(effect.clearFlag);
       }
     } else if ("setVar" in effect) {
-      const cur = nextVars[effect.setVar] ?? 0;
-      if (cur !== effect.to) {
-        if (effect.to === 0) delete nextVars[effect.setVar];
-        else nextVars[effect.setVar] = effect.to;
+      if (!(effect.setVar in nextVars) || nextVars[effect.setVar] !== effect.to) {
+        nextVars[effect.setVar] = effect.to;
       }
+    } else if ("incVar" in effect) {
+      const cur = nextVars[effect.incVar] ?? 0;
+      nextVars[effect.incVar] = cur + effect.by;
+    } else if ("decVar" in effect) {
+      const cur = nextVars[effect.decVar] ?? 0;
+      nextVars[effect.decVar] = cur - effect.by;
+    } else if ("clearVar" in effect) {
+      if (effect.clearVar in nextVars) delete nextVars[effect.clearVar];
     } else if ("grantBadge" in effect) {
       if (!badges.includes(effect.grantBadge)) badges.push(effect.grantBadge);
     } else if ("giveArtefact" in effect) {

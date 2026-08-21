@@ -17,7 +17,7 @@ Author guide for quest JSON: **[QUESTS.md](QUESTS.md)**.
 | HTTP as the interaction model | Quests that set flags, vars, badges, artefacts | Platform missions / quest journal |
 | Collect-as-link inventory | Use / input / gain / drop edges | Nested inventory |
 | Multi-writer shared graph | Standalone N-ary alchemy | JS / embedded scripting / expression DSL |
-| File-backed, portable | Manager JSON textareas | String vars, increment ops, fixpoint cascade |
+| File-backed, portable | Manager JSON textareas | String vars, fixpoint cascade |
 
 **No mission.** Players free-roam. Unfolding is woven into the world.
 Rewards are prose (artefacts) and public badges — not a win screen.
@@ -46,13 +46,14 @@ Rewards are prose (artefacts) and public badges — not a win screen.
 **Flags** are set or clear (presence of `true`). Missing ≡ clear.
 
 **Vars** are namespaced numbers (`quest.local`). Unset reads as **0**.
-Authors set absolute values with `setVar` (stages, counters-as-enums). No
-increment/decrement language.
+Authors may `setVar` (absolute), `incVar` / `decVar` (by a positive step,
+default 1), or `clearVar` (delete the key). Explicit `0` is stored; only
+`clearVar` removes the key.
 
 Live facts also sit outside those files (`holds`, `atScene`, `scenesOwned`,
 use/input/gain/drop edges). Quest rules use rich `when`; `then` may
-`setFlag` / `clearFlag` / `setVar` / `grantBadge` / `giveArtefact` under the
-quest namespace.
+`setFlag` / `clearFlag` / `setVar` / `incVar` / `decVar` / `clearVar` /
+`grantBadge` / `giveArtefact` under the quest namespace.
 
 One **quest evaluation** walks rules once in document order. Later rules see
 earlier effects. Flag-edge and gain-edge rules (`on: { flag }` / `on: "gain"`)
@@ -299,13 +300,13 @@ examine details, Use, Input):
 
 **Out of scope:** parser, NPC dialogue, inventory quantities/weight, timers,
 shared mutable world flags, mission journal, JS in JSON, string vars,
-increment/decrement, fixpoint cascade.
+fixpoint cascade.
 
 ---
 
 ## Non-goals
 
-Parser, JS in data, expression DSL, string vars, increment ops, nested
+Parser, JS in data, expression DSL, string vars, nested
 inventory, give/trade, conditional scene body, mission journal, per-quest
 private flag stores, shared mutable world flags, fixpoint cascade.
 
