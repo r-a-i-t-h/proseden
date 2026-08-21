@@ -62,7 +62,8 @@ react to changes earlier in the **same** evaluation — not a second run.
 The prose world does **not** evaluate quest Pred trees. Exits, scene access,
 details, and artefacts use a **FlagRef** condition string: flags,
 `holds:<id>`, `badge:<id>`, `var:<id>=N` (and `!=` / `>` / `<`). Unknown schemes are
-false.
+false. Randomness is quest-side only (`chance` / `setVar` with `random`); sticky
+outcomes reach gates via the resulting flag or var.
 
 ```
 rich when  →  then (flags / vars / badges / artefacts)
@@ -84,6 +85,7 @@ type Pred =
   | { hasBadge: string }
   | { atScene: number }
   | { scenesOwned: number }       // ≥ N
+  | { chance: number }            // 1/N probability; quest-only
   | { var: string; "=" | "!=" | ">" | "<": number }
   | { use: number } | { input: string } | { gain: number } | { drop: number }
   | { not: Pred } | { all: Pred[] } | { any: Pred[] };
@@ -151,9 +153,10 @@ optional). Invert with `not.` on the payload (`not.x`, `flag:not.x`,
 `a,b,c;d,e` means `(a AND b AND c) OR (d AND e)`. Empty pieces fail closed.
 Do not put `,` or `;` inside flag, badge, or var ids.
 
-`holdsTag`, `atScene`, `scenesOwned`, `use`, `input`, `gain`, and `drop` are
-not world-gate schemes (quest Pred only). Tag gates are too general for world
-records.
+`holdsTag`, `atScene`, `scenesOwned`, `use`, `input`, `gain`, `drop`, and
+`chance` are not world-gate schemes (quest Pred only). Tag gates are too
+general for world records. Random rolls stay in quests; gate on the sticky
+flag/var they write.
 
 ```ts
 type FlagRef = string; // atom | "a,b" (AND) | "a;b" (OR of groups)

@@ -10,7 +10,13 @@ import type {
   ThenEffect,
 } from "../model/logic.js";
 import { logQuestFault } from "./log.js";
-import { evaluatePred, isFlagOnlyPred, normalizeInputPhrase, type PredContext } from "./pred.js";
+import {
+  evaluatePred,
+  isFlagOnlyPred,
+  normalizeInputPhrase,
+  rollUniform1ToN,
+  type PredContext,
+} from "./pred.js";
 
 export class QuestValidationError extends Error {
   constructor(message: string) {
@@ -236,6 +242,18 @@ function parseThenEffect(raw: unknown, questName: string, label: string): ThenEf
   if ("setVar" in o) {
     const id = String(o.setVar);
     assertNamespace(id, questName, label);
+    const hasTo = "to" in o;
+    const hasRandom = "random" in o;
+    if (hasTo === hasRandom) {
+      throw new QuestValidationError(`${label}: setVar needs exactly one of to, random`);
+    }
+    if (hasRandom) {
+      const n = Number(o.random);
+      if (!Number.isSafeInteger(n) || n < 1) {
+        throw new QuestValidationError(`${label}: setVar random must be a safe integer >= 1`);
+      }
+      return { setVar: id, random: n };
+    }
     const to = Number(o.to);
     if (!Number.isFinite(to)) {
       throw new QuestValidationError(`${label}: setVar to must be a finite number`);
@@ -347,6 +365,13 @@ function assertPredShape(pred: Pred, label: string): void {
     }
     if (typeof (pred as { scenesOwned: unknown }).scenesOwned === "object") {
       throw new QuestValidationError(`${label}: scenesOwned must be a number (not { gte })`);
+    }
+    return;
+  }
+  if ("chance" in pred) {
+    const n = Number((pred as { chance: unknown }).chance);
+    if (!Number.isSafeInteger(n) || n < 1) {
+      throw new QuestValidationError(`${label}: chance must be a safe integer >= 1`);
     }
     return;
   }
@@ -486,8 +511,16 @@ export function applyThenEffects(
         flagsCleared.add(effect.clearFlag);
       }
     } else if ("setVar" in effect) {
-      if (!(effect.setVar in nextVars) || nextVars[effect.setVar] !== effect.to) {
-        nextVars[effect.setVar] = effect.to;
+      let value: number;
+      if ("random" in effect) {
+        const rolled = rollUniform1ToN(effect.random);
+        if (rolled === undefined) continue;
+        value = rolled;
+      } else {
+        value = effect.to;
+      }
+      if (!(effect.setVar in nextVars) || nextVars[effect.setVar] !== value) {
+        nextVars[effect.setVar] = value;
       }
     } else if ("incVar" in effect) {
       const cur = nextVars[effect.incVar] ?? 0;

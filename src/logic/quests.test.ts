@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   evaluateFlagPred,
   evaluateFlagRef,
@@ -6,6 +6,8 @@ import {
   gateFacts,
   isFlagOnlyPred,
   normalizeInputPhrase,
+  rollChance,
+  rollUniform1ToN,
 } from "./pred.js";
 import {
   applyThenEffects,
@@ -67,10 +69,41 @@ describe("pred", () => {
     expect(evaluatePred({ var: "q.missing", ">": 0 }, base)).toBe(false);
   });
 
+  it("chance is 1/N; chance:1 always; invalid false", () => {
+    expect(evaluatePred({ chance: 1 }, base)).toBe(true);
+    expect(evaluatePred({ chance: 0 }, base)).toBe(false);
+    expect(evaluatePred({ chance: -1 }, base)).toBe(false);
+    expect(evaluatePred({ chance: 1.5 }, base)).toBe(false);
+
+    const spy = vi.spyOn(Math, "random");
+    spy.mockReturnValue(0);
+    expect(rollChance(4)).toBe(true);
+    expect(evaluatePred({ chance: 4 }, base)).toBe(true);
+    spy.mockReturnValue(0.24);
+    expect(rollChance(4)).toBe(true);
+    spy.mockReturnValue(0.25);
+    expect(rollChance(4)).toBe(false);
+    spy.mockReturnValue(0.999);
+    expect(rollChance(4)).toBe(false);
+    spy.mockRestore();
+  });
+
+  it("rollUniform1ToN is 1..N inclusive", () => {
+    expect(rollUniform1ToN(0)).toBeUndefined();
+    expect(rollUniform1ToN(1.5)).toBeUndefined();
+    const spy = vi.spyOn(Math, "random");
+    spy.mockReturnValue(0);
+    expect(rollUniform1ToN(50)).toBe(1);
+    spy.mockReturnValue(0.999);
+    expect(rollUniform1ToN(50)).toBe(50);
+    spy.mockRestore();
+  });
+
   it("flag-only detection (quest Pred; world gates use FlagRef)", () => {
     expect(isFlagOnlyPred({ flag: "q.a" })).toBe(true);
     expect(isFlagOnlyPred({ all: [{ flag: "q.a" }, { not: { flag: "q.b" } }] })).toBe(true);
     expect(isFlagOnlyPred({ holds: 1 })).toBe(false);
+    expect(isFlagOnlyPred({ chance: 4 })).toBe(false);
     expect(evaluateFlagPred({ flag: "q.a" }, { "q.a": true })).toBe(true);
     expect(evaluateFlagPred({ holds: 1 }, {})).toBe(false);
   });
@@ -92,7 +125,12 @@ describe("pred", () => {
     expect(evaluateFlagRef("var:q.n>=2", gateFacts({ vars: base.vars }))).toBe(false);
     expect(evaluateFlagRef("var:q.n<=2", gateFacts({ vars: base.vars }))).toBe(false);
     expect(evaluateFlagRef("atScene:5", gateFacts({ flags: { "atScene:5": true } }))).toBe(false);
+    expect(evaluateFlagRef("chance:4", gateFacts())).toBe(false);
   });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("quest names", () => {
@@ -426,6 +464,59 @@ describe("quest eval", () => {
 
     const noopClear = applyThenEffects({}, {}, [{ clearVar: "demo.n" }], giveOpts);
     expect(noopClear.vars).toEqual({});
+  });
+
+  it("chance and setVar random parse; random rolls 1..N", () => {
+    const ok = parseQuestFile({
+      name: "demo",
+      rules: [
+        {
+          id: "roll",
+          when: { chance: 4 },
+          then: [{ setVar: "demo.rnd", random: 50 }],
+        },
+      ],
+    });
+    expect(ok.rules).toHaveLength(1);
+    expect(ok.rules[0]!.when).toEqual({ chance: 4 });
+    expect(ok.rules[0]!.then).toEqual([{ setVar: "demo.rnd", random: 50 }]);
+
+    expect(
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "bad", when: { chance: 0 }, then: [{ setFlag: "demo.x" }] }],
+      }).rules,
+    ).toEqual([]);
+    expect(
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "bad", when: { holds: 1 }, then: [{ setVar: "demo.x", to: 1, random: 2 }] }],
+      }).rules,
+    ).toEqual([]);
+    expect(
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "bad", when: { holds: 1 }, then: [{ setVar: "demo.x" }] }],
+      }).rules,
+    ).toEqual([]);
+    expect(
+      parseQuestFile({
+        name: "demo",
+        rules: [{ id: "bad", when: { holds: 1 }, then: [{ setVar: "demo.x", random: 0 }] }],
+      }).rules,
+    ).toEqual([]);
+
+    const giveOpts = { inventoryIds: new Set<number>(), canGiveArtefact: () => false };
+    const spy = vi.spyOn(Math, "random");
+    spy.mockReturnValue(0);
+    expect(applyThenEffects({}, {}, [{ setVar: "demo.rnd", random: 50 }], giveOpts).vars).toEqual({
+      "demo.rnd": 1,
+    });
+    spy.mockReturnValue(0.999);
+    expect(applyThenEffects({}, {}, [{ setVar: "demo.rnd", random: 50 }], giveOpts).vars).toEqual({
+      "demo.rnd": 50,
+    });
+    spy.mockRestore();
   });
 
   it("incVar and decVar parse by default and apply once per matching rule", () => {

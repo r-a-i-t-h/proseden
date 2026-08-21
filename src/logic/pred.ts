@@ -180,6 +180,18 @@ export function normalizeInputPhrase(raw: string): string {
   return raw.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
 }
 
+/** True with probability 1/n. Invalid n → false. */
+export function rollChance(n: unknown): boolean {
+  if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 1) return false;
+  return Math.floor(Math.random() * n) === 0;
+}
+
+/** Uniform integer in 1..n inclusive. Invalid n → undefined. */
+export function rollUniform1ToN(n: unknown): number | undefined {
+  if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 1) return undefined;
+  return Math.floor(Math.random() * n) + 1;
+}
+
 export function evaluatePred(pred: Pred, ctx: PredContext): boolean {
   try {
     return evaluatePredUnsafe(pred, ctx);
@@ -231,6 +243,9 @@ function evaluatePredUnsafe(pred: Pred, ctx: PredContext): boolean {
     const n = pred.scenesOwned;
     if (typeof n !== "number" || !Number.isFinite(n)) return false;
     return ctx.scenesOwned >= n;
+  }
+  if ("chance" in pred) {
+    return rollChance(pred.chance);
   }
   if ("var" in pred) {
     const id = String(pred.var).trim();

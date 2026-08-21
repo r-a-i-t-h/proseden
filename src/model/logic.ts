@@ -39,6 +39,7 @@ export type Pred =
   | { input: string }
   | { gain: number }
   | { drop: number }
+  | { chance: number }
   | { var: string; "=": number }
   | { var: string; "!=": number }
   | { var: string; ">": number }
@@ -51,6 +52,7 @@ export type ThenEffect =
   | { setFlag: string }
   | { clearFlag: string }
   | { setVar: string; to: number }
+  | { setVar: string; random: number }
   | { incVar: string; by: number }
   | { decVar: string; by: number }
   | { clearVar: string }

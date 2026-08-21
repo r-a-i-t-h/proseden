@@ -135,8 +135,13 @@ One object with one recognised shape. Nest with `all` / `any` / `not`.
 | `{ "input": "open sesame" }` | Input phrase matches after normalize (only on `on: "input"`) |
 | `{ "gain": 12 }` | Artefact 12 is in the gained set (only on `on: "gain"`) |
 | `{ "drop": 12 }` | Artefact 12 is in the dropped set (only on `on: "drop"`) |
+| `{ "chance": 4 }` | True with probability **1/N** (4 → 25%; `1` always). Quest-only — not a world-gate scheme |
 
 `use` / `input` / `gain` / `drop` atoms are only valid on matching `on` rules.
+
+Randomness belongs in quest evaluation (`chance`, or `setVar` with `random` below). World
+gates stay deterministic: roll into a flag/var under a guard, then gate with `flag:` /
+`var:`.
 
 ---
 
@@ -147,6 +152,7 @@ One object with one recognised shape. Nest with `all` / `any` / `not`.
 | `{ "setFlag": "demo.x" }` | Set the flag (no-op if already set) |
 | `{ "clearFlag": "demo.x" }` | Clear the flag (no-op if already clear) |
 | `{ "setVar": "demo.dust", "to": 2 }` | Set a numeric var (no-op if already that value; unset ≡ 0; `to: 0` is stored) |
+| `{ "setVar": "demo.rnd", "random": 50 }` | Set to a uniform integer **1..N** inclusive (re-rolls every time the rule fires; guard with `when` for a one-shot) |
 | `{ "incVar": "demo.dust" }` | Add 1 to a var (unset starts at 0) |
 | `{ "incVar": "demo.dust", "by": 3 }` | Add `by` (`by` must be > 0; default 1) |
 | `{ "decVar": "demo.dust" }` | Subtract 1 from a var |
