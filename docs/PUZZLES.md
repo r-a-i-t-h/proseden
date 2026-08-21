@@ -60,7 +60,7 @@ react to changes earlier in the **same** evaluation — not a second run.
 
 The prose world does **not** evaluate quest Pred trees. Exits, scene access,
 details, and artefacts use a **FlagRef** condition string: flags,
-`holds:<id>`, `badge:<id>`, `var:<id>=N` (and `>` / `<`). Unknown schemes are
+`holds:<id>`, `badge:<id>`, `var:<id>=N` (and `!=` / `>` / `<`). Unknown schemes are
 false.
 
 ```
@@ -83,7 +83,7 @@ type Pred =
   | { hasBadge: string }
   | { atScene: number }
   | { scenesOwned: number }       // ≥ N
-  | { var: string; "=" | ">" | "<": number }
+  | { var: string; "=" | "!=" | ">" | "<": number }
   | { use: number } | { input: string } | { gain: number } | { drop: number }
   | { not: Pred } | { all: Pred[] } | { any: Pred[] };
 ```
@@ -143,6 +143,7 @@ optional). Invert with `not.` on the payload (`not.x`, `flag:not.x`,
 | `badge:demo.x` | reader holds badge `demo.x` |
 | `badge:not.demo.x` | reader does not hold that badge |
 | `var:demo.n=3` | var equals 3 (unset reads as 0) |
+| `var:demo.n!=0` | var is not 0 |
 | `var:demo.n>1` / `var:demo.n<5` | strict greater / less |
 
 **Lists:** `,` is AND within a group; `;` is OR between groups.

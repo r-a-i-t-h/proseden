@@ -1,9 +1,10 @@
-import type { FlagRef, FlagValue, Pred } from "../model/logic.js";
+import type { FlagRef, FlagValue, Pred, VarOp } from "../model/logic.js";
 import { logQuestFault } from "./log.js";
 
 const NOT_PREFIX = "not.";
 const HOLDS_ID = /^[1-9]\d*$/;
-const VAR_COMPARE = /^(.+?)(=|<(?!=)|>(?!=))(-?\d+)$/;
+/** Longest-first: `!=` before `=` so `var:id!=N` is not parsed as id `id!`. */
+const VAR_COMPARE = /^(.+?)(!=|=|<(?!=)|>(?!=))(-?\d+)$/;
 const GATE_SCHEMES = new Set(["flag", "holds", "badge", "var"]);
 
 /** Reader facts for world-gate FlagRef evaluation (not quest Pred trees). */
@@ -56,8 +57,9 @@ export function readVar(vars: Record<string, number>, id: string): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
 }
 
-export function compareVar(value: number, op: "=" | ">" | "<", target: number): boolean {
+export function compareVar(value: number, op: VarOp, target: number): boolean {
   if (op === "=") return value === target;
+  if (op === "!=") return value !== target;
   if (op === ">") return value > target;
   return value < target;
 }
@@ -125,7 +127,7 @@ function evaluateFlagRefAtom(trimmed: string, facts: GateFacts): boolean {
     const m = VAR_COMPARE.exec(payload);
     if (!m) return false;
     const id = m[1]!.trim();
-    const op = m[2] as "=" | ">" | "<";
+    const op = m[2] as VarOp;
     const target = Number(m[3]);
     if (!id || !Number.isFinite(target)) return false;
     ok = compareVar(readVar(facts.vars, id), op, target);
@@ -235,6 +237,7 @@ function evaluatePredUnsafe(pred: Pred, ctx: PredContext): boolean {
     if (!id) return false;
     const value = readVar(ctx.vars, id);
     if ("=" in pred) return compareVar(value, "=", Number(pred["="]));
+    if ("!=" in pred) return compareVar(value, "!=", Number(pred["!="]));
     if (">" in pred) return compareVar(value, ">", Number(pred[">"]));
     if ("<" in pred) return compareVar(value, "<", Number(pred["<"]));
     return false;

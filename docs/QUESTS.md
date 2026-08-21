@@ -128,6 +128,7 @@ One object with one recognised shape. Nest with `all` / `any` / `not`.
 | `{ "atScene": 5 }` | This evaluation’s scene id is 5 |
 | `{ "scenesOwned": 5 }` | Scenes owned by this username ≥ 5 |
 | `{ "var": "demo.dust", "=": 1 }` | Var equals 1 (unset reads as **0**) |
+| `{ "var": "demo.dust", "!=": 0 }` | Var is not 0 |
 | `{ "var": "demo.dust", ">": 1 }` | Var strictly greater than 1 |
 | `{ "var": "demo.dust", "<": 3 }` | Var strictly less than 3 |
 | `{ "use": 12 }` | Use of artefact 12 (only on `on: "use"`) |
@@ -188,9 +189,10 @@ Example — wait twice to raise a stage:
 ## Vars and world gates
 
 Vars are numbers only. Unset reads as **0**. Operators in Conditions are
-strict `=` / `<` / `>` (not ≤ / ≥):
+strict `=` / `!=` / `<` / `>` (not ≤ / ≥):
 
 - `var:demo.dust=1`
+- `var:demo.dust!=0`
 - `var:demo.dust>1` (stage 2 or beyond if stages are 0,1,2,…)
 - `var:not.demo.dust=0` (invert, same `not.` idea as flags)
 

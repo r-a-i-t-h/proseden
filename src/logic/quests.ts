@@ -152,6 +152,7 @@ function rewritePred(pred: Pred): Pred {
   if ("var" in pred) {
     const id = String(pred.var).trim();
     if ("=" in pred) return { var: id, "=": Number(pred["="]) };
+    if ("!=" in pred) return { var: id, "!=": Number(pred["!="]) };
     if (">" in pred) return { var: id, ">": Number(pred[">"]) };
     if ("<" in pred) return { var: id, "<": Number(pred["<"]) };
   }
@@ -280,7 +281,7 @@ function assertNamespace(id: string, questName: string, label: string): void {
   }
 }
 
-const VAR_OPS = ["=", ">", "<"] as const;
+const VAR_OPS = ["=", "!=", ">", "<"] as const;
 
 function assertPredShape(pred: Pred, label: string): void {
   if (!pred || typeof pred !== "object") throw new QuestValidationError(`${label}: invalid pred`);
@@ -362,7 +363,7 @@ function assertPredShape(pred: Pred, label: string): void {
     if (!id) throw new QuestValidationError(`${label}: var id must be non-empty`);
     const keys = VAR_OPS.filter((op) => op in pred);
     if (keys.length !== 1) {
-      throw new QuestValidationError(`${label}: var needs exactly one of =, >, <`);
+      throw new QuestValidationError(`${label}: var needs exactly one of =, !=, >, <`);
     }
     const op = keys[0]!;
     const n = Number((pred as Record<string, unknown>)[op]);

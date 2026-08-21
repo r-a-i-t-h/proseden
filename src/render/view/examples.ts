@@ -81,7 +81,7 @@ on (eligibility — omit for always):
 
 when (one shape; nest with all / any / not):
   flag, holds, holdsTag, hasBadge, atScene, scenesOwned
-  var (+ exactly one of "=", ">", "<")
+  var (+ exactly one of "=", "!=", ">", "<")
   use, input, gain, drop            — only with matching on
   not, all, any
 
@@ -92,4 +92,4 @@ then (non-empty list):
   { "grantBadge": "name.local" }
   { "giveArtefact": <artefactId> }
 
-Unset vars read as 0. scenesOwned: N means ≥ N. World Conditions may use var:name.local=3 (and > / <).`;
+Unset vars read as 0. scenesOwned: N means ≥ N. World Conditions may use var:name.local=3 (and != / > / <).`;

@@ -58,9 +58,12 @@ describe("pred", () => {
 
   it("var compares; unset reads as 0", () => {
     expect(evaluatePred({ var: "q.n", "=": 2 }, base)).toBe(true);
+    expect(evaluatePred({ var: "q.n", "!=": 1 }, base)).toBe(true);
+    expect(evaluatePred({ var: "q.n", "!=": 2 }, base)).toBe(false);
     expect(evaluatePred({ var: "q.n", ">": 1 }, base)).toBe(true);
     expect(evaluatePred({ var: "q.n", "<": 2 }, base)).toBe(false);
     expect(evaluatePred({ var: "q.missing", "=": 0 }, base)).toBe(true);
+    expect(evaluatePred({ var: "q.missing", "!=": 0 }, base)).toBe(false);
     expect(evaluatePred({ var: "q.missing", ">": 0 }, base)).toBe(false);
   });
 
@@ -79,11 +82,15 @@ describe("pred", () => {
     expect(evaluateFlagRef("holds:1", gateFacts({ inventoryIds: base.inventoryIds }))).toBe(true);
     expect(evaluateFlagRef("badge:q.badge", gateFacts({ badges: base.badges }))).toBe(true);
     expect(evaluateFlagRef("var:q.n=2", gateFacts({ vars: base.vars }))).toBe(true);
+    expect(evaluateFlagRef("var:q.n!=1", gateFacts({ vars: base.vars }))).toBe(true);
+    expect(evaluateFlagRef("var:q.n!=2", gateFacts({ vars: base.vars }))).toBe(false);
     expect(evaluateFlagRef("var:q.n>1", gateFacts({ vars: base.vars }))).toBe(true);
     expect(evaluateFlagRef("var:q.n<2", gateFacts({ vars: base.vars }))).toBe(false);
     expect(evaluateFlagRef("var:q.missing=0", gateFacts())).toBe(true);
+    expect(evaluateFlagRef("var:q.missing!=0", gateFacts())).toBe(false);
     expect(evaluateFlagRef("var:not.q.n=2", gateFacts({ vars: base.vars }))).toBe(false);
     expect(evaluateFlagRef("var:q.n>=2", gateFacts({ vars: base.vars }))).toBe(false);
+    expect(evaluateFlagRef("var:q.n<=2", gateFacts({ vars: base.vars }))).toBe(false);
     expect(evaluateFlagRef("atScene:5", gateFacts({ flags: { "atScene:5": true } }))).toBe(false);
   });
 });

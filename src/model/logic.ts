@@ -2,11 +2,14 @@
 
 export type FlagValue = boolean;
 
+/** Shared var compare ops for Pred JSON keys and world-gate `var:` strings. */
+export type VarOp = "=" | "!=" | ">" | "<";
+
 /**
  * World-gate condition string. No colon → flag scheme (`quest.local`);
  * `flag:` is optional. Also `holds:<id>`, `badge:<id>`, and
- * `var:<id>=N` / `>` / `<` (unset var reads as 0). Invert with `not.` on the
- * payload. Unknown schemes are false. Empty = ungated.
+ * `var:<id>=N` / `!=` / `>` / `<` (unset var reads as 0). Invert with `not.`
+ * on the payload. Unknown schemes are false. Empty = ungated.
  */
 export type FlagRef = string;
 
@@ -37,6 +40,7 @@ export type Pred =
   | { gain: number }
   | { drop: number }
   | { var: string; "=": number }
+  | { var: string; "!=": number }
   | { var: string; ">": number }
   | { var: string; "<": number }
   | { not: Pred }
