@@ -136,8 +136,9 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `GET` | `/s/:id/history/:version` | View retained snapshot |
 | `POST` | `/s/:id/history/:version/restore` | Restore snapshot (manage) |
 | `GET` | `/a/:id/history` … | Same for artefacts |
-| `POST` | `/a` | Create artefact (auth, edit rights on home) |
+| `POST` | `/a` | Create artefact (auth; edit on home scene or public repository) |
 | `PUT`/`POST` | `/a/:id` | Update artefact |
+| `POST` | `/a/:id/eject` | Return guest artefact to owner home (manage on home scene) |
 | `POST` | `/s/:id/input` | Phrase box (auth); private, not Live chat |
 | `POST` | `/a/:id/collect` | Collect (inventory link) |
 | `DELETE` | `/a/:id/collect` | Drop from inventory |
@@ -177,6 +178,8 @@ Staff roles: `moderator`, `topographer`, `manager`, `questor`. Questors edit per
 Prose files use YAML frontmatter plus `## detail:<slug>` sections. Hash-leading lines in body/detail text are saved escaped (`\#`, `\##`) so they cannot be mistaken for section markers.
 
 **Collect** adds an inventory link to the artefact; it does not remove it from its home scene. Multiple readers may collect the same artefact.
+
+Each user has a permanent **home scene** (created at registration) where ejected or orphaned guest artefacts are returned. Home scenes cannot be deleted. **Public repository** scenes allow any signed-in user to place artefacts when the scene is public.
 
 **Subscribe** on a scene (signed-in readers) watches title, description, details, and artefacts at that scene. Changes deliver a coalesced `scene_update` inbox notice (kinds merge; no prose text). Exits and ACL edits do not notify.
 

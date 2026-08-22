@@ -84,8 +84,12 @@ export interface ManageContext {
   canManage?: boolean;
   /** Add exit from this scene (manage/topographer, or public junction). */
   canAddExit?: boolean;
+  /** Place an artefact in this scene (edit, or public repository). */
+  canPlaceArtefact?: boolean;
   /** Reorder the origin’s full exit list (manage or topographer). */
   canReorderExits?: boolean;
+  /** Return a guest artefact to its owner's home scene. */
+  canEject?: boolean;
   isTopographer?: boolean;
   canDelete?: boolean;
   canTransfer?: boolean;

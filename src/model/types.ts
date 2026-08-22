@@ -50,6 +50,8 @@ export interface UserRecord {
   denies?: Deny[];
   /** Last successfully rendered scene (resume-on-login). */
   lastSceneId?: number;
+  /** Permanent home scene for ejected / orphaned guest artefacts. Immutable after creation. */
+  homeSceneId?: number;
   /** ISO timestamp of last location note / presence flush. */
   lastSeenAt?: string;
   /** Derived, memory-only. Never persist. */
@@ -69,6 +71,8 @@ export interface SceneMeta {
   entranceGroupId?: string | null;
   /** Public junction: any signed-in user may add exits originating from this scene. */
   isJunction?: boolean;
+  /** Public repository: any signed-in user may place artefacts in this scene. */
+  isRepository?: boolean;
   /** @deprecated migrated to grants on load */
   invites?: string[];
   /**

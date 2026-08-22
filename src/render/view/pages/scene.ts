@@ -146,9 +146,11 @@ export function scenePageView(opts: {
   }
 
   const publicJunction = Boolean(scene.isJunction && scene.visibility === "public");
+  const publicRepository = Boolean(scene.isRepository && scene.visibility === "public");
   const badges = [
     scene.visibility,
     publicJunction ? "junction" : "",
+    publicRepository ? "repository" : "",
     isEntrance ? "entrance" : "",
   ].filter(Boolean);
 

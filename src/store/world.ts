@@ -2,6 +2,7 @@ import { cp, mkdir, readdir, access, rename, rm, unlink } from "node:fs/promises
 import { join } from "node:path";
 import { canManage, canRead, type AccessWorld } from "../access/permissions.js";
 import { normalizeDenies, normalizeGrants, stripLegacyInvites } from "../access/acl.js";
+import { userHomeSceneBody, userHomeSceneTitle } from "../user-home.js";
 import type { AlchemyRecipe, FlagValue, QuestFile, QuestWake } from "../model/logic.js";
 import {
   alchemyGivesIds,
@@ -1336,6 +1337,9 @@ export class WorldStore implements AccessWorld {
   async deleteScene(id: number): Promise<void> {
     const scene = this.scenes.get(id);
     if (!scene) throw new Error("Scene not found");
+    if (this.isUserHomeScene(id)) {
+      throw new Error("Cannot delete a user's home scene");
+    }
     if (id === this.worldEntranceSceneId()) {
       throw new Error("Cannot delete the world entrance scene");
     }
@@ -1357,7 +1361,15 @@ export class WorldStore implements AccessWorld {
     }
 
     for (const artefact of [...this.artefacts.values()].filter((a) => a.homeSceneId === id)) {
-      await this.deleteArtefact(artefact.id, { notify: false });
+      if (artefact.owner === scene.owner) {
+        await this.deleteArtefact(artefact.id, { notify: false });
+      } else {
+        const homeId = this.userHomeSceneId(artefact.owner);
+        if (!homeId) {
+          throw new Error(`User ${artefact.owner} has no home scene`);
+        }
+        await this.rehomeArtefact(artefact.id, homeId, { by: "system" });
+      }
     }
 
     for (const [fromId, exits] of [...this.exits.entries()]) {
@@ -1566,7 +1578,55 @@ export class WorldStore implements AccessWorld {
       details: {},
     };
     await this.saveUser(user);
-    return user;
+    await this.createUserHomeScene(username);
+    return this.users.get(username)!;
+  }
+
+  /** Permanent home scene for ejected / orphaned guest artefacts. Idempotent if already set. */
+  async createUserHomeScene(username: string): Promise<number> {
+    const user = this.users.get(username);
+    if (!user) throw new Error("User not found");
+    const existing = user.homeSceneId;
+    if (existing !== undefined && this.scenes.has(existing)) return existing;
+
+    const scene = await this.createScene({
+      owner: username,
+      title: userHomeSceneTitle(username),
+      body: userHomeSceneBody(username),
+      visibility: "private",
+    });
+    const updated: UserRecord = { ...user, homeSceneId: scene.id };
+    await this.saveUser(updated);
+    return scene.id;
+  }
+
+  userHomeSceneId(username: string): number | undefined {
+    const id = this.users.get(username)?.homeSceneId;
+    return id !== undefined && Number.isFinite(id) && id > 0 && this.scenes.has(id) ? id : undefined;
+  }
+
+  isUserHomeScene(sceneId: number): boolean {
+    for (const user of this.users.values()) {
+      if (user.homeSceneId === sceneId) return true;
+    }
+    return false;
+  }
+
+  async rehomeArtefact(
+    id: number,
+    homeSceneId: number,
+    opts?: { by?: string },
+  ): Promise<ArtefactRecord> {
+    if (!this.scenes.has(homeSceneId)) throw new Error("Home scene not found");
+    return this.updateArtefact(id, { homeSceneId }, { by: opts?.by ?? "unknown" });
+  }
+
+  async ejectArtefact(id: number, by: string): Promise<ArtefactRecord> {
+    const artefact = this.artefacts.get(id);
+    if (!artefact) throw new Error("Artefact not found");
+    const homeId = this.userHomeSceneId(artefact.owner);
+    if (!homeId) throw new Error(`User ${artefact.owner} has no home scene`);
+    return this.rehomeArtefact(id, homeId, { by });
   }
 
   async updatePassword(
@@ -1617,6 +1677,7 @@ export class WorldStore implements AccessWorld {
         | "details"
         | "visibility"
         | "isJunction"
+        | "isRepository"
         | "when"
         | "whenDenied"
         | "detailWhen"
@@ -1756,6 +1817,7 @@ export class WorldStore implements AccessWorld {
         details: snap.details,
         visibility: snap.visibility,
         isJunction: snap.isJunction,
+        isRepository: snap.isRepository,
       },
       { by, retainSnapshot: false },
     );
@@ -2138,6 +2200,7 @@ function normalizeMeta(raw: Record<string, unknown>): MetaFile {
 /** Persistable user fields only. Disk `cache` (if present) is ignored. */
 function normalizeUser(raw: Record<string, unknown>): UserRecord {
   const lastSceneId = Number(raw.lastSceneId);
+  const homeSceneId = Number(raw.homeSceneId);
   return {
     username: String(raw.username ?? ""),
     passwordHash: String(raw.passwordHash ?? ""),
@@ -2153,6 +2216,8 @@ function normalizeUser(raw: Record<string, unknown>): UserRecord {
     grants: normalizeGrants(raw.grants),
     denies: normalizeDenies(raw.denies),
     lastSceneId: Number.isFinite(lastSceneId) && lastSceneId > 0 ? lastSceneId : undefined,
+    homeSceneId:
+      Number.isFinite(homeSceneId) && homeSceneId > 0 ? homeSceneId : undefined,
     lastSeenAt: raw.lastSeenAt !== undefined ? String(raw.lastSeenAt) : undefined,
   };
 }
@@ -2184,6 +2249,7 @@ function normalizeSceneMeta(raw: Record<string, unknown>, id: number): SceneMeta
         ? String(raw.entranceGroupId)
         : null,
     isJunction: Boolean(raw.isJunction),
+    isRepository: Boolean(raw.isRepository),
     when: parseOptionalFlagRef(raw.when),
     whenDenied: raw.whenDenied !== undefined ? String(raw.whenDenied) : undefined,
     detailWhen: parseDetailWhenMap(raw.detailWhen),

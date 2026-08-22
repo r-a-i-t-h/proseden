@@ -92,6 +92,8 @@ When **adding** exits (`POST /s/:id/exits`):
 
 Public junctions let other writers attach outbound edges *from* a shared hub without managing that hub’s prose or ACL. Linking *to* a public scene never required junction status.
 
+**Public repositories** (`isRepository: true` and `visibility: "public"`) let any signed-in user place artefacts (create or re-home) without edit rights on the scene. Scene managers still control prose and ACL; repository status only opens placement.
+
 ## Exit requests
 
 When you can read a scene but cannot add exits from it, Edit → Exits offers **Request exit** instead of Add. That posts `POST /s/:id/exit-requests` with a nickname, a destination scene you own, and an optional note.

@@ -47,10 +47,10 @@ describe("user.cache.scenesOwned", () => {
     });
 
     expect(world.getUser("alice")?.cache?.scenesOwned).toBeUndefined();
-    expect(world.scenesOwned("alice")).toBe(2);
-    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(2);
+    expect(world.scenesOwned("alice")).toBe(3);
+    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(3);
     expect(world.scenesOwned("alice")).toBe(recount(world, "alice"));
-    expect(world.predContextFor("alice").scenesOwned).toBe(2);
+    expect(world.predContextFor("alice").scenesOwned).toBe(3);
   });
 
   it("bumps after a first get on create and delete", async () => {
@@ -60,7 +60,7 @@ describe("user.cache.scenesOwned", () => {
       body: "Entrance.",
       visibility: "public",
     });
-    expect(world.scenesOwned("alice")).toBe(1);
+    expect(world.scenesOwned("alice")).toBe(2);
 
     const study = await world.createScene({
       owner: "alice",
@@ -68,12 +68,12 @@ describe("user.cache.scenesOwned", () => {
       body: "Quiet.",
       visibility: "private",
     });
-    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(2);
+    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(3);
 
     await world.deleteScene(study.id);
-    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(1);
+    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(2);
     expect(world.scenesOwned("alice")).toBe(recount(world, "alice"));
-    expect(hall.id).toBe(world.worldEntranceSceneId());
+    expect(world.isUserHomeScene(hall.id)).toBe(false);
   });
 
   it("does not insert a cache entry for a never-asked owner", async () => {
@@ -93,20 +93,20 @@ describe("user.cache.scenesOwned", () => {
       visibility: "private",
     });
     expect(world.getUser("bob")?.cache?.scenesOwned).toBeUndefined();
-    expect(world.scenesOwned("bob")).toBe(1);
-    expect(world.getUser("bob")?.cache?.scenesOwned).toBe(1);
+    expect(world.scenesOwned("bob")).toBe(2);
+    expect(world.getUser("bob")?.cache?.scenesOwned).toBe(2);
   });
 
   it("bumps from a cached zero when that user later creates a scene", async () => {
-    expect(world.scenesOwned("bob")).toBe(0);
-    expect(world.getUser("bob")?.cache?.scenesOwned).toBe(0);
+    expect(world.scenesOwned("bob")).toBe(1);
+    expect(world.getUser("bob")?.cache?.scenesOwned).toBe(1);
     await world.createScene({
       owner: "bob",
       title: "Shed",
       body: "Tools.",
       visibility: "private",
     });
-    expect(world.getUser("bob")?.cache?.scenesOwned).toBe(1);
+    expect(world.getUser("bob")?.cache?.scenesOwned).toBe(2);
   });
 
   it("moves a cached count on transfer and leaves an uncached recipient unset", async () => {
@@ -122,19 +122,19 @@ describe("user.cache.scenesOwned", () => {
       body: "Quiet.",
       visibility: "private",
     });
-    expect(world.scenesOwned("alice")).toBe(2);
+    expect(world.scenesOwned("alice")).toBe(3);
     expect(world.getUser("bob")?.cache?.scenesOwned).toBeUndefined();
 
     await world.transferSceneOwner(study.id, "bob");
-    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(1);
-    expect(world.getUser("bob")?.cache?.scenesOwned).toBeUndefined();
-    expect(world.scenesOwned("bob")).toBe(1);
-    expect(world.getUser("bob")?.cache?.scenesOwned).toBe(1);
-
-    expect(world.scenesOwned("alice")).toBe(1);
-    await world.transferSceneOwner(study.id, "alice");
     expect(world.getUser("alice")?.cache?.scenesOwned).toBe(2);
-    expect(world.getUser("bob")?.cache?.scenesOwned).toBe(0);
+    expect(world.getUser("bob")?.cache?.scenesOwned).toBeUndefined();
+    expect(world.scenesOwned("bob")).toBe(2);
+    expect(world.getUser("bob")?.cache?.scenesOwned).toBe(2);
+
+    expect(world.scenesOwned("alice")).toBe(2);
+    await world.transferSceneOwner(study.id, "alice");
+    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(3);
+    expect(world.getUser("bob")?.cache?.scenesOwned).toBe(1);
     expect(hall.owner).toBe("alice");
   });
 
@@ -151,13 +151,13 @@ describe("user.cache.scenesOwned", () => {
       body: "Bob's.",
       visibility: "private",
     });
-    expect(world.scenesOwned("alice")).toBe(1);
+    expect(world.scenesOwned("alice")).toBe(2);
 
     await world.updateSceneAccess(bobScene.id, {
       grants: [{ who: "alice", rights: ["read", "edit", "manage"] }],
     });
-    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(1);
-    expect(world.scenesOwned("alice")).toBe(1);
+    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(2);
+    expect(world.scenesOwned("alice")).toBe(2);
     expect(world.scenesOwned("alice")).toBe(recount(world, "alice"));
   });
 
@@ -168,11 +168,11 @@ describe("user.cache.scenesOwned", () => {
       body: "One.",
       visibility: "public",
     });
-    expect(world.scenesOwned("alice")).toBe(1);
+    expect(world.scenesOwned("alice")).toBe(2);
 
     const alice = world.getUser("alice")!;
     await world.saveUser({ ...alice, lastSeenAt: "2026-01-02T03:04:05.000Z" });
-    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(1);
+    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(2);
     expect(world.getUser("alice")?.lastSeenAt).toBe("2026-01-02T03:04:05.000Z");
 
     const raw = JSON.parse(
@@ -194,11 +194,11 @@ describe("user.cache.scenesOwned", () => {
       body: "Two.",
       visibility: "private",
     });
-    expect(world.scenesOwned("alice")).toBe(2);
+    expect(world.scenesOwned("alice")).toBe(3);
 
     await world.reload();
     expect(world.getUser("alice")?.cache).toBeUndefined();
-    expect(world.scenesOwned("alice")).toBe(2);
-    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(2);
+    expect(world.scenesOwned("alice")).toBe(3);
+    expect(world.getUser("alice")?.cache?.scenesOwned).toBe(3);
   });
 });

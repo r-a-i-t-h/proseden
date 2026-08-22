@@ -5,8 +5,10 @@ import {
   canEdit,
   canEditArtefact,
   canAddExit,
+  canEjectArtefact,
   canManage,
   canManageGroup,
+  canPlaceArtefact,
   canTransferGroup,
   canTransferScene,
   canRead,
@@ -233,6 +235,7 @@ worldRoutes.get("/s/:id", (c) => {
       canEdit: canEdit(user, scene, world),
       canManage: manage,
       canAddExit: canAddExit(user, scene, world),
+      canPlaceArtefact: canPlaceArtefact(user, scene, world),
       canReorderExits: canReorderExits(user, scene, world),
       isTopographer: isTopographer(user, world),
       canDelete: manage || isModerator(user, world),
@@ -412,6 +415,7 @@ worldRoutes.get("/a/:id", (c) => {
         (user.username === artefact.owner ||
           isModerator(user, world) ||
           canManage(user, home, world)),
+      canEject: canEjectArtefact(user, artefact, home, world),
       isManager: isManager(user, world),
       collected,
     },
@@ -1038,6 +1042,15 @@ async function updateScene(c: Context) {
       body.isJunction === "1";
   }
 
+  let isRepository = scene.isRepository;
+  if (body.isRepository !== undefined && canManage(user, scene, world)) {
+    isRepository =
+      body.isRepository === true ||
+      body.isRepository === "true" ||
+      body.isRepository === "on" ||
+      body.isRepository === "1";
+  }
+
   const clearGates: Array<"when" | "whenDenied" | "detailWhen"> = [];
   const gatePatch: {
     when?: string;
@@ -1081,6 +1094,7 @@ async function updateScene(c: Context) {
       details,
       visibility,
       isJunction,
+      isRepository,
       ...gatePatch,
     },
     {
@@ -1989,7 +2003,9 @@ worldRoutes.post("/a", async (c) => {
 
   const home = world.getScene(homeSceneId);
   if (!home) return apiError(c, 404, "Home scene not found");
-  if (!canEdit(user, home, world)) return apiError(c, 403, "Not allowed to place artefacts here");
+  if (!canPlaceArtefact(user, home, world)) {
+    return apiError(c, 403, "Not allowed to place artefacts here");
+  }
 
   let details: Record<string, string>;
   try {
@@ -2029,6 +2045,14 @@ async function updateArtefact(c: Context) {
 
   const body = await readBody(c);
   try {
+    if (body.homeSceneId !== undefined) {
+      const destId = Number(body.homeSceneId);
+      const dest = world.getScene(destId);
+      if (!dest) return apiError(c, 404, "Home scene not found");
+      if (destId !== artefact.homeSceneId && !canPlaceArtefact(user, dest, world)) {
+        return apiError(c, 403, "Not allowed to place artefacts there");
+      }
+    }
     let details: Record<string, string> | undefined;
     if (body.detailsJson !== undefined || body.details !== undefined) {
       details = parseDetails(body.detailsJson ?? body.details);
@@ -2165,6 +2189,28 @@ async function deleteScene(c: Context) {
 
 worldRoutes.delete("/a/:id", async (c) => deleteArtefact(c));
 worldRoutes.post("/a/:id/delete", async (c) => deleteArtefact(c));
+
+worldRoutes.post("/a/:id/eject", async (c) => ejectArtefact(c));
+
+async function ejectArtefact(c: Context) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  const id = Number(c.req.param("id"));
+  const artefact = world.getArtefact(id);
+  if (!artefact) return apiError(c, 404, "Artefact not found");
+  const home = world.getScene(artefact.homeSceneId);
+  if (!home || !canEjectArtefact(user, artefact, home, world)) {
+    return apiError(c, 403, "Not allowed to eject this artefact");
+  }
+  try {
+    const updated = await world.ejectArtefact(id, user.username);
+    if (wantsJson(c)) return c.json(updated);
+    return c.redirect(`${c.get("assetBase")}/a/${id}`);
+  } catch (err) {
+    return apiError(c, 400, err instanceof Error ? err.message : "Could not eject artefact");
+  }
+}
 
 async function deleteArtefact(c: Context) {
   const world = c.get("world");

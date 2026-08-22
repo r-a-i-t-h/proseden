@@ -20,6 +20,7 @@ describe("admin backups", () => {
   let app: ReturnType<typeof createApp>;
   let managerToken: string;
   let userToken: string;
+  let hallId: number;
 
   beforeEach(async () => {
     instanceDir = await mkdtemp(join(tmpdir(), "proseden-bak-"));
@@ -31,12 +32,13 @@ describe("admin backups", () => {
     const password = await hashPassword("secret1");
     await world.createUser("alice", password.hash, password.salt);
     await world.createUser("bob", password.hash, password.salt);
-    await world.createScene({
+    const hall = await world.createScene({
       owner: "alice",
       title: "Hall",
       body: "A stone hall.",
       visibility: "public",
     });
+    hallId = hall.id;
     await world.setStaffRoles("alice", ["manager"]);
 
     const sessions = new SessionStore();
@@ -105,7 +107,7 @@ describe("admin backups", () => {
         nextSceneId: number;
       };
       expect(meta.nextSceneId).toBeGreaterThan(1);
-      const scene = await readFile(join(extract, "scenes", "1.md"), "utf8");
+      const scene = await readFile(join(extract, "scenes", `${hallId}.md`), "utf8");
       expect(scene).toContain("A stone hall.");
       await expect(readFile(join(extract, "package.json"))).rejects.toThrow();
     } finally {

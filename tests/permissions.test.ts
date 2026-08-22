@@ -3,7 +3,9 @@ import {
   canAddExit,
   canEdit,
   canEditArtefact,
+  canEjectArtefact,
   canEditGroup,
+  canPlaceArtefact,
   canManage,
   canManageGroup,
   canTransferGroup,
@@ -219,6 +221,45 @@ describe("artefact ACL", () => {
     const art = artefact(1, "alice", 1);
     const w = world({ users: [alice, carol] });
     expect(canEditArtefact(carol, art, home, w)).toBe(true);
+  });
+});
+
+describe("repository artefact placement", () => {
+  const repository = scene(1, "alice", { visibility: "public", isRepository: true });
+  const privateRepo = scene(2, "alice", { visibility: "private", isRepository: true });
+  const normal = scene(3, "alice", { visibility: "public" });
+
+  it("allows signed-in users to place on a public repository", () => {
+    const w = world({ users: [alice, bob] });
+    expect(canPlaceArtefact(bob, repository, w)).toBe(true);
+    expect(canPlaceArtefact(undefined, repository, w)).toBe(false);
+  });
+
+  it("requires edit rights when not a public repository", () => {
+    const w = world({ users: [alice, bob, carol] });
+    expect(canPlaceArtefact(bob, normal, w)).toBe(false);
+    expect(canPlaceArtefact(alice, normal, w)).toBe(true);
+    expect(canPlaceArtefact(bob, privateRepo, w)).toBe(false);
+  });
+
+  it("lets edit grantees place via scene edit rights", () => {
+    const granted = scene(4, "alice", {
+      visibility: "private",
+      grants: [{ who: "bob", rights: ["edit"] }],
+    });
+    const w = world({ users: [alice, bob] });
+    expect(canPlaceArtefact(bob, granted, w)).toBe(true);
+  });
+});
+
+describe("eject artefact", () => {
+  it("allows home-scene managers but not the artefact owner", () => {
+    const home = scene(1, "alice");
+    const art = artefact(1, "bob", 1);
+    const w = world({ users: [alice, bob, carol] });
+    expect(canEjectArtefact(alice, art, home, w)).toBe(true);
+    expect(canEjectArtefact(bob, art, home, w)).toBe(false);
+    expect(canEjectArtefact(undefined, art, home, w)).toBe(false);
   });
 });
 

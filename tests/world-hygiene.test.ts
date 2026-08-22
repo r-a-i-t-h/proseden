@@ -19,6 +19,8 @@ async function harness() {
     body: "Front door.",
     visibility: "public",
   });
+  world.meta.entranceSceneId = 2;
+  await world.saveMeta();
   await world.createScene({
     owner: "alice",
     title: "Study",
@@ -50,40 +52,40 @@ describe("world hygiene", () => {
   });
 
   it("refuses to delete the world entrance", async () => {
-    const res = await h.app.request("/s/1/delete", {
+    const res = await h.app.request("/s/2/delete", {
       method: "POST",
       headers: auth(h.token),
     });
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toMatch(/entrance/i);
-    expect(h.world.getScene(1)).toBeTruthy();
+    expect(h.world.getScene(2)).toBeTruthy();
   });
 
   it("cascades artefact and inbound exit cleanup on scene delete", async () => {
     const art = await h.world.createArtefact({
       owner: "alice",
-      homeSceneId: 2,
+      homeSceneId: 3,
       title: "Note",
       body: "scratch",
     });
-    await h.world.addExit(1, "into study", 2);
+    await h.world.addExit(1, "into study", 3);
     await h.world.updateScene(
-      2,
+      3,
       { body: "edited" },
       { by: "alice", retainSnapshot: true },
     );
 
-    const res = await h.app.request("/s/2/delete", {
+    const res = await h.app.request("/s/3/delete", {
       method: "POST",
       headers: auth(h.token),
     });
     expect(res.status).toBe(200);
-    expect(h.world.getScene(2)).toBeUndefined();
+    expect(h.world.getScene(3)).toBeUndefined();
     expect(h.world.getArtefact(art.id)).toBeUndefined();
-    expect(h.world.getExits(1).some((e) => e.toSceneId === 2)).toBe(false);
+    expect(h.world.getExits(1).some((e) => e.toSceneId === 3)).toBe(false);
 
-    await expect(access(join(h.dataDir, "scenes", "2.md"))).rejects.toThrow();
+    await expect(access(join(h.dataDir, "scenes", "3.md"))).rejects.toThrow();
     await expect(access(join(h.dataDir, "artefacts", `${art.id}.md`))).rejects.toThrow();
   });
 
@@ -97,7 +99,7 @@ describe("world hygiene", () => {
     const eg = await h.world.createEntranceGroup({
       title: "Wing",
       entranceSceneId: 2,
-      sceneIds: [3],
+      sceneIds: [4],
     });
     expect(eg.id).toBeTruthy();
 
@@ -194,5 +196,24 @@ describe("world hygiene", () => {
     });
     expect(res.status).toBe(200);
     expect(h.world.getScene(2)?.isJunction).toBe(false);
+  });
+
+  it("clears repository when isRepository=false is posted", async () => {
+    await h.world.updateScene(2, { visibility: "public", isRepository: true }, { by: "alice" });
+    const res = await h.app.request("/s/2", {
+      method: "PUT",
+      headers: {
+        ...auth(h.token),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: "Entrance",
+        body: "Front door.",
+        visibility: "public",
+        isRepository: false,
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(h.world.getScene(2)?.isRepository).toBe(false);
   });
 });

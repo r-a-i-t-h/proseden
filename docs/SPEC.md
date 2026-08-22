@@ -51,6 +51,18 @@ Certain scenes can be marked as public junctions, from which other writers may
 attach outbound exits without managing the junction itself. Any readable (e.g.
 public) scene can be linked to as a destination. The graph is directional.
 
+Scenes may also be marked as **public repositories** (`isRepository`). When a
+scene is public and flagged as a repository, any signed-in user may **place**
+artefacts there (create new artefacts or re-home their own). Repository status
+does not grant scene edit rights; it only opens placement on that scene. This is
+separate from junction status (exits vs artefacts).
+
+Each registered user receives a permanent **home scene** (`{username} home`,
+private by default) at registration. Guest artefacts homed in someone else's
+scene are returned to the owner's home when that scene is deleted, or when a
+scene manager **ejects** them (`POST /a/:id/eject`). Home scenes cannot be
+deleted. There is no API to change which scene is a user's home.
+
 Each scene has a numeric id (incremental in creation order) by which it can be
 navigated to (if the user has access rights). Essentially teleporting around
 Proseden.
@@ -77,7 +89,14 @@ On-disk storage remains under `data/inbox/`.
 Artefacts are placed in scenes and, like all else, are merely a text
 description which can have details examined.
 
-Each artefact is homed in a single scene. It can be moved by the owner.
+Each artefact is homed in a single scene. It can be moved by the owner when
+they have **placement** rights on the destination scene (edit on that scene, or
+a public repository).
+
+When a scene is deleted, artefacts owned by the scene owner and homed there are
+deleted with it. Guest artefacts (owned by someone else) are re-homed to their
+owner's home scene instead. A scene manager who manages the artefact's home
+scene may eject a guest artefact back to that home without deleting the scene.
 
 Artefacts can be collected and become part of a users inventory. Owner-set tags
 on the artefact (e.g. "music", "garment") are the only tags; collectors do not

@@ -134,6 +134,35 @@ export function canEditArtefact(
   return canEdit(user, home, world);
 }
 
+/**
+ * Create an artefact in or move one to `scene`.
+ * Edit rights on the scene, or any signed-in user when the scene is a public repository.
+ */
+export function canPlaceArtefact(
+  user: UserRecord | undefined,
+  scene: SceneRecord,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  if (canEdit(user, scene, world)) return true;
+  return Boolean(scene.isRepository && scene.visibility === "public");
+}
+
+/**
+ * Return a guest artefact to its owner's home scene.
+ * Home-scene managers may eject; artefact owners use re-home instead.
+ */
+export function canEjectArtefact(
+  user: UserRecord | undefined,
+  artefact: ArtefactRecord,
+  home: SceneRecord,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  if (user.username === artefact.owner) return false;
+  return canManage(user, home, world);
+}
+
 /** Owner or staff manager — a manage grant is not enough. */
 export function canTransferScene(
   user: UserRecord | undefined,

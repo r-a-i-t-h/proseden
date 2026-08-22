@@ -9,12 +9,21 @@ import { WorldStore } from "../src/store/world.js";
 
 type App = ReturnType<typeof createApp>;
 
+type TestIds = {
+  publicHall: number;
+  privateStudy: number;
+  junction: number;
+  hiddenNote: number;
+  postcard: number;
+};
+
 async function createTestWorld(): Promise<{
   world: WorldStore;
   sessions: SessionStore;
   app: App;
   dataDir: string;
   tokens: Record<string, string>;
+  ids: TestIds;
 }> {
   const dataDir = await mkdtemp(join(tmpdir(), "proseden-acl-"));
   const world = new WorldStore(dataDir);
@@ -25,47 +34,46 @@ async function createTestWorld(): Promise<{
     await world.createUser(name, password.hash, password.salt);
   }
 
-  await world.createScene({
+  const publicHall = await world.createScene({
     owner: "alice",
     title: "Public Hall",
     body: "A public hall.",
     visibility: "public",
   });
-  await world.createScene({
+  const privateStudy = await world.createScene({
     owner: "alice",
     title: "Private Study",
     body: "A private study.",
     visibility: "private",
   });
-  await world.createScene({
+  const junction = await world.createScene({
     owner: "alice",
     title: "Junction",
     body: "A public junction.",
     visibility: "public",
   });
-  await world.updateScene(3, { isJunction: true }, { by: "alice" });
+  await world.updateScene(junction.id, { isJunction: true }, { by: "alice" });
 
-  await world.updateSceneAccess(2, {
+  await world.updateSceneAccess(privateStudy.id, {
     grants: [{ who: "bob", rights: ["read"] }],
   });
 
-  const art = await world.createArtefact({
+  const hiddenNote = await world.createArtefact({
     owner: "alice",
-    homeSceneId: 2,
+    homeSceneId: privateStudy.id,
     title: "Hidden note",
     body: "secret",
   });
-  expect(art.id).toBe(1);
 
-  await world.createArtefact({
+  const postcard = await world.createArtefact({
     owner: "carol",
-    homeSceneId: 1,
+    homeSceneId: publicHall.id,
     title: "Carol's postcard",
     body: "hello",
   });
 
   const group = await world.createGroup({ owner: "alice", title: "Alice Rooms" });
-  await world.setSceneGroup(2, group.id);
+  await world.setSceneGroup(privateStudy.id, group.id);
 
   await world.setStaffRoles("dave", ["moderator"]);
 
@@ -76,7 +84,14 @@ async function createTestWorld(): Promise<{
   }
 
   const app = createApp({ world, sessions });
-  return { world, sessions, app, dataDir, tokens };
+  const ids: TestIds = {
+    publicHall: publicHall.id,
+    privateStudy: privateStudy.id,
+    junction: junction.id,
+    hiddenNote: hiddenNote.id,
+    postcard: postcard.id,
+  };
+  return { world, sessions, app, dataDir, tokens, ids };
 }
 
 function auth(token: string): Record<string, string> {
@@ -88,9 +103,11 @@ function auth(token: string): Record<string, string> {
 
 describe("HTTP ACL enforcement", () => {
   let harness: Awaited<ReturnType<typeof createTestWorld>>;
+  let ids: TestIds;
 
   beforeEach(async () => {
     harness = await createTestWorld();
+    ids = harness.ids;
   });
 
   afterEach(async () => {
@@ -99,19 +116,19 @@ describe("HTTP ACL enforcement", () => {
 
   it("allows anonymous public scene reads and blocks private ones", async () => {
     const { app } = harness;
-    const pub = await app.request("/s/1", { headers: { Accept: "application/json" } });
+    const pub = await app.request(`/s/${ids.publicHall}`, { headers: { Accept: "application/json" } });
     expect(pub.status).toBe(200);
 
-    const priv = await app.request("/s/2", { headers: { Accept: "application/json" } });
+    const priv = await app.request(`/s/${ids.privateStudy}`, { headers: { Accept: "application/json" } });
     expect(priv.status).toBe(401);
   });
 
   it("allows invitees to read granted private scenes but not edit them", async () => {
     const { app, tokens } = harness;
-    const read = await app.request("/s/2", { headers: auth(tokens.bob) });
+    const read = await app.request(`/s/${ids.privateStudy}`, { headers: auth(tokens.bob) });
     expect(read.status).toBe(200);
 
-    const edit = await app.request("/s/2", {
+    const edit = await app.request(`/s/${ids.privateStudy}`, {
       method: "PUT",
       headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
       body: JSON.stringify({ body: "hacked" }),
@@ -121,20 +138,20 @@ describe("HTTP ACL enforcement", () => {
 
   it("returns 403 for authenticated users without access", async () => {
     const { app, tokens } = harness;
-    const res = await app.request("/s/2", { headers: auth(tokens.carol) });
+    const res = await app.request(`/s/${ids.privateStudy}`, { headers: auth(tokens.carol) });
     expect(res.status).toBe(403);
   });
 
   it("lets owners manage scene access and blocks non-managers", async () => {
     const { app, tokens, world } = harness;
 
-    const denied = await app.request("/s/2/access", { headers: auth(tokens.bob) });
+    const denied = await app.request(`/s/${ids.privateStudy}/access`, { headers: auth(tokens.bob) });
     expect(denied.status).toBe(403);
 
-    const get = await app.request("/s/2/access", { headers: auth(tokens.alice) });
+    const get = await app.request(`/s/${ids.privateStudy}/access`, { headers: auth(tokens.alice) });
     expect(get.status).toBe(200);
 
-    const put = await app.request("/s/2/access", {
+    const put = await app.request(`/s/${ids.privateStudy}/access`, {
       method: "PUT",
       headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -143,9 +160,9 @@ describe("HTTP ACL enforcement", () => {
       }),
     });
     expect(put.status).toBe(200);
-    expect(world.getScene(2)?.grants).toEqual([{ who: "carol", rights: ["edit"] }]);
+    expect(world.getScene(ids.privateStudy)?.grants).toEqual([{ who: "carol", rights: ["edit"] }]);
 
-    const carolRead = await app.request("/s/2", { headers: auth(tokens.carol) });
+    const carolRead = await app.request(`/s/${ids.privateStudy}`, { headers: auth(tokens.carol) });
     expect(carolRead.status).toBe(200);
   });
 
@@ -216,7 +233,7 @@ describe("HTTP ACL enforcement", () => {
     const addSceneDenied = await app.request(`/g/${groupId}/scenes`, {
       method: "POST",
       headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
-      body: JSON.stringify({ sceneId: 1 }),
+      body: JSON.stringify({ sceneId: ids.publicHall }),
     });
     expect(addSceneDenied.status).toBe(403);
   });
@@ -224,62 +241,62 @@ describe("HTTP ACL enforcement", () => {
   it("requires manage or organise to add exits; public junctions allow outbound attaches", async () => {
     const { app, tokens, world } = harness;
 
-    const bobExit = await app.request("/s/2/exits", {
+    const bobExit = await app.request(`/s/${ids.privateStudy}/exits`, {
       method: "POST",
       headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: "out", toSceneId: 1 }),
+      body: JSON.stringify({ nickname: "out", toSceneId: ids.publicHall }),
     });
     expect(bobExit.status).toBe(403);
 
-    const aliceToPrivate = await app.request("/s/1/exits", {
+    const aliceToPrivate = await app.request(`/s/${ids.publicHall}/exits`, {
       method: "POST",
       headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: "study", toSceneId: 2 }),
+      body: JSON.stringify({ nickname: "study", toSceneId: ids.privateStudy }),
     });
     expect(aliceToPrivate.status).toBe(201);
 
-    await world.createScene({
+    const carolPrivate = await world.createScene({
       owner: "carol",
       title: "Carol private",
       body: "nope",
       visibility: "private",
     });
-    const unreadableDest = await app.request("/s/1/exits", {
+    const unreadableDest = await app.request(`/s/${ids.publicHall}/exits`, {
       method: "POST",
       headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: "blocked", toSceneId: 4 }),
+      body: JSON.stringify({ nickname: "blocked", toSceneId: carolPrivate.id }),
     });
     expect(unreadableDest.status).toBe(403);
 
     // Public destination does not require junction status.
-    const toPublic = await app.request("/s/4/exits", {
+    const toPublic = await app.request(`/s/${carolPrivate.id}/exits`, {
       method: "POST",
       headers: { ...auth(tokens.carol), "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: "hall", toSceneId: 1 }),
+      body: JSON.stringify({ nickname: "hall", toSceneId: ids.publicHall }),
     });
     expect(toPublic.status).toBe(201);
 
     // Non-manager may add an exit *from* a public junction.
-    const fromJunction = await app.request("/s/3/exits", {
+    const fromJunction = await app.request(`/s/${ids.junction}/exits`, {
       method: "POST",
       headers: { ...auth(tokens.carol), "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: "carol-wing", toSceneId: 4 }),
+      body: JSON.stringify({ nickname: "carol-wing", toSceneId: carolPrivate.id }),
     });
     expect(fromJunction.status).toBe(201);
 
     // Non-junction public origin still requires manage.
-    const fromPublicHall = await app.request("/s/1/exits", {
+    const fromPublicHall = await app.request(`/s/${ids.publicHall}/exits`, {
       method: "POST",
       headers: { ...auth(tokens.carol), "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: "nope", toSceneId: 4 }),
+      body: JSON.stringify({ nickname: "nope", toSceneId: carolPrivate.id }),
     });
     expect(fromPublicHall.status).toBe(403);
 
     await world.setStaffRoles("bob", ["topographer"]);
-    const organise = await app.request("/s/2/exits", {
+    const organise = await app.request(`/s/${ids.privateStudy}/exits`, {
       method: "POST",
       headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: "hall", toSceneId: 1 }),
+      body: JSON.stringify({ nickname: "hall", toSceneId: ids.publicHall }),
     });
     expect(organise.status).toBe(201);
   });
@@ -287,72 +304,71 @@ describe("HTTP ACL enforcement", () => {
   it("lets junction visitors remove only exits to their own scenes", async () => {
     const { app, tokens, world } = harness;
 
-    const carolExit = await world.addExit(3, "carol-wing", 1);
-    // Scene 1 is owned by alice; create a carol-owned target and exit to it.
+    const carolExit = await world.addExit(ids.junction, "carol-wing", ids.publicHall);
     const carolScene = await world.createScene({
       owner: "carol",
       title: "Carol annex",
       body: "hers",
       visibility: "public",
     });
-    const toCarol = await world.addExit(3, "to-carol", carolScene.id);
+    const toCarol = await world.addExit(ids.junction, "to-carol", carolScene.id);
     const bobScene = await world.createScene({
       owner: "bob",
       title: "Bob annex",
       body: "his",
       visibility: "public",
     });
-    const toBob = await world.addExit(3, "to-bob", bobScene.id);
+    const toBob = await world.addExit(ids.junction, "to-bob", bobScene.id);
 
-    const carolOwn = await app.request(`/s/3/exits/${toCarol.exitId}/delete`, {
+    const carolOwn = await app.request(`/s/${ids.junction}/exits/${toCarol.exitId}/delete`, {
       method: "POST",
       headers: auth(tokens.carol),
     });
     expect(carolOwn.status).toBe(200);
-    expect(world.findExit(3, String(toCarol.exitId))).toBeUndefined();
+    expect(world.findExit(ids.junction, String(toCarol.exitId))).toBeUndefined();
 
-    const carolOthers = await app.request(`/s/3/exits/${toBob.exitId}/delete`, {
+    const carolOthers = await app.request(`/s/${ids.junction}/exits/${toBob.exitId}/delete`, {
       method: "POST",
       headers: auth(tokens.carol),
     });
     expect(carolOthers.status).toBe(403);
-    expect(world.findExit(3, String(toBob.exitId))).toBeTruthy();
+    expect(world.findExit(ids.junction, String(toBob.exitId))).toBeTruthy();
 
-    const ownerAny = await app.request(`/s/3/exits/${carolExit.exitId}/delete`, {
+    const ownerAny = await app.request(`/s/${ids.junction}/exits/${carolExit.exitId}/delete`, {
       method: "POST",
       headers: auth(tokens.alice),
     });
     expect(ownerAny.status).toBe(200);
-    expect(world.findExit(3, String(carolExit.exitId))).toBeUndefined();
+    expect(world.findExit(ids.junction, String(carolExit.exitId))).toBeUndefined();
 
-    const bobAgain = await world.addExit(3, "to-bob-again", bobScene.id);
-    const bulk = await app.request("/s/3/exits/delete", {
+    const bobAgain = await world.addExit(ids.junction, "to-bob-again", bobScene.id);
+    const bulk = await app.request(`/s/${ids.junction}/exits/delete`, {
       method: "POST",
       headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
       body: JSON.stringify({ exitIds: [toBob.exitId, bobAgain.exitId] }),
     });
     expect(bulk.status).toBe(200);
-    expect(world.findExit(3, String(toBob.exitId))).toBeUndefined();
-    expect(world.findExit(3, String(bobAgain.exitId))).toBeUndefined();
+    expect(world.findExit(ids.junction, String(toBob.exitId))).toBeUndefined();
+    expect(world.findExit(ids.junction, String(bobAgain.exitId))).toBeUndefined();
   });
 
   it("reorders exits for the owner and updates the reader list", async () => {
     const { app, tokens, world } = harness;
-    const north = await world.addExit(1, "north", 3);
-    const east = await world.addExit(1, "east", 3, {
+    const north = await world.addExit(ids.publicHall, "north", ids.junction);
+    const east = await world.addExit(ids.publicHall, "east", ids.junction, {
       when: "quest.open",
       whenDenied: "Nope.",
       hidden: true,
     });
-    const south = await world.addExit(1, "south", 3);
+    const south = await world.addExit(ids.publicHall, "south", ids.junction);
 
-    const ok = await app.request("/s/1/exits/reorder", {
+    const ok = await app.request(`/s/${ids.publicHall}/exits/reorder`, {
       method: "POST",
       headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
       body: JSON.stringify({ exitIds: [south.exitId, north.exitId, east.exitId] }),
     });
     expect(ok.status).toBe(200);
-    const ordered = world.getExits(1);
+    const ordered = world.getExits(ids.publicHall);
     expect(ordered.map((e) => e.exitId)).toEqual([south.exitId, north.exitId, east.exitId]);
     expect(ordered[2]).toMatchObject({
       exitId: east.exitId,
@@ -362,7 +378,7 @@ describe("HTTP ACL enforcement", () => {
       hidden: true,
     });
 
-    const listed = await app.request("/s/1", { headers: { Accept: "text/plain" } });
+    const listed = await app.request(`/s/${ids.publicHall}`, { headers: { Accept: "text/plain" } });
     expect(listed.status).toBe(200);
     const text = await listed.text();
     const southAt = text.indexOf("- south");
@@ -372,14 +388,14 @@ describe("HTTP ACL enforcement", () => {
     expect(southAt).toBeLessThan(northAt);
     expect(text).not.toContain("- east");
 
-    const partial = await app.request("/s/1/exits/reorder", {
+    const partial = await app.request(`/s/${ids.publicHall}/exits/reorder`, {
       method: "POST",
       headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
       body: JSON.stringify({ exitIds: [south.exitId, north.exitId] }),
     });
     expect(partial.status).toBe(400);
 
-    const dupes = await app.request("/s/1/exits/reorder", {
+    const dupes = await app.request(`/s/${ids.publicHall}/exits/reorder`, {
       method: "POST",
       headers: { ...auth(tokens.alice), "Content-Type": "application/json" },
       body: JSON.stringify({ exitIds: [south.exitId, south.exitId, north.exitId] }),
@@ -389,59 +405,59 @@ describe("HTTP ACL enforcement", () => {
 
   it("lets manage grantees and topographers reorder, not junction visitors", async () => {
     const { app, tokens, world } = harness;
-    const first = await world.addExit(2, "out", 1);
-    const second = await world.addExit(2, "also", 1);
-    await world.updateSceneAccess(2, {
+    const first = await world.addExit(ids.privateStudy, "out", ids.publicHall);
+    const second = await world.addExit(ids.privateStudy, "also", ids.publicHall);
+    await world.updateSceneAccess(ids.privateStudy, {
       grants: [{ who: "bob", rights: ["manage"] }],
     });
 
-    const grantee = await app.request("/s/2/exits/reorder", {
+    const grantee = await app.request(`/s/${ids.privateStudy}/exits/reorder`, {
       method: "POST",
       headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
       body: JSON.stringify({ exitIds: [second.exitId, first.exitId] }),
     });
     expect(grantee.status).toBe(200);
-    expect(world.getExits(2).map((e) => e.exitId)).toEqual([second.exitId, first.exitId]);
+    expect(world.getExits(ids.privateStudy).map((e) => e.exitId)).toEqual([second.exitId, first.exitId]);
 
     await world.setStaffRoles("carol", ["topographer"]);
-    const topo = await app.request("/s/2/exits/reorder", {
+    const topo = await app.request(`/s/${ids.privateStudy}/exits/reorder`, {
       method: "POST",
       headers: { ...auth(tokens.carol), "Content-Type": "application/json" },
       body: JSON.stringify({ exitIds: [first.exitId, second.exitId] }),
     });
     expect(topo.status).toBe(200);
-    expect(world.getExits(2).map((e) => e.exitId)).toEqual([first.exitId, second.exitId]);
+    expect(world.getExits(ids.privateStudy).map((e) => e.exitId)).toEqual([first.exitId, second.exitId]);
 
-    const j1 = await world.addExit(3, "one", 1);
-    const j2 = await world.addExit(3, "two", 1);
-    const visitor = await app.request("/s/3/exits/reorder", {
+    const j1 = await world.addExit(ids.junction, "one", ids.publicHall);
+    const j2 = await world.addExit(ids.junction, "two", ids.publicHall);
+    const visitor = await app.request(`/s/${ids.junction}/exits/reorder`, {
       method: "POST",
       headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
       body: JSON.stringify({ exitIds: [j2.exitId, j1.exitId] }),
     });
     expect(visitor.status).toBe(403);
-    expect(world.getExits(3).map((e) => e.exitId)).toEqual([j1.exitId, j2.exitId]);
+    expect(world.getExits(ids.junction).map((e) => e.exitId)).toEqual([j1.exitId, j2.exitId]);
   });
 
   it("blocks reading and collecting artefacts in unreadable homes", async () => {
     const { app, tokens } = harness;
 
-    const anon = await app.request("/a/1", { headers: { Accept: "application/json" } });
+    const anon = await app.request(`/a/${ids.hiddenNote}`, { headers: { Accept: "application/json" } });
     expect(anon.status).toBe(401);
 
-    const bob = await app.request("/a/1", { headers: auth(tokens.bob) });
+    const bob = await app.request(`/a/${ids.hiddenNote}`, { headers: auth(tokens.bob) });
     expect(bob.status).toBe(200);
 
-    const carol = await app.request("/a/1", { headers: auth(tokens.carol) });
+    const carol = await app.request(`/a/${ids.hiddenNote}`, { headers: auth(tokens.carol) });
     expect(carol.status).toBe(403);
 
-    const collect = await app.request("/a/1/collect", {
+    const collect = await app.request(`/a/${ids.hiddenNote}/collect`, {
       method: "POST",
       headers: auth(tokens.carol),
     });
     expect(collect.status).toBe(403);
 
-    const bobCollect = await app.request("/a/1/collect", {
+    const bobCollect = await app.request(`/a/${ids.hiddenNote}/collect`, {
       method: "POST",
       headers: auth(tokens.bob),
     });
@@ -455,28 +471,28 @@ describe("HTTP ACL enforcement", () => {
       Accept: "text/plain",
     };
 
-    await world.collectArtefact("carol", 1);
+    await world.collectArtefact("carol", ids.hiddenNote);
 
-    const page = await app.request("/a/1", { headers });
+    const page = await app.request(`/a/${ids.hiddenNote}`, { headers });
     expect(page.status).toBe(200);
     expect(await page.text()).toContain("secret");
 
-    const scene = await app.request("/s/2", { headers });
+    const scene = await app.request(`/s/${ids.privateStudy}`, { headers });
     expect(scene.status).toBe(403);
 
-    const collect = await app.request("/a/1/collect", {
+    const collect = await app.request(`/a/${ids.hiddenNote}/collect`, {
       method: "POST",
       headers: auth(tokens.carol),
     });
     expect(collect.status).toBe(403);
 
-    const history = await app.request("/a/1/history", {
+    const history = await app.request(`/a/${ids.hiddenNote}/history`, {
       headers: auth(tokens.carol),
     });
     expect(history.status).toBe(403);
 
-    await world.dropArtefact("carol", 1);
-    const afterDrop = await app.request("/a/1", { headers });
+    await world.dropArtefact("carol", ids.hiddenNote);
+    const afterDrop = await app.request(`/a/${ids.hiddenNote}`, { headers });
     expect(afterDrop.status).toBe(403);
   });
 
@@ -516,17 +532,17 @@ describe("HTTP ACL enforcement", () => {
 
   it("lets artefact owners edit without scene edit rights", async () => {
     const { app, tokens } = harness;
-    const denied = await app.request("/a/2", {
+    const denied = await app.request(`/a/${ids.postcard}`, {
       method: "PUT",
       headers: { ...auth(tokens.bob), "Content-Type": "application/json" },
-      body: JSON.stringify({ body: "nope", homeSceneId: 1 }),
+      body: JSON.stringify({ body: "nope", homeSceneId: ids.privateStudy }),
     });
     expect(denied.status).toBe(403);
 
-    const res = await app.request("/a/2", {
+    const res = await app.request(`/a/${ids.postcard}`, {
       method: "PUT",
       headers: { ...auth(tokens.carol), "Content-Type": "application/json" },
-      body: JSON.stringify({ body: "updated postcard", homeSceneId: 1 }),
+      body: JSON.stringify({ body: "updated postcard", homeSceneId: ids.publicHall }),
     });
     expect(res.status).toBe(200);
   });
@@ -615,7 +631,7 @@ describe("HTTP ACL enforcement", () => {
     });
     await world.createEntranceGroup({
       title: "Wing",
-      entranceSceneId: 2,
+      entranceSceneId: ids.privateStudy,
       sceneIds: [innerId],
     });
 
@@ -633,21 +649,21 @@ describe("HTTP ACL enforcement", () => {
   it("requires manage to restore scene history", async () => {
     const { app, tokens, world } = harness;
     await world.updateScene(
-      2,
+      ids.privateStudy,
       { body: "version one" },
       { by: "alice", retainSnapshot: true },
     );
-    const log = await world.listEditLog("scenes", 2);
+    const log = await world.listEditLog("scenes", ids.privateStudy);
     const versionId = log.find((e) => e.versionId)?.versionId;
     expect(versionId).toBeTruthy();
 
-    const denied = await app.request(`/s/2/history/${versionId}/restore`, {
+    const denied = await app.request(`/s/${ids.privateStudy}/history/${versionId}/restore`, {
       method: "POST",
       headers: auth(tokens.bob),
     });
     expect(denied.status).toBe(403);
 
-    const ok = await app.request(`/s/2/history/${versionId}/restore`, {
+    const ok = await app.request(`/s/${ids.privateStudy}/history/${versionId}/restore`, {
       method: "POST",
       headers: auth(tokens.alice),
     });

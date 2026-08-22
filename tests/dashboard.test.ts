@@ -83,7 +83,7 @@ describe("dashboard", () => {
     expect(body).toMatchObject({
       ok: true,
       users: 2,
-      scenes: 2,
+      scenes: 4,
       artefacts: 1,
       exits: 1,
       groups: 1,
@@ -108,7 +108,7 @@ describe("dashboard", () => {
     const html = await htmlRes.text();
     expect(html).toContain("<h1>Dashboard</h1>");
     expect(html).toContain("<dt>Users</dt><dd>2</dd>");
-    expect(html).toContain("<dt>Scenes</dt><dd>2</dd>");
+    expect(html).toContain("<dt>Scenes</dt><dd>4</dd>");
     expect(html).toContain("<dt>Artefacts</dt><dd>1</dd>");
     expect(html).toContain('href="staff">Staff</a>');
     expect(html).toContain("<h2>Process</h2>");
@@ -123,7 +123,7 @@ describe("dashboard", () => {
     const text = await textRes.text();
     expect(text).toContain("[Dashboard]");
     expect(text).toContain("Users: 2");
-    expect(text).toContain("Scenes: 2");
+    expect(text).toContain("Scenes: 4");
     expect(text).toContain("Artefacts: 1");
     expect(text).toContain("Staff: 1  /staff");
     expect(text).toContain("Process:");
