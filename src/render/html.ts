@@ -65,6 +65,14 @@ export interface HtmlShellOptions {
   readHref?: string;
   /** Total inbox messages for the signed-in user (header badge). */
   inboxCount?: number;
+  /** From data/settings.json — guests may use Live. */
+  guestLiveEnabled?: boolean;
+  /** From data/settings.json — say and shout allowed. */
+  liveChatEnabled?: boolean;
+  /** From data/settings.json — new account registration. */
+  registrationEnabled?: boolean;
+  /** From data/settings.json — non-managers may edit. */
+  nonManagerEditingEnabled?: boolean;
 }
 
 export interface ManageContext {
@@ -101,6 +109,12 @@ export interface EditBootstrap {
   liveSceneId?: number;
   /** Guests may open Live on public scenes. */
   allowGuestLive: boolean;
+  /** Say and shout in Live. */
+  liveChatEnabled: boolean;
+  /** New account registration. */
+  registrationEnabled: boolean;
+  /** Non-managers may use Edit mode. */
+  nonManagerEditingEnabled: boolean;
 }
 
 /** Relative hrefs for entering / leaving edit mode on the current request. */
@@ -139,6 +153,8 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
   const editHref = opts.editHref ?? "?edit";
   const readHref = opts.readHref ?? "./";
   const liveSceneId = opts.liveSceneId;
+  const canEditPanel =
+    !!user && (opts.isManager === true || opts.nonManagerEditingEnabled !== false);
   const bootstrap: EditBootstrap = {
     user: user ? { username: user.username } : undefined,
     manage: opts.manage,
@@ -149,7 +165,10 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
     editHref,
     readHref,
     liveSceneId,
-    allowGuestLive: liveSceneId !== undefined,
+    allowGuestLive: liveSceneId !== undefined && opts.guestLiveEnabled !== false,
+    liveChatEnabled: opts.liveChatEnabled !== false,
+    registrationEnabled: opts.registrationEnabled !== false,
+    nonManagerEditingEnabled: opts.nonManagerEditingEnabled !== false,
   };
   return `<!DOCTYPE html>
 <html lang="en">
@@ -165,7 +184,7 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
     <header class="top">
       <a class="brand" href="./">Proseden</a>
       <div class="auth" id="auth-panel">
-        ${user ? authLoggedIn(user, liveSceneId !== undefined, opts.inboxCount ?? 0) : authLoggedOut(liveSceneId !== undefined)}
+        ${user ? authLoggedIn(user, liveSceneId !== undefined, opts.inboxCount ?? 0, canEditPanel) : authLoggedOut(liveSceneId !== undefined && opts.guestLiveEnabled !== false, opts.registrationEnabled !== false)}
       </div>
     </header>
     <div class="layout">
@@ -192,19 +211,19 @@ export function renderHtmlPage(opts: HtmlShellOptions): string {
 </html>`;
 }
 
-function authLoggedIn(user: UserRecord, canLive: boolean, inboxCount: number): string {
+function authLoggedIn(user: UserRecord, canLive: boolean, inboxCount: number, canEdit: boolean): string {
   const inboxLabel = inboxCount > 0 ? `Messages (${inboxCount})` : "Messages";
   return `<span class="who"><strong><a href="${userPath(user.username)}">${escapeHtml(user.username)}</a></strong></span>
     <a href="profile">Profile</a>
     <a href="inbox">${escapeHtml(inboxLabel)}</a>
     <a href="inv">Inventory</a>
-    ${modeSwitchHtml({ canLive, canEdit: true })}
+    ${modeSwitchHtml({ canLive, canEdit })}
     <form method="post" action="auth/logout" class="inline">
       <button type="submit">Log out</button>
     </form>`;
 }
 
-function authLoggedOut(canLive: boolean): string {
+function authLoggedOut(canLive: boolean, registrationEnabled: boolean): string {
   return `${modeSwitchHtml({ canLive, canEdit: false })}
   <details class="login">
       <summary>Log in</summary>
@@ -213,7 +232,9 @@ function authLoggedOut(canLive: boolean): string {
         <label>Pass <input name="password" type="password" autocomplete="current-password" required /></label>
         <button type="submit">Log in</button>
       </form>
-    </details>
+    </details>${
+      registrationEnabled
+        ? `
     <details class="register">
       <summary>Register</summary>
       <form method="post" action="auth/register" class="login-form">
@@ -221,7 +242,9 @@ function authLoggedOut(canLive: boolean): string {
         <label>Pass <input name="password" type="password" autocomplete="new-password" required minlength="6" /></label>
         <button type="submit">Create account</button>
       </form>
-    </details>`;
+    </details>`
+        : ""
+    }`;
 }
 
 function modeSwitchHtml(opts: { canLive: boolean; canEdit: boolean }): string {
@@ -229,9 +252,26 @@ function modeSwitchHtml(opts: { canLive: boolean; canEdit: boolean }): string {
   const editDis = opts.canEdit ? "" : " disabled";
   return `<div class="mode-switch" role="group" aria-label="Panel mode">
       <button type="button" class="mode-switch-btn" id="panel-live"${liveDis} title="${opts.canLive ? "Live" : "Live is available on scene pages"}">Live</button>
-      <button type="button" class="mode-switch-btn" id="panel-edit"${editDis} title="${opts.canEdit ? "Edit" : "Log in to edit"}">Edit</button>
+      <button type="button" class="mode-switch-btn" id="panel-edit"${editDis} title="${opts.canEdit ? "Edit" : opts.canLive ? "Editing is temporarily disabled" : "Log in to edit"}">Edit</button>
       <button type="button" class="mode-switch-btn" id="panel-view">View</button>
     </div>`;
+}
+
+export function renderViewLockdownBodyHtml(): string {
+  return `<h1>Proseden is closed</h1>
+    <p class="muted">The site is temporarily closed to readers. Managers may log in below.</p>
+    <details class="login" open>
+      <summary>Log in</summary>
+      <form method="post" action="auth/login" class="login-form">
+        <label>User <input name="username" autocomplete="username" required /></label>
+        <label>Pass <input name="password" type="password" autocomplete="current-password" required /></label>
+        <button type="submit">Log in</button>
+      </form>
+    </details>`;
+}
+
+export function renderViewLockdownText(): string {
+  return "Proseden is closed.\n\nThe site is temporarily closed to readers. Managers may log in.\n";
 }
 
 function renderNamedDetailsHtml(path: string, details: Record<string, string>): string {

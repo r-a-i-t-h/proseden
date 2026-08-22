@@ -71,7 +71,8 @@ function bootPanel(): void {
   const root: HTMLElement = rootEl;
 
   const canLive = boot.liveSceneId !== undefined && !!(boot.user || boot.allowGuestLive);
-  const canEdit = !!boot.user;
+  const canEdit =
+    !!boot.user && (boot.isManager === true || boot.nonManagerEditingEnabled !== false);
 
   const livePane = el("div", { class: "panel-pane", id: "live-pane", hidden: true });
   const editPane = el("div", { class: "panel-pane", id: "edit-pane", hidden: true });

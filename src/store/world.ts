@@ -88,7 +88,7 @@ export class WorldStore implements AccessWorld {
   entranceGroups = new Map<string, EntranceGroupRecord>();
   inbox = new Map<number, InboxMessage>();
   staff: StaffFile = { roles: {} };
-  settings: SettingsFile = { peerMessagingEnabled: true };
+  settings: SettingsFile = defaultSettings();
   /** username → flags */
   userFlags = new Map<string, Record<string, FlagValue>>();
   /** username → numeric quest vars */
@@ -123,7 +123,7 @@ export class WorldStore implements AccessWorld {
       entranceSceneId: 1,
     };
     this.staff = { roles: {} };
-    this.settings = { peerMessagingEnabled: true };
+    this.settings = defaultSettings();
     this.users.clear();
     this.scenes.clear();
     this.exits.clear();
@@ -177,7 +177,7 @@ export class WorldStore implements AccessWorld {
     if (await exists(settingsPath)) {
       this.settings = normalizeSettings(await readJson<Record<string, unknown>>(settingsPath));
     } else {
-      this.settings = { peerMessagingEnabled: true };
+      this.settings = defaultSettings();
     }
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".json")) {
@@ -856,6 +856,56 @@ export class WorldStore implements AccessWorld {
 
   async setPeerMessagingEnabled(enabled: boolean): Promise<SettingsFile> {
     this.settings = { ...this.settings, peerMessagingEnabled: enabled };
+    await this.saveSettings();
+    return this.settings;
+  }
+
+  isGuestLiveEnabled(): boolean {
+    return this.settings.guestLiveEnabled !== false;
+  }
+
+  async setGuestLiveEnabled(enabled: boolean): Promise<SettingsFile> {
+    this.settings = { ...this.settings, guestLiveEnabled: enabled };
+    await this.saveSettings();
+    return this.settings;
+  }
+
+  isLiveChatEnabled(): boolean {
+    return this.settings.liveChatEnabled !== false;
+  }
+
+  async setLiveChatEnabled(enabled: boolean): Promise<SettingsFile> {
+    this.settings = { ...this.settings, liveChatEnabled: enabled };
+    await this.saveSettings();
+    return this.settings;
+  }
+
+  isRegistrationEnabled(): boolean {
+    return this.settings.registrationEnabled !== false;
+  }
+
+  async setRegistrationEnabled(enabled: boolean): Promise<SettingsFile> {
+    this.settings = { ...this.settings, registrationEnabled: enabled };
+    await this.saveSettings();
+    return this.settings;
+  }
+
+  isNonManagerEditingEnabled(): boolean {
+    return this.settings.nonManagerEditingEnabled !== false;
+  }
+
+  async setNonManagerEditingEnabled(enabled: boolean): Promise<SettingsFile> {
+    this.settings = { ...this.settings, nonManagerEditingEnabled: enabled };
+    await this.saveSettings();
+    return this.settings;
+  }
+
+  isNonManagerViewEnabled(): boolean {
+    return this.settings.nonManagerViewEnabled !== false;
+  }
+
+  async setNonManagerViewEnabled(enabled: boolean): Promise<SettingsFile> {
+    this.settings = { ...this.settings, nonManagerViewEnabled: enabled };
     await this.saveSettings();
     return this.settings;
   }
@@ -2221,9 +2271,25 @@ function normalizeInboxMessage(
   return undefined;
 }
 
+function defaultSettings(): SettingsFile {
+  return {
+    peerMessagingEnabled: true,
+    guestLiveEnabled: true,
+    liveChatEnabled: true,
+    registrationEnabled: true,
+    nonManagerEditingEnabled: true,
+    nonManagerViewEnabled: true,
+  };
+}
+
 function normalizeSettings(raw: Record<string, unknown>): SettingsFile {
   return {
     peerMessagingEnabled: raw.peerMessagingEnabled !== false,
+    guestLiveEnabled: raw.guestLiveEnabled !== false,
+    liveChatEnabled: raw.liveChatEnabled !== false,
+    registrationEnabled: raw.registrationEnabled !== false,
+    nonManagerEditingEnabled: raw.nonManagerEditingEnabled !== false,
+    nonManagerViewEnabled: raw.nonManagerViewEnabled !== false,
   };
 }
 

@@ -166,6 +166,10 @@ function htmlPageResponse(
       isQuestor: shell?.isQuestor ?? isQuestor(user, world),
       liveSceneId,
       inboxCount,
+      guestLiveEnabled: world.isGuestLiveEnabled(),
+      liveChatEnabled: world.isLiveChatEnabled(),
+      registrationEnabled: world.isRegistrationEnabled(),
+      nonManagerEditingEnabled: world.isNonManagerEditingEnabled(),
       ...hrefs,
     }),
   );

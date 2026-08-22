@@ -72,6 +72,9 @@ interface EditBootstrap {
   readHref: string;
   liveSceneId?: number;
   allowGuestLive?: boolean;
+  liveChatEnabled?: boolean;
+  registrationEnabled?: boolean;
+  nonManagerEditingEnabled?: boolean;
 }
 
 const FLASH_KEY = "proseden-edit-flash";

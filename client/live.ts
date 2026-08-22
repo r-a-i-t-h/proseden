@@ -109,6 +109,7 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
     shoutInput,
     el("button", { type: "submit" }, "Shout"),
   );
+  const chatEnabled = boot.liveChatEnabled !== false;
 
   sayForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -153,8 +154,7 @@ export function mountLive(boot: EditBootstrap, pane: HTMLElement): LiveControlle
     el("details", { class: "live-online-wrap" }, el("summary", {}, "Online"), onlineList),
     el("h3", { class: "live-heading" }, "Chat"),
     log,
-    sayForm,
-    shoutForm,
+    ...(chatEnabled ? [sayForm, shoutForm] : []),
     status,
     ...(purgeBtn ? [purgeBtn] : []),
   );

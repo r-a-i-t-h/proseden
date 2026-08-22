@@ -27,10 +27,11 @@ describe("live presence and chat", () => {
     world = new WorldStore(dataDir);
     await world.load();
     const password = await hashPassword("secret1");
-    for (const name of ["alice", "bob", "mod"]) {
+    for (const name of ["alice", "bob", "mod", "mgr"]) {
       await world.createUser(name, password.hash, password.salt);
     }
     await world.setStaffRoles("mod", ["moderator"]);
+    await world.setStaffRoles("mgr", ["manager"]);
 
     const hall = await world.createScene({
       owner: "alice",
@@ -70,6 +71,7 @@ describe("live presence and chat", () => {
       alice: sessions.create("alice").token,
       bob: sessions.create("bob").token,
       mod: sessions.create("mod").token,
+      mgr: sessions.create("mgr").token,
     };
     app = createApp({ world, sessions, presence, hub });
   });
@@ -797,5 +799,88 @@ describe("live presence and chat", () => {
   it("names guest cookies from the session cookie", () => {
     expect(guestCookieName("proseden_session")).toBe("proseden_guest");
     expect(guestCookieName("proseden_garden_session")).toBe("proseden_garden_guest");
+  });
+
+  it("manager can toggle guest live and live chat from live admin", async () => {
+    const modAdmin = await app.request("/live/admin", {
+      headers: { Authorization: `Bearer ${tokens.mod}`, Accept: "text/html" },
+    });
+    expect(await modAdmin.text()).not.toContain("Disable guest live");
+
+    const mgrAdmin = await app.request("/live/admin", {
+      headers: { Authorization: `Bearer ${tokens.mgr}`, Accept: "application/json" },
+    });
+    expect(mgrAdmin.status).toBe(200);
+    expect(await mgrAdmin.json()).toMatchObject({
+      guestLiveEnabled: true,
+      liveChatEnabled: true,
+    });
+
+    const offGuest = await app.request("/live/admin/guest-live", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.mgr}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(offGuest.status).toBe(200);
+    expect(await offGuest.json()).toMatchObject({ ok: true, guestLiveEnabled: false });
+
+    const modDenied = await app.request("/live/admin/guest-live", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.mod}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(modDenied.status).toBe(403);
+
+    const guestEvents = await app.request(`/live/events?scene=${sceneIds.public}`, {
+      headers: { Accept: "text/event-stream" },
+    });
+    expect(guestEvents.status).toBe(403);
+
+    const offChat = await app.request("/live/admin/live-chat", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.mgr}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(offChat.status).toBe(200);
+    expect(await offChat.json()).toMatchObject({ ok: true, liveChatEnabled: false });
+
+    presence.connect({
+      userKey: "u:alice",
+      displayName: "alice",
+      sceneId: sceneIds.public,
+    });
+    const say = await app.request("/live/say", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.alice}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text: "blocked" }),
+    });
+    expect(say.status).toBe(403);
+    expect(await say.json()).toMatchObject({ error: "Live chat is disabled." });
+  });
+
+  it("scene HTML omits guest live when disabled", async () => {
+    await world.setGuestLiveEnabled(false);
+    const res = await app.request(`/s/${sceneIds.public}`, {
+      headers: { Accept: "text/html" },
+    });
+    const html = await res.text();
+    expect(html).toContain('"allowGuestLive":false');
+    expect(html).toContain('"liveChatEnabled":true');
   });
 });

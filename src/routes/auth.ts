@@ -33,6 +33,9 @@ const authPasswordLimit = rateLimit({
 
 authRoutes.post("/register", authAttemptLimit, async (c) => {
   const world = c.get("world");
+  if (!world.isRegistrationEnabled()) {
+    return respond(c, 403, "Register", "New registrations are disabled.");
+  }
   const sessions = c.get("sessions");
   const body = await readAuthBody(c);
   if (!body.username || !body.password) {
@@ -272,7 +275,7 @@ async function readAuthBody(c: Context): Promise<{
   };
 }
 
-function respond(c: Context, status: 400 | 401 | 409, title: string, message: string) {
+function respond(c: Context, status: 400 | 401 | 403 | 409, title: string, message: string) {
   if (wantsJson(c)) {
     return c.json({ error: message }, status);
   }

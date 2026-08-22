@@ -147,6 +147,16 @@ export interface StaffFile {
 export interface SettingsFile {
   /** Peer free-text Messages compose. Missing file defaults to enabled. */
   peerMessagingEnabled: boolean;
+  /** Guests may open Live on public scenes. Missing defaults to enabled. */
+  guestLiveEnabled: boolean;
+  /** Say and shout in Live. Missing defaults to enabled. */
+  liveChatEnabled: boolean;
+  /** New account registration. Missing defaults to enabled. */
+  registrationEnabled: boolean;
+  /** Non-managers may edit scenes, artefacts, profile, etc. Missing defaults to enabled. */
+  nonManagerEditingEnabled: boolean;
+  /** Non-managers may view the site. Missing defaults to enabled. */
+  nonManagerViewEnabled: boolean;
 }
 
 export interface MetaFile {

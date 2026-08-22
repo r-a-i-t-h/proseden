@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
-import { canRead, isModerator } from "../access/permissions.js";
+import { canRead, isManager, isModerator } from "../access/permissions.js";
 import { bypassesSceneFlagGate } from "../access/scene-gate.js";
 import { gateFactsFor } from "../logic/pred.js";
 import { sceneAllowed } from "../logic/world-view.js";
@@ -13,6 +13,7 @@ import { rateLimit } from "../middleware/rate-limit.js";
 import { clientIp } from "../rate-limit/client-ip.js";
 import type { LiveEvent } from "../live/types.js";
 import { HEARTBEAT_INTERVAL_MS, SSE_CONNECT_PADDING_BYTES } from "../live/types.js";
+import type { WorldStore } from "../store/world.js";
 import {
   escapeHtml,
   renderPageBackCrumb,
@@ -50,6 +51,9 @@ liveRoutes.get("/events", liveSseLimit, async (c) => {
   if (!scene) return c.json({ error: "Scene not found" }, 404);
 
   const identity = resolveLiveIdentity(c);
+  if (!identity.user && !world.isGuestLiveEnabled()) {
+    return c.json({ error: "Guest live is disabled." }, 403);
+  }
   if (!canRead(identity.user, scene, world)) {
     return c.json({ error: "Forbidden" }, identity.user ? 403 : 401);
   }
@@ -129,6 +133,10 @@ liveRoutes.get("/events", liveSseLimit, async (c) => {
 });
 
 liveRoutes.post("/say", liveChatLimit, async (c) => {
+  const world = c.get("world");
+  if (!world.isLiveChatEnabled()) {
+    return c.json({ error: "Live chat is disabled." }, 403);
+  }
   const presence = c.get("presence");
   const hub = c.get("hub");
   const identity = resolveLiveIdentity(c);
@@ -139,7 +147,6 @@ liveRoutes.post("/say", liveChatLimit, async (c) => {
   const online = presence.findByUserKey(identity.userKey);
   if (!online) return c.json({ error: "Not present — open Live mode first." }, 400);
 
-  const world = c.get("world");
   const scene = world.getScene(online.sceneId);
   if (!scene || !canRead(identity.user, scene, world)) {
     return c.json({ error: "Forbidden" }, 403);
@@ -156,6 +163,10 @@ liveRoutes.post("/say", liveChatLimit, async (c) => {
 });
 
 liveRoutes.post("/shout", liveChatLimit, async (c) => {
+  const world = c.get("world");
+  if (!world.isLiveChatEnabled()) {
+    return c.json({ error: "Live chat is disabled." }, 403);
+  }
   const presence = c.get("presence");
   const hub = c.get("hub");
   const identity = resolveLiveIdentity(c);
@@ -166,7 +177,6 @@ liveRoutes.post("/shout", liveChatLimit, async (c) => {
   const online = presence.findByUserKey(identity.userKey);
   if (!online) return c.json({ error: "Not present — open Live mode first." }, 400);
 
-  const world = c.get("world");
   const scene = world.getScene(online.sceneId);
   presence.heartbeatUser(identity.userKey);
   const message = hub.shout({
@@ -180,8 +190,12 @@ liveRoutes.post("/shout", liveChatLimit, async (c) => {
 });
 
 liveRoutes.post("/ping", async (c) => {
-  const presence = c.get("presence");
+  const world = c.get("world");
   const identity = resolveLiveIdentity(c);
+  if (!identity.user && !world.isGuestLiveEnabled()) {
+    return c.json({ error: "Guest live is disabled." }, 403);
+  }
+  const presence = c.get("presence");
   if (!presence.heartbeatUser(identity.userKey)) {
     return c.json({ error: "Not present — open Live mode first." }, 400);
   }
@@ -303,16 +317,21 @@ liveRoutes.get("/admin", (c) => {
   }));
 
   if (wantsJson(c)) {
-    return c.json({ users: recentUsers, buffers });
+    const payload: Record<string, unknown> = { users: recentUsers, buffers };
+    if (isManager(user, world)) {
+      Object.assign(payload, liveAdminSecuritySettings(world));
+    }
+    return c.json(payload);
   }
 
   const back = sceneBackLink(user!, world);
+  const security = isManager(user, world) ? liveAdminSecuritySettings(world) : undefined;
   return page(
     c,
     200,
     "Live admin",
-    renderLiveAdminHtml(recentUsers, buffers, back),
-    renderLiveAdminText(recentUsers, buffers),
+    renderLiveAdminHtml(recentUsers, buffers, back, security),
+    renderLiveAdminText(recentUsers, buffers, security),
   );
 });
 
@@ -347,6 +366,83 @@ liveRoutes.post("/admin/kick", async (c) => {
   return c.redirect(`${c.get("assetBase")}/live/admin?kicked=1`);
 });
 
+liveRoutes.post("/admin/guest-live", async (c) => setLiveSecurityToggle(c, "guestLiveEnabled"));
+liveRoutes.post("/admin/live-chat", async (c) => setLiveSecurityToggle(c, "liveChatEnabled"));
+liveRoutes.post("/admin/registration", async (c) => setLiveSecurityToggle(c, "registrationEnabled"));
+liveRoutes.post("/admin/non-manager-editing", async (c) =>
+  setLiveSecurityToggle(c, "nonManagerEditingEnabled"),
+);
+liveRoutes.post("/admin/non-manager-view", async (c) =>
+  setLiveSecurityToggle(c, "nonManagerViewEnabled"),
+);
+
+type LiveSecuritySettingKey =
+  | "guestLiveEnabled"
+  | "liveChatEnabled"
+  | "registrationEnabled"
+  | "nonManagerEditingEnabled"
+  | "nonManagerViewEnabled";
+
+interface LiveAdminSecuritySettings {
+  guestLiveEnabled: boolean;
+  liveChatEnabled: boolean;
+  registrationEnabled: boolean;
+  nonManagerEditingEnabled: boolean;
+  nonManagerViewEnabled: boolean;
+}
+
+function liveAdminSecuritySettings(world: WorldStore): LiveAdminSecuritySettings {
+  return {
+    guestLiveEnabled: world.isGuestLiveEnabled(),
+    liveChatEnabled: world.isLiveChatEnabled(),
+    registrationEnabled: world.isRegistrationEnabled(),
+    nonManagerEditingEnabled: world.isNonManagerEditingEnabled(),
+    nonManagerViewEnabled: world.isNonManagerViewEnabled(),
+  };
+}
+
+async function setLiveSecurityToggle(c: Context, key: LiveSecuritySettingKey) {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!isManager(user, world)) {
+    return apiError(c, user ? 403 : 401, "Manager role required");
+  }
+  const body = await readJsonBody(c);
+  const enabled = parseEnabledFlag(body.enabled ?? body[key]);
+  if (key === "guestLiveEnabled") await world.setGuestLiveEnabled(enabled);
+  else if (key === "liveChatEnabled") await world.setLiveChatEnabled(enabled);
+  else if (key === "registrationEnabled") await world.setRegistrationEnabled(enabled);
+  else if (key === "nonManagerEditingEnabled") await world.setNonManagerEditingEnabled(enabled);
+  else await world.setNonManagerViewEnabled(enabled);
+
+  const settings = liveAdminSecuritySettings(world);
+  if (wantsJson(c)) {
+    return c.json({ ok: true, ...settings });
+  }
+  const qsParam =
+    key === "guestLiveEnabled"
+      ? "guest"
+      : key === "liveChatEnabled"
+        ? "chat"
+        : key === "registrationEnabled"
+          ? "reg"
+          : key === "nonManagerEditingEnabled"
+            ? "edit"
+            : "view";
+  const on = settings[key];
+  return c.redirect(`${c.get("assetBase")}/live/admin?${qsParam}=${on ? "on" : "off"}`);
+}
+
+function parseEnabledFlag(raw: unknown): boolean {
+  return (
+    raw === true ||
+    raw === 1 ||
+    String(raw).toLowerCase() === "true" ||
+    String(raw) === "1" ||
+    String(raw).toLowerCase() === "on"
+  );
+}
+
 function renderLiveAdminHtml(
   users: Array<{
     username: string;
@@ -364,6 +460,7 @@ function renderLiveAdminHtml(
     newestAt?: string;
   }>,
   back?: PageBackLink,
+  security?: LiveAdminSecuritySettings,
 ): string {
   const userRows = users
     .map((u) => {
@@ -403,6 +500,56 @@ function renderLiveAdminHtml(
       </tr>`;
     })
     .join("\n");
+  const securityHtml = security
+    ? `<h2>Security</h2>
+    <p class="muted">Manager-only kill switches for abuse response. Existing sessions may linger briefly.</p>
+    <h3>Live</h3>
+    ${renderSecurityToggle({
+      enabled: security.guestLiveEnabled,
+      action: "live/admin/guest-live",
+      onHelp:
+        "Guests may open Live on public scenes. Disable if anonymous presence or chat becomes abusive.",
+      offHelp: "Guest Live is off. Only signed-in readers can connect.",
+      disableLabel: "Disable guest live",
+      enableLabel: "Enable guest live",
+    })}
+    ${renderSecurityToggle({
+      enabled: security.liveChatEnabled,
+      action: "live/admin/live-chat",
+      onHelp: "Say and shout are allowed. Disable to keep presence while blocking new chat.",
+      offHelp: "Live chat is off. Presence and join still work; say and shout are blocked.",
+      disableLabel: "Disable live chat",
+      enableLabel: "Enable live chat",
+    })}
+    <h3>Access</h3>
+    ${renderSecurityToggle({
+      enabled: security.registrationEnabled,
+      action: "live/admin/registration",
+      onHelp: "Anyone may create an account. Disable to stop new sign-ups during abuse.",
+      offHelp: "New registrations are off. Existing accounts may still log in.",
+      disableLabel: "Disable registration",
+      enableLabel: "Enable registration",
+    })}
+    ${renderSecurityToggle({
+      enabled: security.nonManagerEditingEnabled,
+      action: "live/admin/non-manager-editing",
+      onHelp:
+        "Signed-in readers may edit scenes, artefacts, exits, and profile when they have rights.",
+      offHelp:
+        "Editing is off for non-managers. Gameplay, chat, and inbox still work; only managers may change content.",
+      disableLabel: "Disable non-manager editing",
+      enableLabel: "Enable non-manager editing",
+    })}
+    ${renderSecurityToggle({
+      enabled: security.nonManagerViewEnabled,
+      action: "live/admin/non-manager-view",
+      onHelp: "The site is readable as usual.",
+      offHelp:
+        "The site is closed to non-managers. Only managers may view pages; others see a login screen.",
+      disableLabel: "Close site to non-managers",
+      enableLabel: "Open site to non-managers",
+    })}`
+    : "";
   return `${renderPageBackCrumb(back)}<h1>Live admin</h1>
     <p class="muted">Recently seen users and in-memory chat buffer stats (no message text). Kick drops a live connection immediately.</p>
     <h2>Users</h2>
@@ -417,7 +564,7 @@ function renderLiveAdminHtml(
     </table>
     <form method="post" action="live/admin/purge" class="stack" onsubmit="return confirm('Purge all in-memory chat buffers?');">
       <button type="submit" class="edit-danger">Purge all chats</button>
-    </form>`;
+    </form>${securityHtml}`;
 }
 
 function renderLiveAdminText(
@@ -435,6 +582,7 @@ function renderLiveAdminText(
     oldestAt?: string;
     newestAt?: string;
   }>,
+  security?: LiveAdminSecuritySettings,
 ): string {
   const lines = ["Live admin", "", "Users:"];
   for (const u of users) {
@@ -449,7 +597,35 @@ function renderLiveAdminText(
     );
   }
   lines.push("", "Kick: POST /live/admin/kick { userKey }", "Purge all: POST /live/admin/purge");
+  if (security) {
+    lines.push(
+      "",
+      "Security (manager):",
+      `- guest live: ${security.guestLiveEnabled ? "on" : "off"} — POST /live/admin/guest-live { enabled }`,
+      `- live chat: ${security.liveChatEnabled ? "on" : "off"} — POST /live/admin/live-chat { enabled }`,
+      `- registration: ${security.registrationEnabled ? "on" : "off"} — POST /live/admin/registration { enabled }`,
+      `- non-manager editing: ${security.nonManagerEditingEnabled ? "on" : "off"} — POST /live/admin/non-manager-editing { enabled }`,
+      `- non-manager view: ${security.nonManagerViewEnabled ? "on" : "off"} — POST /live/admin/non-manager-view { enabled }`,
+    );
+  }
   return lines.join("\n");
+}
+
+function renderSecurityToggle(opts: {
+  enabled: boolean;
+  action: string;
+  onHelp: string;
+  offHelp: string;
+  disableLabel: string;
+  enableLabel: string;
+}): string {
+  return `<p class="muted">${opts.enabled ? opts.onHelp : opts.offHelp}</p>
+    <form method="post" action="${escapeHtml(opts.action)}" class="stack">
+      <input type="hidden" name="enabled" value="${opts.enabled ? "false" : "true"}" />
+      <button type="submit"${opts.enabled ? ' class="edit-danger"' : ""}>${
+        opts.enabled ? opts.disableLabel : opts.enableLabel
+      }</button>
+    </form>`;
 }
 
 function liveChatKeys(c: Context): string[] {

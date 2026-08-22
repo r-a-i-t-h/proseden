@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { SessionStore } from "./auth/sessions.js";
 import { loadUser, sessionCookieNameForBase } from "./middleware/auth.js";
+import { crisisLockdown } from "./middleware/crisis-lockdown.js";
 import { pathWithinApp, writeRateLimit } from "./middleware/rate-limit.js";
 import { SceneHub } from "./live/hub.js";
 import { LocationTracker } from "./live/location.js";
@@ -79,6 +80,7 @@ export function createApp(opts: {
   });
 
   app.use("*", loadUser);
+  app.use("*", crisisLockdown);
   app.use("*", writeRateLimit);
 
   app.get("/health", (c) => c.json({ ok: true, name: "proseden", ...healthFields() }));
