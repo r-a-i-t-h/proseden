@@ -6,7 +6,6 @@ import {
   canEdit,
   canEditArtefact,
   canEjectArtefact,
-  canEditGroup,
   canPlaceArtefact,
   canManage,
   canManageGroup,
@@ -291,7 +290,6 @@ describe("group ACL", () => {
     const g = group("1", "alice");
     const w = world({ users: [alice] });
     expect(canReadGroup(alice, g, w)).toBe(true);
-    expect(canEditGroup(alice, g, w)).toBe(true);
     expect(canManageGroup(alice, g, w)).toBe(true);
   });
 

@@ -76,7 +76,11 @@ profileRoutes.post("/profile/badges/:id/drop", async (c) => {
   const next = world.getUserBadges(user.username).filter((b) => b.badge !== badgeId);
   await world.saveUserBadges(user.username, next);
   await triggerQuestEval(c, user, user.lastSceneId);
-  return respondMutation(c, { json: { ok: true, badges: next }, redirect: `/profile?badge-dropped=1` });
+  return respondMutation(c, {
+    json: { ok: true, badges: next },
+    redirect: "/profile",
+    flash: { "badge-dropped": "1" },
+  });
 });
 
 aliasFormMethods(profileRoutes, "put", "/profile", (c) => updateProfileAppearance(c));

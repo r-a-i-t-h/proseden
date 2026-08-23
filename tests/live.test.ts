@@ -275,6 +275,38 @@ describe("live presence and chat", () => {
     expect(res.status).toBe(400);
   });
 
+  it("SSE /live/events is 403 when the reader fails the scene when-gate", async () => {
+    const gated = await world.createScene({
+      owner: "alice",
+      title: "Gated hall",
+      body: "Shut.",
+      visibility: "public",
+    });
+    await world.updateScene(
+      gated.id,
+      { when: "quest.open", whenDenied: "The study is shut." },
+      { by: "alice" },
+    );
+
+    const owner = await app.request(`/live/events?scene=${gated.id}`, {
+      headers: {
+        Accept: "text/event-stream",
+        Authorization: `Bearer ${tokens.alice}`,
+      },
+    });
+    expect(owner.status).toBe(200);
+    await owner.body?.cancel();
+
+    const reader = await app.request(`/live/events?scene=${gated.id}`, {
+      headers: {
+        Accept: "text/event-stream",
+        Authorization: `Bearer ${tokens.bob}`,
+      },
+    });
+    expect(reader.status).toBe(403);
+    expect(await reader.json()).toEqual({ error: "Forbidden" });
+  });
+
   it("SSE /live/events disables proxy buffering and streams a snapshot", async () => {
     const res = await app.request(`/live/events?scene=${sceneIds.public}`, {
       headers: { Accept: "text/event-stream" },

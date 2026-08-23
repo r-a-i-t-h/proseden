@@ -187,7 +187,11 @@ async function deleteInboxMessage(c: Context) {
 
   try {
     await world.deleteInboxMessage(id);
-    return respondMutation(c, { json: { ok: true, id }, redirect: `/inbox?deleted=1` });
+    return respondMutation(c, {
+      json: { ok: true, id },
+      redirect: "/inbox",
+      flash: { deleted: "1" },
+    });
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Could not delete message");
   }

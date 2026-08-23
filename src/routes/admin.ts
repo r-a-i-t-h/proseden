@@ -217,6 +217,7 @@ adminRoutes.post("/quests", async (c) => {
   return respondMutation(c, {
     json: { ok: true, name },
     redirect: `/data/quests/${encodeURIComponent(name)}`,
+    status: 201,
     flash: { saved: "1" },
   });
 });

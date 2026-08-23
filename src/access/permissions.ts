@@ -243,15 +243,6 @@ export function canManageGroup(
   return hasRightOn(user, groupAclSubject(group, world), "manage", world);
 }
 
-export function canEditGroup(
-  user: UserRecord | undefined,
-  group: GroupRecord,
-  world: AccessWorld,
-): boolean {
-  if (!user) return false;
-  return hasRightOn(user, groupAclSubject(group, world), "edit", world);
-}
-
 export function canReadGroup(
   user: UserRecord | undefined,
   group: GroupRecord,

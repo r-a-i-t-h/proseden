@@ -176,7 +176,11 @@ groupRoutes.post("/g/:id/transfer", async (c) => {
       keepAccess: parseKeepAccess(body),
       by: user.username,
     });
-    return respondMutation(c, { json: result, redirect: `/g/${id}?transferred=1` });
+    return respondMutation(c, {
+      json: result,
+      redirect: `/g/${id}`,
+      flash: { transferred: "1" },
+    });
   } catch (err) {
     return apiError(c, 400, err instanceof Error ? err.message : "Could not transfer group");
   }

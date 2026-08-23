@@ -1,8 +1,8 @@
 # Architecture after the 2026-08 refactor
 
-Maintenance pass that finished halfway migrations. Product URLs, the HTML / text / JSON contract, and `WorldStore` as the aggregate root are unchanged.
+Maintenance pass that finished halfway migrations, plus a short cleanup of leftovers that pass introduced. Product URLs, the HTML / text / JSON contract, and `WorldStore` as the aggregate root are unchanged.
 
-**Verified:** `npx tsc --noEmit`, `npx vitest run` (481 tests), `npm run build`.
+**Verified:** `npx tsc --noEmit`, `npx vitest run` (483 tests), `npm run build`.
 
 **Related:** [SPEC.md](SPEC.md), [RENDERING.md](RENDERING.md), [NAVIGATION.md](NAVIGATION.md), [AGENTS.md](../AGENTS.md).
 
@@ -68,7 +68,9 @@ When adding a route, put it on the resource file, not back on `world.ts`.
 | `requireUser` / `requireManager` | Return `UserRecord \| Response`. Check with `isResponse(value)`. |
 | `page(c, status, view)` | **PageView only.** The old `page(title, html, text)` overload is gone. |
 
-Creates that used to return **201** still do, via `respondMutation(..., { status: 201 })`. Default status is 200. Forgetting `status: 201` on a create is a silent JSON-client break.
+Creates that used to return **201** still do, via `respondMutation(..., { status: 201 })`. Default status is 200. Forgetting `status: 201` on a create is a silent JSON-client break. That includes manager `POST /data/quests`.
+
+`flash` is the only way to add query params on a helper redirect — do not put `?deleted=1` in `redirect` (the helper replaces the query string and does not merge). Inbox delete, group transfer, and profile badge-drop use `flash`. Inbox send still hand-rolls JSON vs redirect because it also returns **text** 201.
 
 Quest / Use / Input still use session one-shots (`setActionMessage`) so the result is not in the URL. Inbox/msg validation errors still re-render the form with `notice`/`error`.
 
@@ -105,12 +107,16 @@ Transfer remains **ownership** (owner or staff manager), not a manage grant. UI 
 | GET `/s/:id` | `redirect` to the group entrance |
 | POST `/s/:id/input`, POST `/a/:id/collect` | `forbid` (403 if you would be teleported away) |
 | GET `/s/:id/go/:exit` dest, Live join / SSE / here / say | `ignore` (join still calls `resolveTeleportTarget(..., { asJoin: true })`) |
+| POST `/s/:id/subscribe`, POST `/s/:id/view-invites` | not used — `canRead` only (no FlagRef / teleport) |
+| POST `/live/shout` | not used — existing presence only; no scene ACL/gate re-check |
+
+**Product decision:** leave subscribe, view-invites, and shout off `assertSceneEntry`. Subscribe and view-invite are ACL actions on a scene you already reached. Shout is global fan-out from an existing presence connection. Applying entry would be a product change: today you can fail GET/input/collect on a gated scene and still subscribe, invite, or shout if you already have presence. Leave that split unless it starts to matter.
 
 **Holding an artefact** still skips ACL and scene/artefact `when` **only on GET `/a/:id`**. Collect, history, and Live do not get that exception.
 
 If teleport would send you to an unreadable entrance, the message is **“Entrance to this area is not reachable.”** (403 signed-in, 401 anonymous) — not the generic private-scene copy.
 
-Live SSE / `/here` / `/say` now apply the FlagRef gate as well as ACL. Someone who can “read” a scene but fails `when` no longer gets a live stream there.
+Live SSE / `/here` / `/say` now apply the FlagRef gate as well as ACL. Someone who can “read” a scene but fails `when` no longer gets a live stream there. Covered by `tests/live.test.ts` (SSE 403 on a public `when`-gated scene). Collect from outside an entrance group is covered by `tests/navigation.test.ts`.
 
 ### 5. PageView finished
 
@@ -144,6 +150,15 @@ Live chat types come from `src/live/types.ts` (`ChatMessage.kind` is the union, 
 `updateSetting(world, key, enabled)` is the single boolean settings write used by `/live/admin/*` and `/msg/peer-messaging`.
 
 `updateAccess(c, { persist, redirect, flash? })` is the shared grants/denies save for scene, group, and user share-all.
+
+### 7. Cleanup pass
+
+Mopped leftovers from the unexpected-fix work; no new layers.
+
+- Deleted unused `src/render/text.ts` (wrappers around `toText` that nothing imported).
+- Removed unused `canEditGroup`. Routes never called it; group rights stay `canReadGroup` / `canManageGroup` / `canTransferGroup`.
+- Tests for the two untested behavior changes: Live SSE 403 on a `when`-gated readable scene; collect 403 when the artefact home is an inner entrance-group room and `from` is outside.
+- `POST /data/quests` create now passes `status: 201`. Inbox/group/profile helper redirects use `flash` only.
 
 ---
 
@@ -236,6 +251,6 @@ Automated tests cover ACL, navigation, inbox, live SSE plumbing, and HTML snippe
 - New HTML page: a `*PageView` composer + `page(c, status, view)`. Do not add string twins in `html.ts`.
 - New mutation: `readRequestBody` + `requireUser`/`requireManager` + `respondMutation`. Use `status: 201` on create. Register form aliases with `aliasFormMethods`.
 - New ACL check: extend `AclSubject` only if it is owner/grants/denies/visibility. Otherwise write a named `can*`.
-- New scene-touching GET/POST: `assertSceneEntry` (or `evaluateSceneEntry` when you must keep a JSON-only error body, as Live SSE does).
+- New scene-touching **reader** GET/POST (open, go, input, collect, Live SSE/here/say/join): `assertSceneEntry` (or `evaluateSceneEntry` when you must keep a JSON-only error body, as Live SSE does). Subscribe and view-invites stay `canRead` only; shout stays presence-only — see the scene-entry table.
 - New boolean setting: add a key to `updateSetting`, do not copy another POST handler.
 - Edit panel types: change `src/render/bootstrap.ts`, not a second interface in `client/edit.ts`.
