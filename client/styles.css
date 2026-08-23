@@ -804,11 +804,25 @@ details.live-online-wrap {
   border-bottom: 1px solid var(--line);
 }
 
+.backup-table th:nth-child(1),
+.backup-table td:nth-child(1),
+.backup-table th:nth-child(2),
+.backup-table td:nth-child(2) {
+  width: 1%;
+  white-space: nowrap;
+  padding-right: 1rem;
+}
+
 .backup-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: baseline;
   gap: 0.6rem;
+}
+
+.backup-actions .inline {
+  display: inline-flex;
+  flex-wrap: nowrap;
 }
 
 .stack {

@@ -1,5 +1,6 @@
 import type { BackupInfo } from "../../../store/backup.js";
 import {
+  box,
   button,
   crumb,
   form,
@@ -37,24 +38,21 @@ export function adminDataPageView(opts: {
       cells: [
         { type: "para" as const, text: b.mtime },
         { type: "para" as const, text: formatBytes(b.size) },
-        {
-          type: "fragment" as const,
-          children: [
-            { type: "userLink" as const, username: "" },
-            {
-              type: "unsafeHtml" as const,
-              html: `<a href="${href}">Download</a>`,
-            },
-            {
-              type: "unsafeHtml" as const,
-              html: `<form method="post" action="${href}/restore" class="inline" onsubmit="return confirm('${restoreConfirm}');"><button type="submit">Restore</button></form>`,
-            },
-            form(
-              { method: "post", action: `${href}/delete`, class: "inline" },
-              button("Delete"),
-            ),
-          ].filter((n) => n.type !== "userLink"),
-        },
+        box(
+          "backup-actions",
+          {
+            type: "unsafeHtml" as const,
+            html: `<a href="${href}">Download</a>`,
+          },
+          {
+            type: "unsafeHtml" as const,
+            html: `<form method="post" action="${href}/restore" class="inline" onsubmit="return confirm('${restoreConfirm}');"><button type="submit">Restore</button></form>`,
+          },
+          form(
+            { method: "post", action: `${href}/delete`, class: "inline" },
+            button("Delete"),
+          ),
+        ),
       ] as Node[],
     };
   });
