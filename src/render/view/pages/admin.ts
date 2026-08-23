@@ -35,9 +35,8 @@ export function adminDataPageView(opts: {
       "Replace all data with this archive? A safety backup of the current data will be created first.";
     return {
       cells: [
-        { type: "para" as const, text: b.name },
-        { type: "para" as const, text: formatBytes(b.size) },
         { type: "para" as const, text: b.mtime },
+        { type: "para" as const, text: formatBytes(b.size) },
         {
           type: "fragment" as const,
           children: [
@@ -95,7 +94,7 @@ export function adminDataPageView(opts: {
       heading(2, "Data backups"),
       muted("Archives data/ only (not the app). Restore replaces all data; a safety backup is created first."),
       form({ method: "post", action: "data/backup", class: "stack" }, button("Backup now")),
-      table(["File", "Size", "Modified", ""], backupRows, {
+      table(["Modified", "Size", ""], backupRows, {
         class: "backup-table",
         empty: "No archives yet.",
       }),
