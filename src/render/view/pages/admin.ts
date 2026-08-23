@@ -72,23 +72,10 @@ export function adminDataPageView(opts: {
       backCrumb(opts.back),
       heading(1, "Data"),
       opts.notice ? notice(opts.notice) : undefined,
-      muted("Quests · Alchemy recipes"),
-      {
-        type: "para",
-        text: "",
-        class: "muted",
-      },
       {
         type: "unsafeHtml",
         html: `<p class="muted"><a href="data/quests">Quests</a> · <a href="data/alchemy">Alchemy recipes</a></p>`,
       },
-      linkList(
-        opts.endpoints.map((e) => ({
-          href: e.path.replace(/^\//, ""),
-          label: `${e.method} ${e.path}`,
-          note: e.description,
-        })),
-      ),
       heading(2, "Data backups"),
       muted("Archives data/ only (not the app). Restore replaces all data; a safety backup is created first."),
       form({ method: "post", action: "data/backup", class: "stack" }, button("Backup now")),
