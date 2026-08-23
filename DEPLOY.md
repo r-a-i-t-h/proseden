@@ -201,7 +201,7 @@ PROSEDEN_DATA=./data sh deploy/migrate.sh
 
 Archives are **data only** (never the app). They accumulate under `backup/`; nothing deletes them automatically.
 
-**From Data** (signed in as a manager): open `/data`, **Backup now**, then Download or Delete.
+**From Data** (signed in as a manager): open `/data`, **Backup now**, then Download, Restore, or Delete. Restore replaces all of `data/` from the chosen archive and writes a safety backup of the current data first.
 
 **From SSH** (same files the Data page lists):
 
@@ -216,7 +216,7 @@ sudo chown -R proseden:proseden /opt/proseden/www/backup
 
 Set `PROSEDEN_DATA` (and optionally `PROSEDEN_BACKUP`) when calling `backup-data.sh` if this instance’s `env` uses non-default paths. The helper defaults `PROSEDEN_BACKUP` to the `backup` sibling of the data directory.
 
-**Restore** is not in the web UI. Stop the service, replace `data/` from an archive, start again:
+**Restore from SSH** (stop the service first if you want a clean process restart):
 
 ```bash
 sudo systemctl stop proseden-www
@@ -227,6 +227,8 @@ sudo tar -xzf /opt/proseden/www/backup/2026-08-11T201530Z.tar.gz \
 sudo chown -R proseden:proseden /opt/proseden/www/data
 sudo systemctl start proseden-www
 ```
+
+To copy production into a new test instance: create or download a backup on production, copy the `.tar.gz` into the test instance’s `backup/` directory, sign in as a manager on the test instance, open `/data`, and **Restore**. Or use the SSH steps above on the test host.
 
 Rolling the app `current` symlink back does not undo a data migration. Restore a pre-update archive if the files in `data/` no longer match the older app.
 

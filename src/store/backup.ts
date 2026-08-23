@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rename, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { SESSION_HANDOFF_FILE } from "../auth/sessions.js";
 
@@ -94,6 +95,65 @@ export async function deleteBackup(backupDir: string, name: string): Promise<boo
   }
 }
 
+export interface RestoreResult {
+  restored: string;
+  safetyBackup: string;
+}
+
+/** Replace all files under `dataDir` from a timestamped archive in `backupDir`. */
+export async function restoreDataBackup(
+  dataDir: string,
+  backupDir: string,
+  name: string,
+): Promise<RestoreResult> {
+  const archive = backupPath(backupDir, name);
+  if (!archive) throw new Error("Invalid backup name");
+
+  try {
+    const st = await stat(archive);
+    if (!st.isFile()) throw new Error("Backup not found");
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") throw new Error("Backup not found");
+    throw err;
+  }
+
+  const probeDir = await mkdtemp(join(tmpdir(), "proseden-restore-probe-"));
+  try {
+    await extractTar(archive, probeDir);
+    await stat(join(probeDir, "meta.json"));
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      throw new Error("Archive is not a valid data backup (missing meta.json)");
+    }
+    throw err;
+  } finally {
+    await rm(probeDir, { recursive: true, force: true });
+  }
+
+  const safetyBackup = await createDataBackup(dataDir, backupDir);
+  await clearDataDir(dataDir);
+  await extractTar(archive, dataDir);
+
+  return { restored: name, safetyBackup: safetyBackup.name };
+}
+
+async function clearDataDir(dataDir: string): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await readdir(dataDir);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      await mkdir(dataDir, { recursive: true });
+      return;
+    }
+    throw err;
+  }
+  await Promise.all(entries.map((entry) => rm(join(dataDir, entry), { recursive: true, force: true })));
+}
+
 function runTar(archive: string, dataDir: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -103,6 +163,23 @@ function runTar(archive: string, dataDir: string): Promise<void> {
         stdio: ["ignore", "ignore", "pipe"],
       },
     );
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(stderr.trim() || `tar exited ${code}`));
+    });
+  });
+}
+
+function extractTar(archive: string, destDir: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("tar", ["-xzf", archive, "-C", destDir], {
+      stdio: ["ignore", "ignore", "pipe"],
+    });
     let stderr = "";
     child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();

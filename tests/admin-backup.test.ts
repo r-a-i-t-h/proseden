@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
@@ -176,5 +176,65 @@ describe("admin backups", () => {
       headers: { Authorization: `Bearer ${managerToken}` },
     });
     expect(sneaky.status).toBe(400);
+  });
+
+  it("requires a manager to restore", async () => {
+    const created = await app.request("/data/backup", {
+      method: "POST",
+      headers: auth(managerToken),
+    });
+    const { name } = (await created.json()) as { name: string };
+
+    const anon = await app.request(`/data/backup/${name}/restore`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    });
+    expect(anon.status).toBe(401);
+
+    const user = await app.request(`/data/backup/${name}/restore`, {
+      method: "POST",
+      headers: auth(userToken),
+    });
+    expect(user.status).toBe(403);
+  });
+
+  it("restores data from an archive and replaces existing files", async () => {
+    const created = await app.request("/data/backup", {
+      method: "POST",
+      headers: auth(managerToken),
+    });
+    const { name: archiveName } = (await created.json()) as { name: string };
+
+    const extra = await world.createScene({
+      owner: "alice",
+      title: "Extra",
+      body: "Will be removed on restore.",
+      visibility: "public",
+    });
+    expect(world.getScene(extra.id)).toBeTruthy();
+
+    const scenePath = join(dataDir, "scenes", `${hallId}.md`);
+    const raw = await readFile(scenePath, "utf8");
+    await writeFile(scenePath, raw.replace("A stone hall.", "Changed before restore."));
+
+    const restored = await app.request(`/data/backup/${archiveName}/restore`, {
+      method: "POST",
+      headers: auth(managerToken),
+    });
+    expect(restored.status).toBe(200);
+    const body = (await restored.json()) as {
+      ok: boolean;
+      restored: string;
+      safetyBackup: string;
+    };
+    expect(body).toMatchObject({ ok: true, restored: archiveName });
+    expect(body.safetyBackup).toMatch(BACKUP_NAME_RE);
+    expect(body.safetyBackup).not.toBe(archiveName);
+
+    expect(world.getScene(hallId)?.body).toBe("A stone hall.");
+    expect(world.getScene(extra.id)).toBeUndefined();
+
+    const backups = await readdir(backupDir);
+    expect(backups.filter((n) => BACKUP_NAME_RE.test(n)).length).toBeGreaterThanOrEqual(2);
   });
 });

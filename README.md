@@ -131,6 +131,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `POST` | `/data/backup` | Archive `data/` into `backup/` (manager) |
 | `GET` | `/data/backup/:name` | Download a data archive (manager) |
 | `POST` | `/data/backup/:name/delete` | Delete a data archive (manager) |
+| `POST` | `/data/backup/:name/restore` | Replace `data/` from a data archive (manager) |
 | `POST` | `/data/reload` | Reload in-memory world cache from disk (manager) |
 | `GET` | `/s/:id/history` | Edit log (readers) |
 | `GET` | `/s/:id/history/:version` | View retained snapshot |
@@ -169,7 +170,7 @@ backup/
   2026-08-11T201530Z.tar.gz   # data/ only; sibling of data/, never nested inside it
 ```
 
-Managers can create, download, and delete archives from **Data**. `proseden-update` writes one snapshot before it touches the app. See [DEPLOY.md](DEPLOY.md) for the SSH one-liner and restore notes.
+Managers can create, download, restore, and delete archives from **Data**. Restore fully replaces `data/` and archives the previous contents first. `proseden-update` writes one snapshot before it touches the app. See [DEPLOY.md](DEPLOY.md) for the SSH one-liner and restore notes.
 
 A planned stop (SIGTERM) writes SHA-256 hashes of live session tokens to `data/.sessions.json` (mode 0600). The next boot loads that file as a one-shot fallback and deletes it, so a save after an update still authenticates. Idle cookies, crashes, and a second restart without a visit may still log people out. The handoff file is not included in data tarballs.
 

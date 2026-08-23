@@ -25,6 +25,7 @@ import {
   createDataBackup,
   deleteBackup,
   listBackups,
+  restoreDataBackup,
   type BackupInfo,
 } from "../store/backup.js";
 import { displayJsonTextarea, prepareJsonTextarea } from "../json-textarea.js";
@@ -39,7 +40,12 @@ adminRoutes.get("/", async (c) => {
   if (denied) return denied;
 
   const backups = await listBackups(c.get("backupDir"));
-  const notice = adminNotice(c.req.query("backed-up"), c.req.query("deleted"));
+  const notice = adminNotice(
+    c.req.query("backed-up"),
+    c.req.query("deleted"),
+    c.req.query("restored"),
+    c.req.query("safety"),
+  );
   const endpoints = [
     {
       method: "GET",
@@ -65,6 +71,11 @@ adminRoutes.get("/", async (c) => {
       method: "POST",
       path: "/data/backup/:name/delete",
       description: "Delete a data archive",
+    },
+    {
+      method: "POST",
+      path: "/data/backup/:name/restore",
+      description: "Replace data/ from a data archive",
     },
     {
       method: "POST",
@@ -151,6 +162,37 @@ adminRoutes.post("/backup/:name/delete", async (c) => {
     return c.text(formatPlainMessage("Backup", `Deleted ${name}.`));
   }
   return c.redirect(`${c.get("assetBase")}/data?deleted=${encodeURIComponent(name)}`);
+});
+
+adminRoutes.post("/backup/:name/restore", async (c) => {
+  const denied = denyIfNotManager(c);
+  if (denied) return denied;
+
+  const name = c.req.param("name");
+  if (!backupPath(c.get("backupDir"), name)) {
+    return apiError(c, 400, "Invalid backup name", { isManager: true });
+  }
+
+  const world = c.get("world");
+  let result: { restored: string; safetyBackup: string };
+  try {
+    result = await timedAsync(c.get("timer"), "restore", () =>
+      restoreDataBackup(world.dataDir, c.get("backupDir"), name),
+    );
+    await timedAsync(c.get("timer"), "reload", () => world.reload());
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Restore failed";
+    return apiError(c, 400, message, { isManager: true });
+  }
+
+  if (wantsJson(c)) return c.json({ ok: true, ...result });
+  const message = `Restored data from ${result.restored}. Previous data archived as ${result.safetyBackup}.`;
+  if (negotiateFormat(c) === "text") {
+    return c.text(formatPlainMessage("Restore", message));
+  }
+  return c.redirect(
+    `${c.get("assetBase")}/data?restored=${encodeURIComponent(result.restored)}&safety=${encodeURIComponent(result.safetyBackup)}`,
+  );
 });
 
 adminRoutes.post("/reload", async (c) => {
@@ -363,8 +405,12 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function adminNotice(backedUp?: string, deleted?: string): string {
+function adminNotice(backedUp?: string, deleted?: string, restored?: string, safety?: string): string {
   if (backedUp) return `Archived data to ${backedUp}.`;
   if (deleted) return `Deleted ${deleted}.`;
+  if (restored) {
+    const safetyNote = safety ? ` Previous data archived as ${safety}.` : "";
+    return `Restored data from ${restored}.${safetyNote}`;
+  }
   return "";
 }

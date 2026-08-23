@@ -31,6 +31,8 @@ export function adminDataPageView(opts: {
 }): PageView {
   const backupRows = opts.backups.map((b) => {
     const href = `data/backup/${encodeURIComponent(b.name)}`;
+    const restoreConfirm =
+      "Replace all data with this archive? A safety backup of the current data will be created first.";
     return {
       cells: [
         { type: "para" as const, text: b.name },
@@ -43,6 +45,10 @@ export function adminDataPageView(opts: {
             {
               type: "unsafeHtml" as const,
               html: `<a href="${href}">Download</a>`,
+            },
+            {
+              type: "unsafeHtml" as const,
+              html: `<form method="post" action="${href}/restore" class="inline" onsubmit="return confirm('${restoreConfirm}');"><button type="submit">Restore</button></form>`,
             },
             form(
               { method: "post", action: `${href}/delete`, class: "inline" },
@@ -87,7 +93,7 @@ export function adminDataPageView(opts: {
         })),
       ),
       heading(2, "Data backups"),
-      muted("Archives data/ only (not the app). Updates also write one here first."),
+      muted("Archives data/ only (not the app). Restore replaces all data; a safety backup is created first."),
       form({ method: "post", action: "data/backup", class: "stack" }, button("Backup now")),
       table(["File", "Size", "Modified", ""], backupRows, {
         class: "backup-table",
