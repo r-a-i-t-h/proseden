@@ -1,84 +1,12 @@
 import { jsonKindFromFieldName } from "../src/json-table.js";
 import { formatJsonTextarea } from "../src/json-textarea.js";
+import type { EditBootstrap, ManageContext, OwnedSceneLink } from "../src/render/bootstrap.js";
 import {
   DENIES_EXAMPLE,
   DETAILS_EXAMPLE,
   GRANTS_EXAMPLE,
 } from "../src/render/view/examples.js";
 import { applyEditorPreferences, editorPrefsControls } from "./editors.js";
-
-interface OwnedSceneLink {
-  id: number;
-  title?: string;
-}
-
-interface ManageContext {
-  kind: "scene" | "artefact" | "inventory" | "home";
-  scene?: {
-    id: number;
-    title?: string;
-    body: string;
-    details: Record<string, string>;
-    visibility: string;
-    isJunction?: boolean;
-    isRepository?: boolean;
-    owner?: string;
-    groupId?: string | null;
-    entranceGroupId?: string | null;
-    grants?: unknown;
-    denies?: unknown;
-    when?: string;
-    whenDenied?: string;
-    detailWhen?: Record<string, string>;
-  };
-  artefact?: {
-    id: number;
-    title?: string;
-    body: string;
-    details: Record<string, string>;
-    homeSceneId: number;
-    tags: string[];
-    when?: string;
-    detailWhen?: Record<string, string>;
-  };
-  exits?: Array<{
-    exitId: number;
-    nickname: string;
-    toSceneId: number;
-    canRemove?: boolean;
-    when?: string;
-    whenDenied?: string;
-    hidden?: boolean;
-  }>;
-  canEdit?: boolean;
-  canManage?: boolean;
-  canAddExit?: boolean;
-  canPlaceArtefact?: boolean;
-  canReorderExits?: boolean;
-  canEject?: boolean;
-  isTopographer?: boolean;
-  canDelete?: boolean;
-  canTransfer?: boolean;
-  groups?: Array<{ id: string; title: string }>;
-  entranceGroups?: Array<{ id: string; title: string; entranceSceneId: number }>;
-  sceneGroup?: { id: string; title: string };
-}
-
-interface EditBootstrap {
-  user?: { username: string };
-  manage?: ManageContext;
-  ownedScenes: OwnedSceneLink[];
-  isManager: boolean;
-  isModerator?: boolean;
-  isQuestor?: boolean;
-  editHref: string;
-  readHref: string;
-  liveSceneId?: number;
-  allowGuestLive?: boolean;
-  liveChatEnabled?: boolean;
-  registrationEnabled?: boolean;
-  nonManagerEditingEnabled?: boolean;
-}
 
 const FLASH_KEY = "proseden-edit-flash";
 const OLD_MODE_KEY = "proseden-edit";

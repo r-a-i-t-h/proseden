@@ -7,6 +7,7 @@ export type EditorKind = "plain" | "prose" | "json";
 export type MetaPart =
   | string
   | { type: "relativeAge"; iso: string }
+  | { type: "labeledAge"; label: string; iso: string }
   | { type: "userLink"; username: string };
 
 export type LinkListItem = {
@@ -119,6 +120,7 @@ export type Node =
       summary: string;
       open?: boolean;
       class?: string;
+      attrs?: Record<string, string>;
       children: Node[];
     }
   | { type: "userLink"; username: string }
@@ -141,6 +143,15 @@ export type Node =
       value: unknown;
       example: string;
       note: string;
+      /** When set, use this source text instead of pretty-printing `value`. */
+      text?: string;
+    }
+  | {
+      type: "table";
+      class?: string;
+      headers: string[];
+      rows: Array<{ cells: Node[]; class?: string }>;
+      empty?: string;
     }
   | { type: "button"; label: string; class?: string; buttonType?: "submit" | "button" }
   | { type: "pre"; text: string; class?: string }

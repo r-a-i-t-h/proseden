@@ -81,7 +81,6 @@ function bootPanel(): void {
   let live: LiveController | null = null;
   let editMounted = false;
   let editToolbar: HTMLElement | null = null;
-  let mode: PanelMode = "view";
 
   const headerLive = document.getElementById("panel-live");
   const headerEdit = document.getElementById("panel-edit");
@@ -119,7 +118,6 @@ function bootPanel(): void {
   function applyMode(next: PanelMode, persist = true): void {
     if (next === "edit" && !canEdit) next = canLive ? "live" : "view";
     if (next === "live" && !canLive) next = "view";
-    mode = next;
     if (persist) writeMode(next, !!boot.user);
 
     const open = next === "live" || next === "edit";
@@ -184,8 +182,10 @@ function bootPanel(): void {
 
 /** Focus username when Log in / Register details open (browser autofill target). */
 function wireAuthPanelFocus(): void {
-  for (const details of document.querySelectorAll<HTMLDetailsElement>(
-    "#auth-panel details.login, #auth-panel details.register",
+  for (const details of Array.from(
+    document.querySelectorAll<HTMLDetailsElement>(
+      "#auth-panel details.login, #auth-panel details.register",
+    ),
   )) {
     details.addEventListener("toggle", () => {
       if (!details.open) return;

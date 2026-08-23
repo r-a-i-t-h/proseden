@@ -1,19 +1,16 @@
-import type { Context } from "hono";
+import type { Context, Handler, Hono } from "hono";
 import { canRead, isManager, isModerator, isQuestor } from "./access/permissions.js";
 import { negotiateFormat } from "./render/format.js";
-import {
-  editModeHrefs,
-  renderHtmlPage,
-  renderMessageBodyHtml,
-  type ManageContext,
-  type OwnedSceneLink,
-  type PageBackLink,
-} from "./render/html.js";
-import { renderMessageText } from "./render/text.js";
-import { isPageView, toHtml, toText, type PageView } from "./render/view/index.js";
+import { editModeHrefs, renderHtmlPage } from "./render/html.js";
+import type { ManageContext, OwnedSceneLink } from "./render/bootstrap.js";
+import type { PageBackLink } from "./render/view/index.js";
+import { isPageView, messagePageView, toHtml, toText, type PageView } from "./render/view/index.js";
 import type { UserRecord } from "./model/types.js";
 import { timed } from "./observe.js";
 import type { WorldStore } from "./store/world.js";
+
+export { readRequestBody, parseEnabledFlag, isTruthy, optionalString } from "./http/body.js";
+export type { ManageContext, OwnedSceneLink, EditBootstrap } from "./render/bootstrap.js";
 
 export function wantsJson(c: Context): boolean {
   const accept = c.req.header("accept") ?? "";
@@ -64,52 +61,18 @@ export interface PageShellOverrides {
 /**
  * Negotiate text vs HTML and wrap HTML in the shared site shell
  * (header, edit bootstrap, live scene binding, owned-scene list).
- *
- * Pass either a PageView (document model) or legacy htmlBody + textBody strings.
  */
-export function page(
-  c: Context,
-  status: number,
-  title: string,
-  htmlBody: string,
-  textBody: string,
-  manage?: ManageContext,
-  shell?: PageShellOverrides,
-): Response;
 export function page(
   c: Context,
   status: number,
   view: PageView,
   manage?: ManageContext,
   shell?: PageShellOverrides,
-): Response;
-export function page(
-  c: Context,
-  status: number,
-  titleOrView: string | PageView,
-  htmlBodyOrManage?: string | ManageContext,
-  textBodyOrShell?: string | PageShellOverrides,
-  manage?: ManageContext,
-  shell?: PageShellOverrides,
-) {
-  if (isPageView(titleOrView)) {
-    return pageFromView(
-      c,
-      status,
-      titleOrView,
-      htmlBodyOrManage as ManageContext | undefined,
-      textBodyOrShell as PageShellOverrides | undefined,
-    );
+): Response {
+  if (!isPageView(view)) {
+    throw new Error("page() expects a PageView");
   }
-
-  const title = titleOrView;
-  const htmlBody = htmlBodyOrManage as string;
-  const textBody = textBodyOrShell as string;
-  const format = negotiateFormat(c);
-  if (format === "text") {
-    return c.text(textBody, status as 200);
-  }
-  return htmlPageResponse(c, status, title, htmlBody, manage, shell);
+  return pageFromView(c, status, view, manage, shell);
 }
 
 function pageFromView(
@@ -180,19 +143,70 @@ export function apiError(
   c: Context,
   status: 400 | 401 | 403 | 404 | 429,
   message: string,
-  opts?: { isManager?: boolean },
+  opts?: { isManager?: boolean; title?: string },
 ) {
+  const title = opts?.title ?? "Error";
   if (wantsJson(c) || negotiateFormat(c) === "text") {
     if (wantsJson(c)) return c.json({ error: message }, status);
-    return c.text(renderMessageText("Error", message), status);
+    return c.text(`[${title}]\n\n${message}\n`, status);
   }
-  return page(
-    c,
-    status,
-    "Error",
-    renderMessageBodyHtml("Error", message),
-    renderMessageText("Error", message),
-    undefined,
-    { isManager: opts?.isManager },
-  );
+  return page(c, status, messagePageView(title, message), undefined, {
+    isManager: opts?.isManager,
+  });
+}
+
+/** JSON entity for the edit panel; HTML forms redirect (optional query flash). */
+export function respondMutation(
+  c: Context,
+  opts: {
+    json: unknown;
+    redirect: string;
+    status?: 200 | 201;
+    flash?: Record<string, string>;
+  },
+): Response {
+  if (wantsJson(c)) {
+    return c.json(opts.json, (opts.status ?? 200) as 200);
+  }
+  const path = opts.redirect.startsWith("/") ? opts.redirect : `/${opts.redirect}`;
+  const qs = opts.flash
+    ? `?${new URLSearchParams(opts.flash).toString()}`
+    : "";
+  return c.redirect(`${c.get("assetBase")}${path}${qs}`);
+}
+
+export function requireUser(c: Context): UserRecord | Response {
+  const user = c.get("user");
+  if (!user) return apiError(c, 401, "Authentication required");
+  return user;
+}
+
+export function requireManager(c: Context): UserRecord | Response {
+  const world = c.get("world");
+  const user = c.get("user");
+  if (!isManager(user, world)) {
+    return apiError(c, user ? 403 : 401, "Manager role required", { isManager: false });
+  }
+  return user!;
+}
+
+export function isResponse(value: unknown): value is Response {
+  return value instanceof Response;
+}
+
+/** Register PUT (or DELETE) plus a POST alias for HTML forms. */
+export function aliasFormMethods(
+  router: Hono,
+  method: "put" | "delete",
+  path: string,
+  handler: Handler,
+  postPath?: string,
+): void {
+  if (method === "put") {
+    router.put(path, handler);
+    router.post(path, handler);
+    return;
+  }
+  router.delete(path, handler);
+  router.post(postPath ?? `${path}/delete`, handler);
 }

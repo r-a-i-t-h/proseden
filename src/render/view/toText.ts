@@ -9,6 +9,7 @@ function channelOk(channel: "html" | "text" | "both" | undefined): boolean {
 function renderMetaPartText(part: MetaPart): string {
   if (typeof part === "string") return part;
   if (part.type === "relativeAge") return relativeAge(part.iso);
+  if (part.type === "labeledAge") return `${part.label}${relativeAge(part.iso)}`;
   return part.username;
 }
 
@@ -154,9 +155,26 @@ function pushNode(lines: string[], node: Node, opts: TextRenderOptions): void {
     case "inboxHeader":
       lines.push(`— ${node.createdAt} from ${node.fromUser}`);
       return;
+    case "table":
+      lines.push(node.headers.join(" | "));
+      if (!node.rows.length) {
+        if (node.empty) lines.push(node.empty);
+        return;
+      }
+      for (const row of node.rows) {
+        const cells = row.cells.map((cell) => cellText(cell, opts));
+        lines.push(`- ${cells.filter(Boolean).join(" · ")}`);
+      }
+      return;
     default:
       return;
   }
+}
+
+function cellText(node: Node, opts: TextRenderOptions): string {
+  const lines: string[] = [];
+  pushNode(lines, node, opts);
+  return lines.join(" ").trim();
 }
 
 /** Serialize document nodes to a curl-friendly plain-text body. */

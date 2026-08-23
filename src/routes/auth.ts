@@ -3,12 +3,11 @@ import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { canRead } from "../access/permissions.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
-import { page, wantsJson } from "../http.js";
+import { page, readRequestBody, wantsJson } from "../http.js";
+import { messagePageView } from "../render/view/index.js";
 import { guestCookieName, guestUserKey, parseGuestId } from "../live/guest.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import { clientIp } from "../rate-limit/client-ip.js";
-import { renderMessageBodyHtml } from "../render/html.js";
-import { renderMessageText } from "../render/text.js";
 import type { UserRecord } from "../model/types.js";
 import type { WorldStore } from "../store/world.js";
 import { triggerQuestEval } from "../logic/trigger.js";
@@ -37,7 +36,7 @@ authRoutes.post("/register", authAttemptLimit, async (c) => {
     return respond(c, 403, "Register", "New registrations are disabled.");
   }
   const sessions = c.get("sessions");
-  const body = await readAuthBody(c);
+  const body = await readAuthRequest(c);
   if (!body.username || !body.password) {
     return respond(c, 400, "Register", "Username and password required.");
   }
@@ -88,7 +87,7 @@ authRoutes.post("/register", authAttemptLimit, async (c) => {
 authRoutes.post("/login", authAttemptLimit, async (c) => {
   const world = c.get("world");
   const sessions = c.get("sessions");
-  const body = await readAuthBody(c);
+  const body = await readAuthRequest(c);
   if (!body.username || !body.password) {
     return respond(c, 400, "Login", "Username and password required.");
   }
@@ -214,21 +213,12 @@ async function readPasswordChangeBody(c: Context): Promise<{
   confirmPassword?: string;
   json: boolean;
 }> {
-  const contentType = c.req.header("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    const json = await c.req.json<{
-      currentPassword?: string;
-      newPassword?: string;
-      confirmPassword?: string;
-    }>();
-    return { ...json, json: true };
-  }
-  const form = await c.req.parseBody();
+  const raw = await readRequestBody(c);
   return {
-    currentPassword: String(form.currentPassword ?? ""),
-    newPassword: String(form.newPassword ?? ""),
-    confirmPassword: String(form.confirmPassword ?? ""),
-    json: wantsJson(c),
+    currentPassword: raw.currentPassword !== undefined ? String(raw.currentPassword) : undefined,
+    newPassword: raw.newPassword !== undefined ? String(raw.newPassword) : undefined,
+    confirmPassword: raw.confirmPassword !== undefined ? String(raw.confirmPassword) : undefined,
+    json: wantsJson(c) || (c.req.header("content-type") ?? "").includes("application/json"),
   };
 }
 
@@ -257,21 +247,16 @@ async function peekAuthUsername(c: Context): Promise<string | undefined> {
   }
 }
 
-async function readAuthBody(c: Context): Promise<{
+async function readAuthRequest(c: Context): Promise<{
   username?: string;
   password?: string;
   json: boolean;
 }> {
-  const contentType = c.req.header("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    const json = await c.req.json<{ username?: string; password?: string }>();
-    return { ...json, json: true };
-  }
-  const form = await c.req.parseBody();
+  const raw = await readRequestBody(c);
   return {
-    username: String(form.username ?? ""),
-    password: String(form.password ?? ""),
-    json: wantsJson(c),
+    username: raw.username !== undefined ? String(raw.username) : undefined,
+    password: raw.password !== undefined ? String(raw.password) : undefined,
+    json: wantsJson(c) || (c.req.header("content-type") ?? "").includes("application/json"),
   };
 }
 
@@ -279,11 +264,5 @@ function respond(c: Context, status: 400 | 401 | 403 | 409, title: string, messa
   if (wantsJson(c)) {
     return c.json({ error: message }, status);
   }
-  return page(
-    c,
-    status,
-    title,
-    renderMessageBodyHtml(title, message),
-    renderMessageText(title, message),
-  );
+  return page(c, status, messagePageView(title, message));
 }

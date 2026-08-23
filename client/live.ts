@@ -1,35 +1,11 @@
-import { HEARTBEAT_INTERVAL_MS, mergeChatTimeline } from "../src/live/types.js";
+import {
+  HEARTBEAT_INTERVAL_MS,
+  mergeChatTimeline,
+  type ChatMessage,
+  type LiveEvent,
+  type PresencePerson,
+} from "../src/live/types.js";
 import type { EditBootstrap } from "./edit.js";
-
-interface PresencePerson {
-  userKey: string;
-  displayName: string;
-  sceneId: number;
-  lastSeenAt: string;
-}
-
-interface ChatMessage {
-  id: string;
-  kind: string;
-  ts: string;
-  fromKey?: string;
-  fromName?: string;
-  sceneTitle?: string;
-  sceneId?: number;
-  text: string;
-}
-
-interface LiveEvent {
-  kind: string;
-  here?: PresencePerson[];
-  messages?: ChatMessage[];
-  shouts?: ChatMessage[];
-  person?: PresencePerson;
-  message?: ChatMessage;
-  fromSceneId?: number;
-  toSceneId?: number;
-  purgedSceneId?: number | "all";
-}
 
 function userProfileHref(userKey: string | undefined): string | undefined {
   if (!userKey?.startsWith("u:")) return undefined;

@@ -3,24 +3,17 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
-import { canRead, isManager, isModerator } from "../access/permissions.js";
-import { bypassesSceneFlagGate } from "../access/scene-gate.js";
-import { gateFactsFor } from "../logic/pred.js";
-import { sceneAllowed } from "../logic/world-view.js";
-import { apiError, page, sceneBackLink, wantsJson } from "../http.js";
+import { isManager, isModerator } from "../access/permissions.js";
+import { evaluateSceneEntry } from "../access/scene-entry.js";
+import { apiError, page, parseEnabledFlag, readRequestBody, respondMutation, sceneBackLink, wantsJson } from "../http.js";
+import { liveAdminPageView } from "../render/view/index.js";
+import { updateSetting } from "../store/settings.js";
 import { guestCookieName, parseGuestId } from "../live/guest.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import { clientIp } from "../rate-limit/client-ip.js";
 import type { LiveEvent } from "../live/types.js";
 import { HEARTBEAT_INTERVAL_MS, SSE_CONNECT_PADDING_BYTES } from "../live/types.js";
 import type { WorldStore } from "../store/world.js";
-import {
-  escapeHtml,
-  renderPageBackCrumb,
-  userLinkHtml,
-  type PageBackLink,
-} from "../render/html.js";
-import { relativeAge, relativeAgeHtml } from "../render/relative-age.js";
 
 export const liveRoutes = new Hono();
 
@@ -47,15 +40,14 @@ liveRoutes.get("/events", liveSseLimit, async (c) => {
   if (!Number.isFinite(sceneId)) {
     return c.json({ error: "scene query required" }, 400);
   }
-  const scene = world.getScene(sceneId);
-  if (!scene) return c.json({ error: "Scene not found" }, 404);
-
   const identity = resolveLiveIdentity(c);
   if (!identity.user && !world.isGuestLiveEnabled()) {
     return c.json({ error: "Guest live is disabled." }, 403);
   }
-  if (!canRead(identity.user, scene, world)) {
-    return c.json({ error: "Forbidden" }, identity.user ? 403 : 401);
+  const entered = evaluateSceneEntry(world, identity.user, sceneId, { teleport: "ignore" });
+  if (!entered.ok) {
+    if (entered.status === 404) return c.json({ error: "Scene not found" }, 404);
+    return c.json({ error: "Forbidden" }, entered.status);
   }
 
   if (identity.guestId && !getCookie(c, cookieNameForGuest(c))) {
@@ -140,17 +132,17 @@ liveRoutes.post("/say", liveChatLimit, async (c) => {
   const presence = c.get("presence");
   const hub = c.get("hub");
   const identity = resolveLiveIdentity(c);
-  const body = await readJsonBody(c);
+  const body = await readRequestBody(c);
   const text = String(body.text ?? "").trim();
   if (!text) return c.json({ error: "text required" }, 400);
 
   const online = presence.findByUserKey(identity.userKey);
   if (!online) return c.json({ error: "Not present — open Live mode first." }, 400);
 
-  const scene = world.getScene(online.sceneId);
-  if (!scene || !canRead(identity.user, scene, world)) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
+  const entered = evaluateSceneEntry(world, identity.user, online.sceneId, {
+    teleport: "ignore",
+  });
+  if (!entered.ok) return c.json({ error: "Forbidden" }, 403);
 
   presence.heartbeatUser(identity.userKey);
   const message = hub.say({
@@ -170,7 +162,7 @@ liveRoutes.post("/shout", liveChatLimit, async (c) => {
   const presence = c.get("presence");
   const hub = c.get("hub");
   const identity = resolveLiveIdentity(c);
-  const body = await readJsonBody(c);
+  const body = await readRequestBody(c);
   const text = String(body.text ?? "").trim();
   if (!text) return c.json({ error: "text required" }, 400);
 
@@ -206,11 +198,11 @@ liveRoutes.get("/here", (c) => {
   const sceneId = Number(c.req.query("scene"));
   if (!Number.isFinite(sceneId)) return c.json({ error: "scene query required" }, 400);
   const world = c.get("world");
-  const scene = world.getScene(sceneId);
-  if (!scene) return c.json({ error: "Scene not found" }, 404);
   const user = c.get("user");
-  if (!canRead(user, scene, world)) {
-    return c.json({ error: "Forbidden" }, user ? 403 : 401);
+  const entered = evaluateSceneEntry(world, user, sceneId, { teleport: "ignore" });
+  if (!entered.ok) {
+    if (entered.status === 404) return c.json({ error: "Scene not found" }, 404);
+    return c.json({ error: "Forbidden" }, entered.status);
   }
   return c.json({ sceneId, here: c.get("presence").here(sceneId) });
 });
@@ -238,23 +230,23 @@ liveRoutes.get("/join/:userKey", (c) => {
   if (!target) return apiError(c, 404, "That person is not online.");
 
   const world = c.get("world");
-  const scene = world.getScene(target.sceneId);
-  if (!scene) return apiError(c, 404, "Their scene no longer exists.");
-  if (!canRead(user, scene, world)) {
-    return apiError(c, 403, "You cannot read the scene they are in.");
-  }
-  const facts = gateFactsFor(world, user);
-  if (!bypassesSceneFlagGate(user, scene, world) && !sceneAllowed(scene, facts)) {
-    return apiError(c, 403, scene.whenDenied?.trim() || "You cannot enter here yet.");
+  const entered = evaluateSceneEntry(world, user, target.sceneId, { teleport: "ignore" });
+  if (!entered.ok) {
+    if (entered.status === 404) return apiError(c, 404, "Their scene no longer exists.");
+    return apiError(c, entered.status, entered.message);
   }
 
   // Join skips entrance groups when the destination is readable (asJoin).
   world.resolveTeleportTarget(target.sceneId, undefined, { asJoin: true });
-  const dest = `${c.get("assetBase")}/s/${target.sceneId}?from=${target.sceneId}`;
-  if (wantsJson(c)) {
-    return c.json({ ok: true, sceneId: target.sceneId, href: dest });
-  }
-  return c.redirect(dest);
+  return respondMutation(c, {
+    json: {
+      ok: true,
+      sceneId: target.sceneId,
+      href: `${c.get("assetBase")}/s/${target.sceneId}?from=${target.sceneId}`,
+    },
+    redirect: `/s/${target.sceneId}`,
+    flash: { from: String(target.sceneId) },
+  });
 });
 
 liveRoutes.post("/purge", async (c) => {
@@ -263,7 +255,7 @@ liveRoutes.post("/purge", async (c) => {
   if (!isModerator(user, world)) {
     return c.json({ error: "Moderator access required" }, 403);
   }
-  const body = await readJsonBody(c);
+  const body = await readRequestBody(c);
   const presence = c.get("presence");
   const identity = user ? `u:${user.username}` : "";
   const online = identity ? presence.findByUserKey(identity) : undefined;
@@ -326,13 +318,7 @@ liveRoutes.get("/admin", (c) => {
 
   const back = sceneBackLink(user!, world);
   const security = isManager(user, world) ? liveAdminSecuritySettings(world) : undefined;
-  return page(
-    c,
-    200,
-    "Live admin",
-    renderLiveAdminHtml(recentUsers, buffers, back, security),
-    renderLiveAdminText(recentUsers, buffers, security),
-  );
+  return page(c, 200, liveAdminPageView({ users: recentUsers, buffers, back, security }));
 });
 
 liveRoutes.post("/admin/purge", async (c) => {
@@ -352,7 +338,7 @@ liveRoutes.post("/admin/kick", async (c) => {
   if (!isModerator(user, world)) {
     return c.json({ error: "Moderator access required" }, 403);
   }
-  const body = await readJsonBody(c);
+  const body = await readRequestBody(c);
   const userKey = String(body.userKey ?? "").trim();
   if (!LIVE_USER_KEY.test(userKey)) {
     return apiError(c, 400, "userKey required.");
@@ -407,18 +393,11 @@ async function setLiveSecurityToggle(c: Context, key: LiveSecuritySettingKey) {
   if (!isManager(user, world)) {
     return apiError(c, user ? 403 : 401, "Manager role required");
   }
-  const body = await readJsonBody(c);
+  const body = await readRequestBody(c);
   const enabled = parseEnabledFlag(body.enabled ?? body[key]);
-  if (key === "guestLiveEnabled") await world.setGuestLiveEnabled(enabled);
-  else if (key === "liveChatEnabled") await world.setLiveChatEnabled(enabled);
-  else if (key === "registrationEnabled") await world.setRegistrationEnabled(enabled);
-  else if (key === "nonManagerEditingEnabled") await world.setNonManagerEditingEnabled(enabled);
-  else await world.setNonManagerViewEnabled(enabled);
+  await updateSetting(world, key, enabled);
 
   const settings = liveAdminSecuritySettings(world);
-  if (wantsJson(c)) {
-    return c.json({ ok: true, ...settings });
-  }
   const qsParam =
     key === "guestLiveEnabled"
       ? "guest"
@@ -429,204 +408,13 @@ async function setLiveSecurityToggle(c: Context, key: LiveSecuritySettingKey) {
           : key === "nonManagerEditingEnabled"
             ? "edit"
             : "view";
-  const on = settings[key];
-  return c.redirect(`${c.get("assetBase")}/live/admin?${qsParam}=${on ? "on" : "off"}`);
+  return respondMutation(c, {
+    json: { ok: true, ...settings },
+    redirect: "/live/admin",
+    flash: { [qsParam]: settings[key] ? "on" : "off" },
+  });
 }
 
-function parseEnabledFlag(raw: unknown): boolean {
-  return (
-    raw === true ||
-    raw === 1 ||
-    String(raw).toLowerCase() === "true" ||
-    String(raw) === "1" ||
-    String(raw).toLowerCase() === "on"
-  );
-}
-
-function renderLiveAdminHtml(
-  users: Array<{
-    username: string;
-    userKey: string;
-    lastSeenAt?: string;
-    lastSceneId?: number;
-    sceneTitle?: string;
-    live: boolean;
-  }>,
-  buffers: Array<{
-    sceneId: number | "shouts";
-    sceneTitle?: string;
-    count: number;
-    oldestAt?: string;
-    newestAt?: string;
-  }>,
-  back?: PageBackLink,
-  security?: LiveAdminSecuritySettings,
-): string {
-  const userRows = users
-    .map((u) => {
-      const age = u.lastSeenAt ? relativeAgeHtml(u.lastSeenAt) : "—";
-      const loc =
-        u.lastSceneId !== undefined
-          ? `${escapeHtml(u.sceneTitle ?? "Untitled")} (#${u.lastSceneId})`
-          : "—";
-      const name = u.userKey.startsWith("g:")
-        ? escapeHtml(u.username)
-        : userLinkHtml(u.username);
-      const kick = u.live
-        ? `<form method="post" action="live/admin/kick" class="live-admin-kick" onsubmit="return confirm('Disconnect this presence?');">
-            <input type="hidden" name="userKey" value="${escapeHtml(u.userKey)}" />
-            <button type="submit">Kick</button>
-          </form>`
-        : "";
-      return `<tr>
-        <td>${name}${u.live ? ' <span class="muted">live</span>' : ""}</td>
-        <td>${age}</td>
-        <td>${loc}</td>
-        <td>${kick}</td>
-      </tr>`;
-    })
-    .join("\n");
-  const bufRows = buffers
-    .map((b) => {
-      const label =
-        b.sceneId === "shouts"
-          ? "Shouts"
-          : `${escapeHtml(b.sceneTitle ?? "Untitled")} (#${b.sceneId})`;
-      return `<tr>
-        <td>${label}</td>
-        <td>${b.count}</td>
-        <td>${b.oldestAt ? relativeAgeHtml(b.oldestAt) : "—"}</td>
-        <td>${b.newestAt ? relativeAgeHtml(b.newestAt) : "—"}</td>
-      </tr>`;
-    })
-    .join("\n");
-  const securityHtml = security
-    ? `<h2>Security</h2>
-    <p class="muted">Manager-only kill switches for abuse response. Existing sessions may linger briefly.</p>
-    <h3>Live</h3>
-    ${renderSecurityToggle({
-      enabled: security.guestLiveEnabled,
-      action: "live/admin/guest-live",
-      onHelp:
-        "Guests may open Live on public scenes. Disable if anonymous presence or chat becomes abusive.",
-      offHelp: "Guest Live is off. Only signed-in readers can connect.",
-      disableLabel: "Disable guest live",
-      enableLabel: "Enable guest live",
-    })}
-    ${renderSecurityToggle({
-      enabled: security.liveChatEnabled,
-      action: "live/admin/live-chat",
-      onHelp: "Say and shout are allowed. Disable to keep presence while blocking new chat.",
-      offHelp: "Live chat is off. Presence and join still work; say and shout are blocked.",
-      disableLabel: "Disable live chat",
-      enableLabel: "Enable live chat",
-    })}
-    <h3>Access</h3>
-    ${renderSecurityToggle({
-      enabled: security.registrationEnabled,
-      action: "live/admin/registration",
-      onHelp: "Anyone may create an account. Disable to stop new sign-ups during abuse.",
-      offHelp: "New registrations are off. Existing accounts may still log in.",
-      disableLabel: "Disable registration",
-      enableLabel: "Enable registration",
-    })}
-    ${renderSecurityToggle({
-      enabled: security.nonManagerEditingEnabled,
-      action: "live/admin/non-manager-editing",
-      onHelp:
-        "Signed-in readers may edit scenes, artefacts, exits, and profile when they have rights.",
-      offHelp:
-        "Editing is off for non-managers. Gameplay, chat, and inbox still work; only managers may change content.",
-      disableLabel: "Disable non-manager editing",
-      enableLabel: "Enable non-manager editing",
-    })}
-    ${renderSecurityToggle({
-      enabled: security.nonManagerViewEnabled,
-      action: "live/admin/non-manager-view",
-      onHelp: "The site is readable as usual.",
-      offHelp:
-        "The site is closed to non-managers. Only managers may view pages; others see a login screen.",
-      disableLabel: "Close site to non-managers",
-      enableLabel: "Open site to non-managers",
-    })}`
-    : "";
-  return `${renderPageBackCrumb(back)}<h1>Live admin</h1>
-    <p class="muted">Recently seen users and in-memory chat buffer stats (no message text). Kick drops a live connection immediately.</p>
-    <h2>Users</h2>
-    <table class="live-admin-table">
-      <thead><tr><th>User</th><th>Last seen</th><th>Location</th><th></th></tr></thead>
-      <tbody>${userRows || `<tr><td colspan="4" class="muted">None yet</td></tr>`}</tbody>
-    </table>
-    <h2>Chat buffers</h2>
-    <table class="live-admin-table">
-      <thead><tr><th>Scene</th><th>Count</th><th>Oldest</th><th>Newest</th></tr></thead>
-      <tbody>${bufRows || `<tr><td colspan="4" class="muted">Empty</td></tr>`}</tbody>
-    </table>
-    <form method="post" action="live/admin/purge" class="stack" onsubmit="return confirm('Purge all in-memory chat buffers?');">
-      <button type="submit" class="edit-danger">Purge all chats</button>
-    </form>${securityHtml}`;
-}
-
-function renderLiveAdminText(
-  users: Array<{
-    username: string;
-    lastSeenAt?: string;
-    lastSceneId?: number;
-    sceneTitle?: string;
-    live: boolean;
-  }>,
-  buffers: Array<{
-    sceneId: number | "shouts";
-    sceneTitle?: string;
-    count: number;
-    oldestAt?: string;
-    newestAt?: string;
-  }>,
-  security?: LiveAdminSecuritySettings,
-): string {
-  const lines = ["Live admin", "", "Users:"];
-  for (const u of users) {
-    lines.push(
-      `- ${u.username}${u.live ? " [live]" : ""} · last ${u.lastSeenAt ? relativeAge(u.lastSeenAt) : "—"} · scene ${u.lastSceneId ?? "—"} ${u.sceneTitle ?? ""}`,
-    );
-  }
-  lines.push("", "Buffers:");
-  for (const b of buffers) {
-    lines.push(
-      `- ${b.sceneId} ${b.sceneTitle ?? ""} · ${b.count} msgs · oldest ${b.oldestAt ? relativeAge(b.oldestAt) : "—"} · newest ${b.newestAt ? relativeAge(b.newestAt) : "—"}`,
-    );
-  }
-  lines.push("", "Kick: POST /live/admin/kick { userKey }", "Purge all: POST /live/admin/purge");
-  if (security) {
-    lines.push(
-      "",
-      "Security (manager):",
-      `- guest live: ${security.guestLiveEnabled ? "on" : "off"} — POST /live/admin/guest-live { enabled }`,
-      `- live chat: ${security.liveChatEnabled ? "on" : "off"} — POST /live/admin/live-chat { enabled }`,
-      `- registration: ${security.registrationEnabled ? "on" : "off"} — POST /live/admin/registration { enabled }`,
-      `- non-manager editing: ${security.nonManagerEditingEnabled ? "on" : "off"} — POST /live/admin/non-manager-editing { enabled }`,
-      `- non-manager view: ${security.nonManagerViewEnabled ? "on" : "off"} — POST /live/admin/non-manager-view { enabled }`,
-    );
-  }
-  return lines.join("\n");
-}
-
-function renderSecurityToggle(opts: {
-  enabled: boolean;
-  action: string;
-  onHelp: string;
-  offHelp: string;
-  disableLabel: string;
-  enableLabel: string;
-}): string {
-  return `<p class="muted">${opts.enabled ? opts.onHelp : opts.offHelp}</p>
-    <form method="post" action="${escapeHtml(opts.action)}" class="stack">
-      <input type="hidden" name="enabled" value="${opts.enabled ? "false" : "true"}" />
-      <button type="submit"${opts.enabled ? ' class="edit-danger"' : ""}>${
-        opts.enabled ? opts.disableLabel : opts.enableLabel
-      }</button>
-    </form>`;
-}
 
 function liveChatKeys(c: Context): string[] {
   const ip = clientIp(c);
@@ -669,11 +457,3 @@ function cookieSecure(): boolean {
   return process.env.NODE_ENV === "production" || process.env.PROSEDEN_SECURE_COOKIES === "1";
 }
 
-async function readJsonBody(c: Context): Promise<Record<string, unknown>> {
-  const contentType = c.req.header("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    return (await c.req.json()) as Record<string, unknown>;
-  }
-  const form = await c.req.parseBody();
-  return form as Record<string, unknown>;
-}

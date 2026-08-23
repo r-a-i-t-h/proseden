@@ -1,11 +1,7 @@
 import { formatAccessSummary } from "../../../access/acl.js";
 import { grantTimeLabel } from "../../relative-age.js";
 import type { Deny, Grant } from "../../../model/types.js";
-import {
-  DENIES_EXAMPLE,
-  DETAILS_EXAMPLE,
-  GRANTS_EXAMPLE,
-} from "../examples.js";
+import { DETAILS_EXAMPLE } from "../examples.js";
 import {
   button,
   byline,
@@ -24,38 +20,13 @@ import {
   textOnly,
 } from "../factories.js";
 import type { Node, PageView } from "../types.js";
+import { accessForm } from "./access.js";
 
 export type PageBackLink = { href: string; label: string; history?: boolean };
 
 function backCrumb(back?: PageBackLink): Node | undefined {
   if (!back) return undefined;
   return crumb(back.href, back.label, back.history);
-}
-
-function accessForm(
-  action: string,
-  grants: Grant[] | undefined,
-  denies: Deny[] | undefined,
-  submit: string,
-): Node {
-  return form(
-    { method: "post", action, class: "access-form" },
-    jsonField(
-      "Grants",
-      "grantsJson",
-      grants ?? [],
-      GRANTS_EXAMPLE,
-      "Array of { who, rights }.",
-    ),
-    jsonField(
-      "Denies",
-      "deniesJson",
-      denies ?? [],
-      DENIES_EXAMPLE,
-      "Array of { who, rights? }. Omit rights to deny all.",
-    ),
-    button(submit),
-  );
 }
 
 export function profilePageView(opts: {
@@ -217,4 +188,4 @@ export function profilePageView(opts: {
   );
 }
 
-export { accessForm, backCrumb };
+export { backCrumb };

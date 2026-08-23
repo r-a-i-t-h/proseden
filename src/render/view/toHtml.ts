@@ -17,6 +17,7 @@ function renderNodes(nodes: Node[]): string {
 function renderMetaPart(part: MetaPart): string {
   if (typeof part === "string") return escapeHtml(part);
   if (part.type === "relativeAge") return relativeAgeHtml(part.iso);
+  if (part.type === "labeledAge") return `${escapeHtml(part.label)}${relativeAgeHtml(part.iso)}`;
   return userLink(part.username);
 }
 
@@ -112,7 +113,7 @@ function renderJsonField(node: Extract<Node, { type: "jsonField" }>): string {
           </div>
         </details>
       </div>
-      <textarea name="${escapeAttr(node.name)}" rows="${node.rows ?? 10}" data-editor="json"${dataJsonKindAttr(node.name)}>${escapeHtml(formatJsonTextarea(node.value))}</textarea>
+      <textarea name="${escapeAttr(node.name)}" rows="${node.rows ?? 10}" data-editor="json"${dataJsonKindAttr(node.name)}>${escapeHtml(node.text ?? formatJsonTextarea(node.value))}</textarea>
     </div>`;
 }
 
@@ -196,7 +197,12 @@ function renderNode(node: Node): string {
     case "details": {
       const cls = node.class ? ` class="${escapeAttr(node.class)}"` : "";
       const open = node.open ? " open" : "";
-      return `<details${cls}${open}><summary>${escapeHtml(node.summary)}</summary>${renderNodes(node.children)}</details>`;
+      const extra = node.attrs
+        ? Object.entries(node.attrs)
+            .map(([k, v]) => ` ${escapeAttr(k)}="${escapeAttr(v)}"`)
+            .join("")
+        : "";
+      return `<details${cls}${open}${extra}><summary>${escapeHtml(node.summary)}</summary>${renderNodes(node.children)}</details>`;
     }
     case "userLink":
       return userLink(node.username);
@@ -257,6 +263,19 @@ function renderNode(node: Node): string {
         <time datetime="${escapeAttr(node.createdAt)}">${escapeHtml(node.createdAt)}</time>
         <span>from <strong>${userLink(node.fromUser)}</strong></span>
       </header>`;
+    case "table": {
+      const cls = node.class ? ` class="${escapeAttr(node.class)}"` : "";
+      const head = `<thead><tr>${node.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>`;
+      const body = node.rows.length
+        ? node.rows
+            .map((row) => {
+              const rowCls = row.class ? ` class="${escapeAttr(row.class)}"` : "";
+              return `<tr${rowCls}>${row.cells.map((cell) => `<td>${renderNode(cell)}</td>`).join("")}</tr>`;
+            })
+            .join("")
+        : `<tr><td colspan="${node.headers.length}" class="muted">${escapeHtml(node.empty ?? "")}</td></tr>`;
+      return `<table${cls}>${head}<tbody>${body}</tbody></table>`;
+    }
   }
 }
 

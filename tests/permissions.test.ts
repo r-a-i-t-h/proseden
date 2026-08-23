@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   canAddExit,
+  canDeleteArtefact,
+  canDeleteScene,
   canEdit,
   canEditArtefact,
   canEjectArtefact,
@@ -252,6 +254,27 @@ describe("repository artefact placement", () => {
   });
 });
 
+describe("delete scene / artefact", () => {
+  it("lets managers and moderators delete scenes", () => {
+    const s = scene(1, "alice");
+    const w = world({ users: [alice, bob, carol], roles: { bob: ["moderator"] } });
+    expect(canDeleteScene(alice, s, w)).toBe(true);
+    expect(canDeleteScene(bob, s, w)).toBe(true);
+    expect(canDeleteScene(carol, s, w)).toBe(false);
+    expect(canDeleteScene(undefined, s, w)).toBe(false);
+  });
+
+  it("lets artefact owners, home managers, and moderators delete artefacts", () => {
+    const home = scene(1, "alice");
+    const art = artefact(1, "bob", 1);
+    const w = world({ users: [alice, bob, carol], roles: { carol: ["moderator"] } });
+    expect(canDeleteArtefact(bob, art, home, w)).toBe(true);
+    expect(canDeleteArtefact(alice, art, home, w)).toBe(true);
+    expect(canDeleteArtefact(carol, art, home, w)).toBe(true);
+    expect(canDeleteArtefact(undefined, art, home, w)).toBe(false);
+  });
+});
+
 describe("eject artefact", () => {
   it("allows home-scene managers but not the artefact owner", () => {
     const home = scene(1, "alice");
@@ -270,6 +293,15 @@ describe("group ACL", () => {
     expect(canReadGroup(alice, g, w)).toBe(true);
     expect(canEditGroup(alice, g, w)).toBe(true);
     expect(canManageGroup(alice, g, w)).toBe(true);
+  });
+
+  it("lets group denies beat the owner, matching scene ACL", () => {
+    const g = group("1", "alice", {
+      denies: [{ who: "alice", rights: ["manage"] }],
+    });
+    const w = world({ users: [alice] });
+    expect(canManageGroup(alice, g, w)).toBe(false);
+    expect(canReadGroup(alice, g, w)).toBe(true);
   });
 
   it("honours group grants and denies", () => {

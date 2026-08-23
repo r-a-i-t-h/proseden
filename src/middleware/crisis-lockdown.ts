@@ -3,7 +3,7 @@ import { createMiddleware } from "hono/factory";
 import { isManager } from "../access/permissions.js";
 import { apiError, page, wantsJson } from "../http.js";
 import { negotiateFormat } from "../render/format.js";
-import { renderViewLockdownBodyHtml, renderViewLockdownText } from "../render/html.js";
+import { viewLockdownPageView } from "../render/view/index.js";
 import { pathWithinApp } from "./rate-limit.js";
 
 /** POST/PUT/DELETE allowed for non-managers when site editing is locked. */
@@ -83,15 +83,10 @@ function viewLockdownResponse(c: Context) {
     return c.json({ error: "The site is temporarily closed to readers." }, 403);
   }
   if (negotiateFormat(c) === "text") {
-    return c.text(renderViewLockdownText(), 403);
+    return c.text(
+      "Proseden is closed.\n\nThe site is temporarily closed to readers. Managers may log in.\n",
+      403,
+    );
   }
-  return page(
-    c,
-    403,
-    "Closed",
-    renderViewLockdownBodyHtml(),
-    renderViewLockdownText(),
-    undefined,
-    { isManager: false },
-  );
+  return page(c, 403, viewLockdownPageView(), undefined, { isManager: false });
 }
