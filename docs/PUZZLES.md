@@ -105,8 +105,8 @@ namespace. Managers edit via a giant JSON textarea (no fancy builder in v1).
 
 Questors (staff role; managers included) edit a personal file at
 `data/quests/users/<username>.json` via Edit toolbar **Quests**. Managers edit
-the official set via **Data → Quests** and their own file via the toolbar — same
-split as alchemy (**Data → Alchemy** vs toolbar **Alchemy**). Unlike alchemy
+the official set via **Data → Quests**, and can open any personal quest file from
+the same page (same giveArtefact ACL as the author’s own editor). Unlike alchemy
 (open to every signed-in user), questor is **hand-picked** — personal quests add
 more overhead and need elevated trust. The personal quest `name` must be
 `user.<username>`; flags and badges use that prefix (for example

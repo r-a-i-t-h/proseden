@@ -170,6 +170,7 @@ describe("dashboardPageView", () => {
     expect(text).toContain("Online: 1  /garden/live/admin");
     expect(text).toContain("Scenes: 3");
     expect(text).toContain("Quests: 2  /garden/data/quests");
+    expect(text).toContain("Personal quest files: 0  /garden/data/quests");
     expect(text).toContain("- Data (backups, reload, quests, alchemy)  /garden/data");
   });
 

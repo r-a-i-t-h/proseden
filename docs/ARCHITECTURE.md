@@ -136,7 +136,7 @@ These pages no longer build HTML/text strings in routes or `html.ts`:
 Shared composers:
 
 - `accessForm` — profile share-all and group access
-- `jsonFileEditorPageView` — `/quests`, `/alchemy`, `/data/quests/:name`, `/data/alchemy`
+- `jsonFileEditorPageView` — `/quests`, `/alchemy`, `/data/quests/:name`, `/data/quests/users/:username`, `/data/alchemy`
 - `messagePageView` — `apiError` HTML and short notices
 
 Error notices use `.notice.notice-error`, not the unstyled `.error` class.
@@ -209,7 +209,7 @@ Automated tests cover ACL, navigation, inbox, live SSE plumbing, and HTML snippe
 
 - `/inv` alchemy panel: combine two holdings (success query `?alchemy=`), error query `?alchemy-error=`. The `<details data-alchemy-panel>` open state should persist via `client/panel.ts`.
 - `/alchemy` and `/quests` (questor): save JSON, `?saved=1`. Invalid JSON must re-show the editor with an error, not a blank page.
-- Manager `/data/quests` and `/data/alchemy` are the same editor composer — confirm save/delete and the back crumb to `/data`.
+- Manager `/data/quests` and `/data/alchemy` are the same editor composer — confirm save/delete and the back crumb to `/data`. `/data/quests` also lists personal `quests/users/*` files for managers.
 
 ### Live
 

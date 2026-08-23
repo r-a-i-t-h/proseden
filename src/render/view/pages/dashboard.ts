@@ -57,7 +57,7 @@ export function dashboardPageView(opts: {
       section("Logic", [
         statList([
           { label: "Quests", value: counts.quests, href: "data/quests" },
-          { label: "Personal quest files", value: counts.userQuestFiles },
+          { label: "Personal quest files", value: counts.userQuestFiles, href: "data/quests" },
           { label: "Alchemy recipes", value: counts.alchemyRecipes, href: "data/alchemy" },
           { label: "Personal alchemy files", value: counts.userAlchemyFiles },
         ]),

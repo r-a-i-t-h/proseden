@@ -3,6 +3,7 @@ import {
   box,
   button,
   crumb,
+  detailsSection,
   form,
   heading,
   linkList,
@@ -95,9 +96,17 @@ export function adminDataPageView(opts: {
 
 export function adminQuestsIndexPageView(opts: {
   names: string[];
+  userQuests?: string[];
   notice?: string;
   back?: PageBackLink;
 }): PageView {
+  const userQuests = opts.userQuests ?? [];
+  const textLines = [
+    opts.names.join("\n") || "(none)",
+    "",
+    "Personal:",
+    userQuests.length ? userQuests.map((u) => `user.${u}`).join("\n") : "(none)",
+  ];
   return pageView(
     "Quests",
     nodes(
@@ -115,6 +124,22 @@ export function adminQuestsIndexPageView(opts: {
             })),
           )
         : para("No quests yet.", "muted"),
+      detailsSection(
+        `Personal quest files (${userQuests.length})`,
+        [
+          muted(
+            "quests/users/<username>.json — same ACL as the questor’s own editor (giveArtefact needs manage on home).",
+          ),
+          userQuests.length
+            ? linkList(
+                userQuests.map((username) => ({
+                  href: `data/quests/users/${encodeURIComponent(username)}`,
+                  label: `user.${username}`,
+                })),
+              )
+            : para("No personal quest files yet.", "muted"),
+        ],
+      ),
       heading(2, "New quest"),
       form(
         { method: "post", action: "data/quests", class: "stack" },
@@ -126,7 +151,7 @@ export function adminQuestsIndexPageView(opts: {
         button("Create"),
       ),
       crumb("data", "← Data"),
-      textOnly(rawText([opts.names.join("\n") || "(none)"])),
+      textOnly(rawText(textLines)),
     ),
   );
 }

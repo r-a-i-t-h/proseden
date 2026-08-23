@@ -651,6 +651,11 @@ export class WorldStore implements AccessWorld {
     return this.userQuestFiles.get(username);
   }
 
+  /** Usernames that have a personal quest file on disk (sorted). */
+  listUserQuestUsernames(): string[] {
+    return [...this.userQuestFiles.keys()].sort((a, b) => a.localeCompare(b));
+  }
+
   emptyUserQuest(username: string): QuestFile {
     const name = userQuestNamespace(username);
     const shell = {
@@ -697,6 +702,12 @@ export class WorldStore implements AccessWorld {
     await mkdir(join(this.dataDir, "quests", "users"), { recursive: true });
     const path = join(this.dataDir, "quests", "users", `${username}.json`);
     await writeQuestOrAlchemySource(path, parsed, sourceText);
+    await this.loadLogicFiles();
+  }
+
+  async deleteUserQuest(username: string): Promise<void> {
+    const path = join(this.dataDir, "quests", "users", `${username}.json`);
+    if (await exists(path)) await unlink(path);
     await this.loadLogicFiles();
   }
 

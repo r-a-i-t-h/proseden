@@ -36,7 +36,7 @@ There is **no cascade loop**. Order in the JSON is the order that matters.
 | Path | Who |
 |---|---|
 | `data/quests/<name>.json` | Managers — **Data → Quests** |
-| `data/quests/users/<username>.json` | Questors — Edit toolbar **Quests** (`name` must be `user.<username>`) |
+| `data/quests/users/<username>.json` | Questors — Edit toolbar **Quests** (`name` must be `user.<username>`); managers — same files under **Data → Quests** |
 | `data/users/<username>.flags.json` | Engine — that reader’s flags |
 | `data/users/<username>.vars.json` | Engine — that reader’s numeric vars |
 | `data/users/<username>.badges.json` | Engine — badges on their profile |

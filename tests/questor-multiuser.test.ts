@@ -262,11 +262,15 @@ describe("questor / multi-user quests", () => {
     );
   });
 
-  it("manager may edit personal quests and lists only master under /data/quests", async () => {
+  it("manager may edit personal quests and lists them under /data/quests", async () => {
     await world.saveUserQuest("alice", {
       name: "user.alice",
       rules: [],
       badges: [{ id: "user.alice.m", title: "M" }],
+    });
+    await world.saveUserQuest("bob", {
+      name: "user.bob",
+      rules: [{ id: "r", when: { holds: bobArt }, then: [{ setFlag: "user.bob.x" }] }],
     });
     await world.saveQuest({ name: "official", rules: [] });
 
@@ -279,8 +283,37 @@ describe("questor / multi-user quests", () => {
     const data = await app().request("/data/quests", {
       headers: { Accept: "application/json", Authorization: `Bearer ${aliceToken}` },
     });
-    const body = (await data.json()) as { quests: string[] };
+    const body = (await data.json()) as { quests: string[]; userQuests: string[] };
     expect(body.quests).toEqual(["official"]);
+    expect(body.userQuests).toEqual(["alice", "bob"]);
+
+    const bobFile = await app().request("/data/quests/users/bob", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${aliceToken}` },
+    });
+    expect(bobFile.status).toBe(200);
+    expect(await bobFile.text()).toContain("user.bob.x");
+
+    const save = await app().request("/data/quests/users/bob", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${aliceToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        json: JSON.stringify({
+          name: "user.bob",
+          rules: [{ id: "r2", when: { holds: bobArt }, then: [{ setFlag: "user.bob.y" }] }],
+        }),
+      }),
+    });
+    expect(save.status).toBe(200);
+    expect(world.getUserQuest("bob")?.rules[0]?.id).toBe("r2");
+
+    const asBob = await app().request("/data/quests/users/alice", {
+      headers: { Accept: "application/json", Authorization: `Bearer ${bobToken}` },
+    });
+    expect(asBob.status).toBe(403);
   });
 
   it("evaluates manager rules before user rules in one pass", async () => {

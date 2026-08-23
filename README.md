@@ -128,9 +128,11 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `GET`/`POST` | `/alchemy` | Edit own alchemy recipes (signed-in) |
 | `GET`/`POST` | `/quests` | Edit own personal quest file (questor or manager) |
 | `GET` | `/data` | Data admin: backups, reload, links to quests/alchemy (manager) |
-| `GET`/`POST` | `/data/quests` | List/create manager quest JSON files (manager) |
+| `GET`/`POST` | `/data/quests` | List/create manager quest JSON files; list personal quest files (manager) |
 | `GET`/`POST` | `/data/quests/:name` | View/save a manager quest file (manager) |
 | `POST` | `/data/quests/:name/delete` | Delete a manager quest file (manager) |
+| `GET`/`POST` | `/data/quests/users/:username` | View/save a personal quest file (manager) |
+| `POST` | `/data/quests/users/:username/delete` | Delete a personal quest file (manager) |
 | `GET`/`POST` | `/data/alchemy` | Edit world alchemy `recipes.json` (manager) |
 | `POST` | `/data/backup` | Archive `data/` into `backup/` (manager) |
 | `GET` | `/data/backup/:name` | Download a data archive (manager) |
@@ -178,7 +180,7 @@ Managers can create, download, restore, and delete archives from **Data**. Resto
 
 A planned stop (SIGTERM) writes SHA-256 hashes of live session tokens to `data/.sessions.json` (mode 0600). The next boot loads that file as a one-shot fallback and deletes it, so a save after an update still authenticates. Idle cookies, crashes, and a second restart without a visit may still log people out. The handoff file is not included in data tarballs.
 
-Staff roles: `moderator`, `topographer`, `manager`, `questor`. Questors edit personal quest JSON under `quests/users/` (namespace `user.<username>.*`); managers register official named quests under Data → Quests.
+Staff roles: `moderator`, `topographer`, `manager`, `questor`. Questors edit personal quest JSON under `quests/users/` (namespace `user.<username>.*`); managers register official named quests under Data → Quests and can edit any personal quest file from that page.
 
 Prose files use YAML frontmatter plus `## detail:<slug>` sections. Hash-leading lines in body/detail text are saved escaped (`\#`, `\##`) so they cannot be mistaken for section markers.
 

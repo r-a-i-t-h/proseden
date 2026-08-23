@@ -50,7 +50,7 @@ adminRoutes.get("/", async (c) => {
     {
       method: "GET",
       path: "/data/quests",
-      description: "List and edit quest JSON files",
+      description: "List and edit quest JSON files (manager + personal)",
     },
     {
       method: "GET",
@@ -221,18 +221,22 @@ adminRoutes.get("/quests", async (c) => {
   if (denied) return denied;
   const world = c.get("world");
   const quests = world.listMasterQuests();
+  const userQuests = world.listUserQuestUsernames();
   const back = sceneBackLink(c.get("user")!, world);
   const notice = c.req.query("saved")
     ? "Quest saved."
     : c.req.query("deleted")
       ? "Quest deleted."
       : "";
-  if (wantsJson(c)) return c.json({ quests: quests.map((q) => q.name) });
+  if (wantsJson(c)) {
+    return c.json({ quests: quests.map((q) => q.name), userQuests });
+  }
   return page(
     c,
     200,
     adminQuestsIndexPageView({
       names: quests.map((q) => q.name),
+      userQuests,
       notice,
       back,
     }),
@@ -261,6 +265,89 @@ adminRoutes.post("/quests", async (c) => {
     redirect: `/data/quests/${encodeURIComponent(name)}`,
     status: 201,
     flash: { saved: "1" },
+  });
+});
+
+adminRoutes.get("/quests/users/:username", async (c) => {
+  const denied = denyIfNotManager(c);
+  if (denied) return denied;
+  const world = c.get("world");
+  const username = c.req.param("username");
+  const quest = world.getUserQuest(username);
+  if (!quest) return apiError(c, 404, "Personal quest file not found");
+  const back = sceneBackLink(c.get("user")!, world);
+  const notice = c.req.query("saved") ? "Saved." : "";
+  const ns = `user.${username}`;
+  const example = QUEST_EXAMPLE.replaceAll("YOUR_USERNAME", ns);
+  const help = `${QUEST_HELP} Personal file for ${username}: flags/badges/vars use the ${ns}.* prefix. giveArtefact still requires that user to manage the artefact home.`;
+  const raw = await world.readUserQuestText(username);
+  return page(
+    c,
+    200,
+    jsonFileEditorPageView({
+      title: `Quest ${ns}`,
+      heading: `Quest ${ns}`,
+      intro: `Personal file quests/users/${username}.json. Evaluated after manager quests.`,
+      notice,
+      action: `data/quests/users/${encodeURIComponent(username)}`,
+      fieldLabel: "Quest JSON",
+      fieldName: "json",
+      value: quest,
+      example,
+      note: help,
+      rawText: raw !== undefined ? displayJsonTextarea(raw) : undefined,
+      rows: 28,
+      back,
+      extra: [
+        {
+          type: "form",
+          method: "post",
+          action: `data/quests/users/${encodeURIComponent(username)}/delete`,
+          class: "stack",
+          children: [{ type: "button", label: "Delete quest file" }],
+        },
+        editorBackCrumb("data/quests", "← Quests"),
+      ],
+    }),
+  );
+});
+
+adminRoutes.post("/quests/users/:username", async (c) => {
+  const denied = denyIfNotManager(c);
+  if (denied) return denied;
+  const world = c.get("world");
+  const username = c.req.param("username");
+  if (!world.getUser(username)) return apiError(c, 404, "User not found");
+  const body = await readRequestBody(c);
+  try {
+    const prepared = prepareJsonTextarea(String(body.json ?? ""));
+    const parsed = parseQuestFile(JSON.parse(prepared));
+    await world.saveUserQuest(username, parsed, prepared);
+  } catch (err) {
+    const msg =
+      err instanceof QuestValidationError || err instanceof SyntaxError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : "Save failed";
+    return apiError(c, 400, msg);
+  }
+  return respondMutation(c, {
+    json: { ok: true, username },
+    redirect: `/data/quests/users/${encodeURIComponent(username)}`,
+    flash: { saved: "1" },
+  });
+});
+
+adminRoutes.post("/quests/users/:username/delete", async (c) => {
+  const denied = denyIfNotManager(c);
+  if (denied) return denied;
+  const username = c.req.param("username");
+  await c.get("world").deleteUserQuest(username);
+  return respondMutation(c, {
+    json: { ok: true, deleted: username },
+    redirect: "/data/quests",
+    flash: { deleted: "1" },
   });
 });
 
