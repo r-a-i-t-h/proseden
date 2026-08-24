@@ -77,6 +77,33 @@ export function adminDataPageView(opts: {
         type: "unsafeHtml",
         html: `<p class="muted"><a href="data/quests">Quests</a> · <a href="data/alchemy">Alchemy recipes</a></p>`,
       },
+      heading(2, "Adventure packs"),
+      muted(
+        "Export densifies scene/artefact ids into a portable archive (excludes users, inbox, and home scenes). Import offsets ids onto this world; colliding quest names are auto-renamed.",
+      ),
+      {
+        type: "unsafeHtml",
+        html: `<p><a href="data/pack/export">Download adventure pack</a></p>`,
+      },
+      form(
+        {
+          method: "post",
+          action: "data/pack/import",
+          class: "stack",
+          enctype: "multipart/form-data",
+        },
+        {
+          type: "field",
+          label: "Pack archive",
+          control: { type: "file", name: "pack", accept: ".tar.gz,application/gzip" },
+        },
+        {
+          type: "field",
+          label: "Title (optional)",
+          control: { type: "text", name: "title" },
+        },
+        button("Import pack"),
+      ),
       heading(2, "Data backups"),
       muted("Archives data/ only (not the app). Restore replaces all data; a safety backup is created first."),
       form({ method: "post", action: "data/backup", class: "stack" }, button("Backup now")),

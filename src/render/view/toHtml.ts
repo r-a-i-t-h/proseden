@@ -37,9 +37,13 @@ function renderControl(control: Control, id?: string): string {
   switch (control.type) {
     case "text":
     case "number":
-    case "password": {
+    case "password":
+    case "file": {
       const value =
-        control.type !== "password" && "value" in control && control.value !== undefined
+        control.type !== "password" &&
+        control.type !== "file" &&
+        "value" in control &&
+        control.value !== undefined
           ? `value="${escapeAttr(control.value)}"`
           : "";
       const attrs = [
@@ -60,6 +64,9 @@ function renderControl(control: Control, id?: string): string {
           : "",
         "maxlength" in control && control.maxlength !== undefined
           ? `maxlength="${control.maxlength}"`
+          : "",
+        "accept" in control && control.accept
+          ? `accept="${escapeAttr(control.accept)}"`
           : "",
       ]
         .filter(Boolean)
@@ -210,7 +217,8 @@ function renderNode(node: Node): string {
       const method = node.method ?? "post";
       const cls = node.class ? ` class="${escapeAttr(node.class)}"` : "";
       const id = node.id ? ` id="${escapeAttr(node.id)}"` : "";
-      return `<form method="${escapeAttr(method)}" action="${escapeAttr(node.action)}"${cls}${id}>${renderNodes(node.children)}</form>`;
+      const enctype = node.enctype ? ` enctype="${escapeAttr(node.enctype)}"` : "";
+      return `<form method="${escapeAttr(method)}" action="${escapeAttr(node.action)}"${cls}${id}${enctype}>${renderNodes(node.children)}</form>`;
     }
     case "field": {
       if (node.control.type === "textarea" && node.control.editor === "json") {

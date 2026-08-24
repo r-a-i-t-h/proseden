@@ -28,6 +28,11 @@ import {
   restoreDataBackup,
   type BackupInfo,
 } from "../store/backup.js";
+import {
+  exportAdventurePack,
+  importAdventurePack,
+  PackRemapError,
+} from "../store/adventure-pack.js";
 import { displayJsonTextarea, prepareJsonTextarea } from "../json-textarea.js";
 import { parseAlchemyRecipes, parseQuestFile, QuestValidationError } from "../logic/quests.js";
 import { timedAsync } from "../observe.js";
@@ -45,6 +50,7 @@ adminRoutes.get("/", async (c) => {
     c.req.query("deleted"),
     c.req.query("restored"),
     c.req.query("safety"),
+    c.req.query("imported"),
   );
   const endpoints = [
     {
@@ -56,6 +62,16 @@ adminRoutes.get("/", async (c) => {
       method: "GET",
       path: "/data/alchemy",
       description: "Edit alchemy recipes.json",
+    },
+    {
+      method: "GET",
+      path: "/data/pack/export",
+      description: "Download densified adventure pack (scenes, artefacts, quests, alchemy)",
+    },
+    {
+      method: "POST",
+      path: "/data/pack/import",
+      description: "Import an adventure pack into this world (offsets ids)",
     },
     {
       method: "POST",
@@ -93,6 +109,111 @@ adminRoutes.get("/", async (c) => {
     200,
     adminDataPageView({ endpoints, backups, notice, back }),
   );
+});
+
+adminRoutes.get("/pack/export", async (c) => {
+  const denied = denyIfNotManager(c);
+  if (denied) return denied;
+
+  const world = c.get("world");
+  let result: Awaited<ReturnType<typeof exportAdventurePack>>;
+  try {
+    result = await timedAsync(c.get("timer"), "packExport", () =>
+      exportAdventurePack(world, { title: c.req.query("title") ?? undefined }),
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Export failed";
+    return apiError(c, 400, message, { isManager: true });
+  }
+
+  if (wantsJson(c)) {
+    return c.json({
+      ok: true,
+      filename: result.filename,
+      manifest: result.manifest,
+      size: result.buffer.length,
+    });
+  }
+
+  return new Response(Uint8Array.from(result.buffer), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/gzip",
+      "Content-Length": String(result.buffer.length),
+      "Content-Disposition": `attachment; filename="${result.filename}"`,
+    },
+  });
+});
+
+adminRoutes.post("/pack/import", async (c) => {
+  const denied = denyIfNotManager(c);
+  if (denied) return denied;
+
+  const world = c.get("world");
+  const user = c.get("user")!;
+  let archive: Buffer | undefined;
+  let title: string | undefined;
+  let owner: string | undefined = user.username;
+
+  const contentType = c.req.header("content-type") ?? "";
+  try {
+    if (contentType.includes("application/json")) {
+      const body = (await c.req.json()) as {
+        archiveBase64?: string;
+        title?: string;
+        owner?: string;
+        autoRenameQuests?: boolean;
+        questRenames?: Record<string, string>;
+      };
+      if (!body.archiveBase64) {
+        return apiError(c, 400, "archiveBase64 required", { isManager: true });
+      }
+      archive = Buffer.from(body.archiveBase64, "base64");
+      title = body.title;
+      if (body.owner !== undefined) owner = body.owner || undefined;
+      const result = await timedAsync(c.get("timer"), "packImport", () =>
+        importAdventurePack(world, archive!, {
+          title,
+          owner,
+          autoRenameQuests: body.autoRenameQuests,
+          questRenames: body.questRenames,
+        }),
+      );
+      return c.json({ ok: true, ...result });
+    }
+
+    const form = await c.req.parseBody();
+    const file = form.pack;
+    title = typeof form.title === "string" ? form.title.trim() || undefined : undefined;
+    if (typeof form.owner === "string" && form.owner.trim()) {
+      owner = form.owner.trim();
+    }
+    if (file instanceof File) {
+      archive = Buffer.from(await file.arrayBuffer());
+    } else if (typeof file === "string" && file) {
+      archive = Buffer.from(file, "base64");
+    }
+    if (!archive?.length) {
+      return apiError(c, 400, "Upload a pack archive (field pack)", { isManager: true });
+    }
+
+    const result = await timedAsync(c.get("timer"), "packImport", () =>
+      importAdventurePack(world, archive!, { title, owner }),
+    );
+
+    if (wantsJson(c)) return c.json({ ok: true, ...result });
+    const message = `Imported ${result.sceneIds.length} scenes, ${result.artefactIds.length} artefacts, quests: ${result.questNames.join(", ") || "(none)"}.`;
+    if (negotiateFormat(c) === "text") {
+      return c.text(formatPlainMessage("Adventure pack", message));
+    }
+    return c.redirect(
+      `${c.get("assetBase")}/data?imported=${encodeURIComponent(String(result.sceneIds.length))}`,
+    );
+  } catch (err) {
+    const message =
+      err instanceof PackRemapError || err instanceof Error ? err.message : "Import failed";
+    return apiError(c, 400, message, { isManager: true });
+  }
 });
 
 adminRoutes.post("/backup", async (c) => {
@@ -492,12 +613,19 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function adminNotice(backedUp?: string, deleted?: string, restored?: string, safety?: string): string {
+function adminNotice(
+  backedUp?: string,
+  deleted?: string,
+  restored?: string,
+  safety?: string,
+  imported?: string,
+): string {
   if (backedUp) return `Archived data to ${backedUp}.`;
   if (deleted) return `Deleted ${deleted}.`;
   if (restored) {
     const safetyNote = safety ? ` Previous data archived as ${safety}.` : "";
     return `Restored data from ${restored}.${safetyNote}`;
   }
+  if (imported) return `Imported adventure pack (${imported} scenes).`;
   return "";
 }

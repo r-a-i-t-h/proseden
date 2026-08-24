@@ -57,6 +57,12 @@ export type Control =
       autocomplete?: string;
     }
   | {
+      type: "file";
+      name: string;
+      required?: boolean;
+      accept?: string;
+    }
+  | {
       type: "checkbox";
       name: string;
       value?: string;
@@ -130,6 +136,7 @@ export type Node =
       action: string;
       class?: string;
       id?: string;
+      enctype?: string;
       children: Node[];
       /** Text-mode recipe lines (emitted instead of / in addition for text). */
       textRecipes?: string[];

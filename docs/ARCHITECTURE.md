@@ -212,6 +212,7 @@ Automated tests cover ACL, navigation, inbox, live SSE plumbing, and HTML snippe
 - `/alchemy`: save JSON, `?saved=1`. Invalid JSON must re-show the editor with an error, not a blank page.
 - `/quests` (questor): three collapsible panels (`data-persist-open`) — Quests / Flags / Badges editors. Quest save `?saved=1`; flags `?saved=flags`; badges `?saved=badges`. Invalid JSON must re-show the editor with an error, not a blank page.
 - Manager `/data/quests` and `/data/alchemy` are the same editor composer — confirm save/delete and the back crumb to `/data`. `/data/quests` also lists personal `quests/users/*` files for managers.
+- `/data/pack/export` downloads a densified adventure pack; `/data/pack/import` merges one into the world (see [PACKS.md](PACKS.md)).
 
 ### Live
 

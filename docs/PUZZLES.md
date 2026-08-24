@@ -4,7 +4,8 @@ Proseden remains a **shared prose world**, not an adventure-game engine.
 This document is the design summary for **quests**, **flags**, **vars**,
 **badges**, **flag-gated prose**, and **artefact alchemy**.
 
-Related: [SPEC.md](SPEC.md), [PLAN.md](PLAN.md), [NAVIGATION.md](NAVIGATION.md).
+Related: [SPEC.md](SPEC.md), [PLAN.md](PLAN.md), [NAVIGATION.md](NAVIGATION.md),
+[PACKS.md](PACKS.md) (adventure export/import).
 Author guide for quest JSON: **[QUESTS.md](QUESTS.md)**.
 
 ---

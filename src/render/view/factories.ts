@@ -111,6 +111,7 @@ export function form(
     method?: string;
     class?: string;
     id?: string;
+    enctype?: string;
     textRecipes?: string[];
   },
   ...children: Node[]
@@ -121,6 +122,7 @@ export function form(
     action: opts.action,
     class: opts.class,
     id: opts.id,
+    enctype: opts.enctype,
     textRecipes: opts.textRecipes,
     children,
   };
