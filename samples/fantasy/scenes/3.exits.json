@@ -1,0 +1,32 @@
+[
+  {
+    "exitId": 4,
+    "nickname": "bridge",
+    "toSceneId": 2,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 5,
+    "nickname": "hut",
+    "toSceneId": 4,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 6,
+    "nickname": "stones",
+    "toSceneId": 5,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 7,
+    "nickname": "forest",
+    "toSceneId": 6,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 8,
+    "nickname": "smokehouse",
+    "toSceneId": 18,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "exitId": 24,
+    "nickname": "engineering",
+    "toSceneId": 10,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 25,
+    "nickname": "outer",
+    "toSceneId": 16,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "holds:4",
+    "whenDenied": "No boots, no walk."
+  }
+]

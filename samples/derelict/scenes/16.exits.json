@@ -1,0 +1,14 @@
+[
+  {
+    "exitId": 30,
+    "nickname": "reactor",
+    "toSceneId": 11,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 31,
+    "nickname": "breach",
+    "toSceneId": 15,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  }
+]

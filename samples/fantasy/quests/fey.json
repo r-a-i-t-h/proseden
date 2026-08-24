@@ -1,0 +1,356 @@
+{
+  "name": "fey",
+  "title": "Ashen Keep",
+  "description": "Fantasy sample. Idioms: on/drop toll, on/gain curse, Input ritual sites, badge gate, giveArtefact, tactile Input, Use-to-deliver win. No alchemy, no lamp, no wait/season.",
+  "rules": [
+    {
+      "id": "drop-toll",
+      "on": "drop",
+      "when": {
+        "all": [
+          {
+            "drop": 1
+          },
+          {
+            "atScene": 2
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "fey.trollPaid"
+        }
+      ],
+      "ok": "Silver vanishes into black water. The troll sinks satisfied. Cross."
+    },
+    {
+      "id": "gain-curse",
+      "on": "gain",
+      "when": {
+        "gain": 2
+      },
+      "then": [
+        {
+          "setFlag": "fey.cursed"
+        }
+      ]
+    },
+    {
+      "id": "curse-blocks-court-magic",
+      "when": {
+        "all": [
+          {
+            "flag": "fey.cursed"
+          },
+          {
+            "flag": "not.fey.warned"
+          },
+          {
+            "atScene": 9
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "fey.warned"
+        }
+      ]
+    },
+    {
+      "id": "shatter-stones",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "shatter"
+          },
+          {
+            "atScene": 5
+          },
+          {
+            "holds": 2
+          },
+          {
+            "flag": "fey.cursed"
+          }
+        ]
+      },
+      "then": [
+        {
+          "clearFlag": "fey.cursed"
+        },
+        {
+          "setFlag": "fey.mirrorBroken"
+        }
+      ],
+      "ok": "You name the break. The mirror's hold cracks. The curse lifts."
+    },
+    {
+      "id": "salt-cleanse",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 3
+          },
+          {
+            "flag": "fey.cursed"
+          }
+        ]
+      },
+      "then": [
+        {
+          "clearFlag": "fey.cursed"
+        },
+        {
+          "setFlag": "fey.mirrorBroken"
+        }
+      ],
+      "ok": "Salt bites the glass-wrong. The watching stops."
+    },
+    {
+      "id": "wand-cleanse",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 4
+          },
+          {
+            "flag": "fey.cursed"
+          }
+        ]
+      },
+      "then": [
+        {
+          "clearFlag": "fey.cursed"
+        },
+        {
+          "setFlag": "fey.mirrorBroken"
+        }
+      ],
+      "ok": "The wand of hush drinks the mirror's whisper. Quiet returns."
+    },
+    {
+      "id": "drop-haunch",
+      "on": "drop",
+      "when": {
+        "all": [
+          {
+            "drop": 5
+          },
+          {
+            "atScene": 7
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "fey.wolvesClear"
+        }
+      ],
+      "ok": "The pack falls on the haunch in a snarling knot. The keep road is briefly ignored."
+    },
+    {
+      "id": "whistle-wolves",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 6
+          },
+          {
+            "atScene": 7
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "fey.wolvesClear"
+        }
+      ],
+      "ok": "The bone note flees into the trees. So do the wolves."
+    },
+    {
+      "id": "sing-glade",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "the long way home"
+          },
+          {
+            "atScene": 7
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "fey.wolvesClear"
+        }
+      ],
+      "ok": "The road song softens the glade. The pack melts into pine."
+    },
+    {
+      "id": "rite-well",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "name the keep"
+          },
+          {
+            "atScene": 3
+          },
+          {
+            "flag": "not.fey.riteWell"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "fey.riteWell"
+        }
+      ],
+      "ok": "The well accepts the name. One third of the rite settles."
+    },
+    {
+      "id": "rite-chapel",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "bind the ward"
+          },
+          {
+            "atScene": 11
+          },
+          {
+            "flag": "not.fey.riteChapel"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "fey.riteChapel"
+        }
+      ],
+      "ok": "The altar warmens under your palm. Two thirds."
+    },
+    {
+      "id": "rite-stones",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "open the sky"
+          },
+          {
+            "atScene": 5
+          },
+          {
+            "flag": "not.fey.riteStones"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "fey.riteStones"
+        }
+      ],
+      "ok": "The menhirs answer. The rite is nearly whole."
+    },
+    {
+      "id": "rite-complete",
+      "when": {
+        "all": [
+          {
+            "flag": "fey.riteWell"
+          },
+          {
+            "flag": "fey.riteChapel"
+          },
+          {
+            "flag": "fey.riteStones"
+          },
+          {
+            "flag": "not.fey.anointed"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "fey.anointed"
+        },
+        {
+          "grantBadge": "fey.anointed"
+        },
+        {
+          "giveArtefact": 8
+        }
+      ]
+    },
+    {
+      "id": "feel-wall",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "feel along the wall"
+          },
+          {
+            "atScene": 13
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "fey.feltWall"
+        }
+      ],
+      "ok": "Fingers find iron where eyes found only black. A niche waits."
+    },
+    {
+      "id": "deliver-letter",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 7
+          },
+          {
+            "atScene": 1
+          },
+          {
+            "flag": "not.fey.cursed"
+          },
+          {
+            "flag": "not.fey.delivered"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "fey.delivered"
+        },
+        {
+          "grantBadge": "fey.courier"
+        }
+      ],
+      "ok": "You set the letter on the milestone. The misty road takes its due. You are finished."
+    }
+  ],
+  "badges": [
+    {
+      "id": "fey.anointed",
+      "title": "Anointed",
+      "description": "Completed the three-site keep-rite. The tower admits you."
+    },
+    {
+      "id": "fey.courier",
+      "title": "Keep's courier",
+      "description": "Delivered the sealed letter to the misty road, uncursed."
+    }
+  ],
+  "alchemy": []
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "exitId": 15,
+    "nickname": "glade",
+    "toSceneId": 7,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 16,
+    "nickname": "court",
+    "toSceneId": 9,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  }
+]

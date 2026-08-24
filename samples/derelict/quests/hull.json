@@ -1,0 +1,332 @@
+{
+  "name": "hull",
+  "title": "Umbilical",
+  "description": "Derelict sample. Idioms: O2 init/drain/choke, on/gain contamination, Input breaker, on/{flag}→giveArtefact, holds boots for EVA, Use patch, Use decon, Use dock-release win at airlock. No alchemy, no lamp twin, no wait/season.",
+  "rules": [
+    {
+      "id": "o2-init",
+      "when": {
+        "all": [
+          {
+            "var": "hull.o2",
+            "=": 0
+          },
+          {
+            "flag": "not.hull.breathing"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setVar": "hull.o2",
+          "to": 14
+        },
+        {
+          "setFlag": "hull.breathing"
+        }
+      ]
+    },
+    {
+      "id": "o2-drain",
+      "when": {
+        "all": [
+          {
+            "flag": "hull.breathing"
+          },
+          {
+            "var": "hull.o2",
+            ">": 0
+          }
+        ]
+      },
+      "then": [
+        {
+          "decVar": "hull.o2"
+        }
+      ]
+    },
+    {
+      "id": "o2-empty",
+      "when": {
+        "all": [
+          {
+            "flag": "hull.breathing"
+          },
+          {
+            "var": "hull.o2",
+            "<": 1
+          },
+          {
+            "flag": "not.hull.choking"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "hull.choking"
+        }
+      ]
+    },
+    {
+      "id": "burn-candle",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 2
+          },
+          {
+            "atScene": 12
+          }
+        ]
+      },
+      "then": [
+        {
+          "setVar": "hull.o2",
+          "to": 18
+        },
+        {
+          "clearFlag": "hull.choking"
+        },
+        {
+          "setFlag": "hull.candleUsed"
+        }
+      ],
+      "ok": "The candle blooms oxygen. Drums catch. You can move again."
+    },
+    {
+      "id": "gain-contam",
+      "on": "gain",
+      "when": {
+        "gain": 3
+      },
+      "then": [
+        {
+          "setFlag": "hull.contaminated"
+        }
+      ]
+    },
+    {
+      "id": "decon",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 7
+          },
+          {
+            "atScene": 7
+          },
+          {
+            "flag": "hull.contaminated"
+          }
+        ]
+      },
+      "then": [
+        {
+          "clearFlag": "hull.contaminated"
+        },
+        {
+          "setFlag": "hull.cleaned"
+        }
+      ],
+      "ok": "The booth screams UV. Quarantine clears. Home will take you back."
+    },
+    {
+      "id": "breakers",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "swap a with c"
+          },
+          {
+            "atScene": 10
+          },
+          {
+            "flag": "not.hull.powerOn"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "hull.powerOn"
+        }
+      ],
+      "ok": "A and C trade places. Lights stagger up the spine. The ship notices."
+    },
+    {
+      "id": "mint-chip",
+      "on": {
+        "flag": "hull.powerOn"
+      },
+      "when": {
+        "flag": "not.hull.chipMinted"
+      },
+      "then": [
+        {
+          "setFlag": "hull.chipMinted"
+        },
+        {
+          "giveArtefact": 9
+        }
+      ]
+    },
+    {
+      "id": "patch-breach",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 1
+          },
+          {
+            "atScene": 15
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "hull.patched"
+        }
+      ],
+      "ok": "Epoxy sets in vacuum's idea of a hurry. The collar may trust the hull."
+    },
+    {
+      "id": "nav-mantra",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "umbra releases her children"
+          },
+          {
+            "atScene": 9
+          },
+          {
+            "flag": "not.hull.navOk"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "hull.navOk"
+        }
+      ],
+      "ok": "Nav accepts the mantra. Dock logic softens."
+    },
+    {
+      "id": "ready-undock",
+      "when": {
+        "all": [
+          {
+            "flag": "hull.powerOn"
+          },
+          {
+            "flag": "hull.patched"
+          },
+          {
+            "flag": "hull.navOk"
+          },
+          {
+            "flag": "not.hull.contaminated"
+          },
+          {
+            "flag": "not.hull.canUndock"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "hull.canUndock"
+        }
+      ]
+    },
+    {
+      "id": "undock",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 6
+          },
+          {
+            "atScene": 1
+          },
+          {
+            "flag": "hull.canUndock"
+          },
+          {
+            "flag": "not.hull.escaped"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "hull.escaped"
+        },
+        {
+          "grantBadge": "hull.survivor"
+        }
+      ],
+      "ok": "Collars part. Umbra-9 falls away. Your airlock is yours again."
+    },
+    {
+      "id": "undock-blocked-contam",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 6
+          },
+          {
+            "atScene": 1
+          },
+          {
+            "flag": "hull.contaminated"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "hull.triedDirty"
+        }
+      ],
+      "ok": "Your ship refuses the seal. Contaminated. Medbay decon first."
+    },
+    {
+      "id": "undock-blocked-early",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 6
+          },
+          {
+            "atScene": 1
+          },
+          {
+            "flag": "not.hull.canUndock"
+          },
+          {
+            "flag": "not.hull.contaminated"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "hull.triedEarly"
+        }
+      ],
+      "ok": "Release refuses. Need power, patched hull, nav mantra — and a clean bill."
+    }
+  ],
+  "badges": [
+    {
+      "id": "hull.survivor",
+      "title": "Umbilical severed",
+      "description": "Powered, patched, cleared quarantine, and undocked from Umbra-9."
+    }
+  ],
+  "alchemy": []
+}

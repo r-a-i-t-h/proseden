@@ -1,0 +1,7 @@
+{
+  "username": "admin",
+  "passwordHash": "a9ad5bcfa4a264557f9b451c2e06987b600585739edd96681faec4c9133496bc22507e42b7a0a777c344732e9ba414a836c2414eb737a35f587d3862638cc9c7",
+  "passwordSalt": "45950efa6cebcc04bc7ae014e96cb26d",
+  "createdAt": "2026-08-10T20:00:00.000Z",
+  "inventory": []
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "exitId": 2,
+    "nickname": "home",
+    "toSceneId": 1,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 3,
+    "nickname": "bay",
+    "toSceneId": 3,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  }
+]

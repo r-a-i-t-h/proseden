@@ -1,0 +1,16 @@
+[
+  {
+    "exitId": 2,
+    "nickname": "road",
+    "toSceneId": 1,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 3,
+    "nickname": "green",
+    "toSceneId": 3,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "flag:fey.trollPaid",
+    "whenDenied": "The troll blocks the bank. Drop silver into the water."
+  }
+]

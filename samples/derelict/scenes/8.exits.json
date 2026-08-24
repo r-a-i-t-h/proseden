@@ -1,0 +1,16 @@
+[
+  {
+    "exitId": 18,
+    "nickname": "spine",
+    "toSceneId": 4,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 19,
+    "nickname": "bridge",
+    "toSceneId": 9,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "flag:hull.powerOn,holds:9",
+    "whenDenied": "Needs power and the access chip engineering mints."
+  }
+]

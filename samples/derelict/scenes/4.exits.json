@@ -1,0 +1,62 @@
+[
+  {
+    "exitId": 6,
+    "nickname": "bay",
+    "toSceneId": 3,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 7,
+    "nickname": "berths",
+    "toSceneId": 5,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 8,
+    "nickname": "galley",
+    "toSceneId": 6,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 9,
+    "nickname": "medbay",
+    "toSceneId": 7,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 10,
+    "nickname": "blister",
+    "toSceneId": 8,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "flag:not.hull.choking",
+    "whenDenied": "Air is gone. Fall back to engineering and life support — burn an O₂ candle."
+  },
+  {
+    "exitId": 11,
+    "nickname": "engineering",
+    "toSceneId": 10,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 12,
+    "nickname": "cargo",
+    "toSceneId": 13,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "flag:not.hull.choking",
+    "whenDenied": "Air is gone. Fall back to engineering and life support — burn an O₂ candle."
+  },
+  {
+    "exitId": 13,
+    "nickname": "lab",
+    "toSceneId": 14,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "flag:not.hull.choking",
+    "whenDenied": "Air is gone. Fall back to engineering and life support — burn an O₂ candle."
+  },
+  {
+    "exitId": 14,
+    "nickname": "locker",
+    "toSceneId": 17,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  }
+]

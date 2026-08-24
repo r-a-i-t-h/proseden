@@ -1,0 +1,16 @@
+[
+  {
+    "exitId": 13,
+    "nickname": "path",
+    "toSceneId": 6,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 14,
+    "nickname": "keep",
+    "toSceneId": 8,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "flag:fey.wolvesClear",
+    "whenDenied": "Wolves hold the far side. Feed them, whistle, or sing the road song."
+  }
+]

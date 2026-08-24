@@ -1,0 +1,14 @@
+[
+  {
+    "exitId": 4,
+    "nickname": "umbilical",
+    "toSceneId": 2,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 5,
+    "nickname": "spine",
+    "toSceneId": 4,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  }
+]

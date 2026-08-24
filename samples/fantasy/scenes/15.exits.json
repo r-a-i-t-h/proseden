@@ -1,0 +1,20 @@
+[
+  {
+    "exitId": 29,
+    "nickname": "court",
+    "toSceneId": 9,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 30,
+    "nickname": "study",
+    "toSceneId": 16,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 31,
+    "nickname": "battlements",
+    "toSceneId": 17,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  }
+]

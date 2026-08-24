@@ -1,0 +1,17 @@
+[
+  {
+    "exitId": 26,
+    "nickname": "up",
+    "toSceneId": 12,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 27,
+    "nickname": "niche",
+    "toSceneId": 14,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "flag:fey.feltWall",
+    "whenDenied": "You need to feel along the wall — input the chalk's advice.",
+    "hidden": true
+  }
+]

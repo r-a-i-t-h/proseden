@@ -1,0 +1,34 @@
+[
+  {
+    "exitId": 17,
+    "nickname": "gate",
+    "toSceneId": 8,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 18,
+    "nickname": "hall",
+    "toSceneId": 10,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 19,
+    "nickname": "chapel",
+    "toSceneId": 11,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 20,
+    "nickname": "cellars",
+    "toSceneId": 12,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 21,
+    "nickname": "tower",
+    "toSceneId": 15,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "badge:fey.anointed",
+    "whenDenied": "Ash marks the door. Complete the keep-rite first."
+  }
+]
