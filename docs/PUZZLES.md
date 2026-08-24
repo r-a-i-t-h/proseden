@@ -104,7 +104,10 @@ One file per manager quest: `data/quests/<name>.json`. The `name` is the write
 namespace. Managers edit via a giant JSON textarea (no fancy builder in v1).
 
 Questors (staff role; managers included) edit a personal file at
-`data/quests/users/<username>.json` via Edit toolbar **Quests**. Managers edit
+`data/quests/users/<username>.json` via Edit toolbar **Quests**. The same page
+has collapsible **Flags editor** and **Badges editor** panels for that user’s
+`users/<username>.flags.json` and `users/<username>.badges.json` (handy for
+testing; flags still stay invisible to ordinary readers). Managers edit
 the official set via **Data → Quests**, and can open any personal quest file from
 the same page (same giveArtefact ACL as the author’s own editor). Unlike alchemy
 (open to every signed-in user), questor is **hand-picked** — personal quests add

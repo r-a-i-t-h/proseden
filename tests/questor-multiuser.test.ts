@@ -208,7 +208,15 @@ describe("questor / multi-user quests", () => {
     expect(html).toContain("Your quests");
     expect(html).toContain("quests/users/bob.json");
     expect(html).toContain("user.bob.*");
+    expect(html).toContain("Quests editor");
+    expect(html).toContain("Flags editor");
+    expect(html).toContain("Badges editor");
     expect(html).toContain('name="questJson"');
+    expect(html).toContain('name="flagsJson"');
+    expect(html).toContain('name="badgesJson"');
+    expect(html).toContain('data-persist-open="proseden-quests-editor-open"');
+    expect(html).toContain('action="quests/flags"');
+    expect(html).toContain('action="quests/badges"');
 
     const post = await app().request("/quests", {
       method: "POST",
@@ -226,6 +234,88 @@ describe("questor / multi-user quests", () => {
     });
     expect(post.status).toBe(302);
     expect(world.getUserQuest("bob")?.badges?.[0]?.id).toBe("user.bob.form");
+  });
+
+  it("questor may GET/POST own flags and badges on /quests", async () => {
+    await world.saveUserFlags("bob", { "user.bob.seed": true });
+    await world.saveUserBadges("bob", [{ badge: "user.bob.old", grantTime: "2026-01-01T00:00:00.000Z" }]);
+
+    const get = await app().request("/quests", {
+      headers: { Accept: "text/html", Authorization: `Bearer ${bobToken}` },
+    });
+    expect(get.status).toBe(200);
+    const html = await get.text();
+    expect(html).toContain("user.bob.seed");
+    expect(html).toContain("user.bob.old");
+
+    const flagsPost = await app().request("/quests/flags", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${bobToken}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        flagsJson: JSON.stringify({ "user.bob.cheat": true, "user.bob.noise": false }),
+      }),
+    });
+    expect(flagsPost.status).toBe(302);
+    expect(flagsPost.headers.get("location")).toContain("saved=flags");
+    expect(world.getUserFlags("bob")).toEqual({ "user.bob.cheat": true });
+    expect(JSON.parse(await readFile(join(dataDir, "users", "bob.flags.json"), "utf8"))).toEqual({
+      "user.bob.cheat": true,
+    });
+
+    const badgesPost = await app().request("/quests/badges", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${bobToken}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        badgesJson: JSON.stringify([
+          { badge: "user.bob.trophy", grantTime: "2026-02-01T00:00:00.000Z" },
+          { badge: "user.bob.trophy" },
+          "skip-me",
+        ]),
+      }),
+    });
+    expect(badgesPost.status).toBe(302);
+    expect(badgesPost.headers.get("location")).toContain("saved=badges");
+    expect(world.getUserBadges("bob")).toEqual([
+      { badge: "user.bob.trophy", grantTime: "2026-02-01T00:00:00.000Z" },
+    ]);
+
+    const denied = await app().request("/quests/flags", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${carolToken}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ flagsJson: "{}" }),
+    });
+    expect(denied.status).toBe(403);
+
+    const badFlags = await app().request("/quests/flags", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${bobToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ flagsJson: "[]" }),
+    });
+    expect(badFlags.status).toBe(400);
+
+    const badBadges = await app().request("/quests/badges", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${bobToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ badgesJson: "{}" }),
+    });
+    expect(badBadges.status).toBe(400);
   });
 
   it("preserves compact quest JSON formatting on save and reload", async () => {

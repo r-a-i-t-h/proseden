@@ -78,6 +78,20 @@ export const QUEST_EXAMPLE = `{
   ]
 }`;
 
+export const FLAGS_EXAMPLE = `{
+  "user.YOUR_USERNAME.hasKey": true
+}`;
+
+export const FLAGS_HELP =
+  "Object of flag id → true. Only set flags are stored; omit or delete a key to clear it. False and other values are dropped on save.";
+
+export const BADGES_EXAMPLE = `[
+  { "badge": "user.YOUR_USERNAME.keyholder", "grantTime": "2026-01-15T12:00:00.000Z" }
+]`;
+
+export const BADGES_HELP =
+  "Array of { badge, grantTime? }. Duplicate badge ids are dropped. grantTime is optional ISO time shown on the profile shelf.";
+
 /** Shown in the quest JSON “i” hint (plain text; newlines preserved in the UI). */
 export const QUEST_HELP = `One quest object. name is the write namespace for flags, badges, and vars. Personal files use user.<username>; manager files use a simple name (not "user"). Rules run once in document order each evaluation — later rules see earlier then effects. Omit on for always. Event ons need a matching when atom. Optional ok prose is for use/input only. Bad rules are skipped at load. giveArtefact only for artefacts you own or manage the home of.
 

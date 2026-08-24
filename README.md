@@ -127,6 +127,8 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `PUT`/`POST` | `/staff/:username` | Set roles (manager) |
 | `GET`/`POST` | `/alchemy` | Edit own alchemy recipes (signed-in) |
 | `GET`/`POST` | `/quests` | Edit own personal quest file (questor or manager) |
+| `POST` | `/quests/flags` | Edit own flags JSON (questor or manager) |
+| `POST` | `/quests/badges` | Edit own badges JSON (questor or manager) |
 | `GET` | `/data` | Data admin: backups, reload, links to quests/alchemy (manager) |
 | `GET`/`POST` | `/data/quests` | List/create manager quest JSON files; list personal quest files (manager) |
 | `GET`/`POST` | `/data/quests/:name` | View/save a manager quest file (manager) |

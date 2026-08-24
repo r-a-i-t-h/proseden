@@ -645,6 +645,7 @@ details.edit-condition > summary:hover {
 /* Section-scale collapsibles (not the tiny JSON format "i" tip).
    Login/Register stay flush in the panel chrome — no section gap. */
 details.alchemy-panel,
+details.quests-panel,
 details.profile-section,
 details.messages-compose,
 details.live-online-wrap,
@@ -653,11 +654,13 @@ details.live-admin-section {
 }
 
 .profile-section,
+.quests-panel,
 .live-admin-section {
   margin-bottom: 0;
 }
 
 .profile-section > summary,
+.quests-panel > summary,
 .live-admin-section > summary {
   font-family: Fraunces, Georgia, serif;
   font-size: 1.15rem;
@@ -666,6 +669,7 @@ details.live-admin-section {
 }
 
 .profile-section > summary:hover,
+.quests-panel > summary:hover,
 .live-admin-section > summary:hover {
   color: var(--leaf);
 }

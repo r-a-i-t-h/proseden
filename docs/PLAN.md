@@ -88,7 +88,7 @@ flowchart TD
 - `data/staff.json` (or per-user `roles[]`): `moderator` | `topographer` | `manager` | `questor`
 - **Moderator:** edit/delete any scene/artefact prose (not necessarily restructure graph)
 - **Topographer:** edit exits, groups, junctions, entrance groups worldwide (not prose)
-- **Questor:** hand-picked; edit personal quest JSON (`quests/users/<username>.json`, namespace `user.<username>.*`). Not open to all users (unlike alchemy). Managers register official named quests.
+- **Questor:** hand-picked; edit personal quest JSON (`quests/users/<username>.json`, namespace `user.<username>.*`) plus own flags/badges JSON on the Quests page. Not open to all users (unlike alchemy). Managers register official named quests.
 - **Manager:** assign roles + user denies at staff level (superset of moderator + topographer + questor)
 - Bootstrap: first manager via env `PROSEDEN_MANAGERS=admin` or seed staff file
 - Access helpers consult roles after ownership/grants

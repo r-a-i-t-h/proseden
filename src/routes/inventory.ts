@@ -11,13 +11,30 @@ import {
 } from "../http.js";
 import { displayJsonTextarea, prepareJsonTextarea } from "../json-textarea.js";
 import { triggerQuestEval } from "../logic/trigger.js";
-import { matchAlchemyRecipe, parseAlchemyRecipes, parseQuestFile, QuestValidationError } from "../logic/quests.js";
+import {
+  matchAlchemyRecipe,
+  parseAlchemyRecipes,
+  parseQuestFile,
+  QuestValidationError,
+  sanitizeUserFlags,
+} from "../logic/quests.js";
 import {
   inventoryPageView,
   jsonFileEditorPageView,
   messagePageView,
+  questsPageView,
 } from "../render/view/index.js";
-import { ALCHEMY_EXAMPLE, ALCHEMY_HELP, QUEST_EXAMPLE, QUEST_HELP } from "../render/view/examples.js";
+import {
+  ALCHEMY_EXAMPLE,
+  ALCHEMY_HELP,
+  BADGES_EXAMPLE,
+  BADGES_HELP,
+  FLAGS_EXAMPLE,
+  FLAGS_HELP,
+  QUEST_EXAMPLE,
+  QUEST_HELP,
+} from "../render/view/examples.js";
+import { parseUserBadges } from "../store/user-badges.js";
 import { alchemyFail } from "./helpers.js";
 
 export const inventoryRoutes = new Hono();
@@ -105,26 +122,27 @@ inventoryRoutes.get("/quests", async (c) => {
   }
   const quest = world.getUserQuest(user.username) ?? world.emptyUserQuest(user.username);
   const back = sceneBackLink(user, world);
-  const notice = c.req.query("saved") ? "Quest saved." : "";
-  const example = QUEST_EXAMPLE.replaceAll("YOUR_USERNAME", `user.${user.username}`);
+  const notice = questsSaveNotice(c.req.query("saved"));
+  const ns = `user.${user.username}`;
+  const example = QUEST_EXAMPLE.replaceAll("YOUR_USERNAME", ns);
   const help = `${QUEST_HELP} This file is yours alone — not shared via scene ACL.`;
   const raw = await world.readUserQuestText(user.username);
   return page(
     c,
     200,
-    jsonFileEditorPageView({
-      title: "Quests",
-      heading: "Your quests",
-      intro: `Personal file quests/users/${user.username}.json. Namespace is user.${user.username}.*. Evaluated after manager quests.`,
+    questsPageView({
+      username: user.username,
+      quest,
+      flags: world.getUserFlags(user.username),
+      badges: world.getUserBadges(user.username),
+      questExample: example,
+      questNote: help,
+      flagsExample: FLAGS_EXAMPLE.replaceAll("YOUR_USERNAME", user.username),
+      flagsNote: FLAGS_HELP,
+      badgesExample: BADGES_EXAMPLE.replaceAll("YOUR_USERNAME", user.username),
+      badgesNote: BADGES_HELP,
+      questRaw: raw !== undefined ? displayJsonTextarea(raw) : undefined,
       notice,
-      action: "quests",
-      fieldLabel: "Quest JSON",
-      fieldName: "questJson",
-      value: quest,
-      example,
-      note: help,
-      rawText: raw !== undefined ? displayJsonTextarea(raw) : undefined,
-      rows: 28,
       back,
     }),
     { kind: "inventory", isManager: isManager(user, world) },
@@ -152,6 +170,63 @@ inventoryRoutes.post("/quests", async (c) => {
   }
   return respondMutation(c, { json: { ok: true }, redirect: "/quests", flash: { saved: "1" } });
 });
+
+inventoryRoutes.post("/quests/flags", async (c) => {
+  const world = c.get("world");
+  const user = requireUser(c);
+  if (isResponse(user)) return user;
+  if (!isQuestor(user, world)) return apiError(c, 403, "Questor role required");
+  const body = await readRequestBody(c);
+  try {
+    const prepared = prepareJsonTextarea(String(body.flagsJson ?? body.json ?? ""));
+    const parsed: unknown = JSON.parse(prepared);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return apiError(c, 400, "Flags must be a JSON object");
+    }
+    await world.saveUserFlags(user.username, sanitizeUserFlags(parsed));
+  } catch (err) {
+    const msg = err instanceof SyntaxError || err instanceof Error ? err.message : "Save failed";
+    return apiError(c, 400, msg);
+  }
+  await triggerQuestEval(c, user, user.lastSceneId);
+  return respondMutation(c, {
+    json: { ok: true, flags: world.getUserFlags(user.username) },
+    redirect: "/quests",
+    flash: { saved: "flags" },
+  });
+});
+
+inventoryRoutes.post("/quests/badges", async (c) => {
+  const world = c.get("world");
+  const user = requireUser(c);
+  if (isResponse(user)) return user;
+  if (!isQuestor(user, world)) return apiError(c, 403, "Questor role required");
+  const body = await readRequestBody(c);
+  try {
+    const prepared = prepareJsonTextarea(String(body.badgesJson ?? body.json ?? ""));
+    const parsed: unknown = JSON.parse(prepared);
+    if (!Array.isArray(parsed)) {
+      return apiError(c, 400, "Badges must be a JSON array");
+    }
+    await world.saveUserBadges(user.username, parseUserBadges(parsed));
+  } catch (err) {
+    const msg = err instanceof SyntaxError || err instanceof Error ? err.message : "Save failed";
+    return apiError(c, 400, msg);
+  }
+  await triggerQuestEval(c, user, user.lastSceneId);
+  return respondMutation(c, {
+    json: { ok: true, badges: world.getUserBadges(user.username) },
+    redirect: "/quests",
+    flash: { saved: "badges" },
+  });
+});
+
+function questsSaveNotice(saved: string | undefined): string {
+  if (saved === "flags") return "Flags saved.";
+  if (saved === "badges") return "Badges saved.";
+  if (saved) return "Quest saved.";
+  return "";
+}
 
 inventoryRoutes.post("/alchemy/combine", async (c) => {
   const world = c.get("world");

@@ -28,6 +28,7 @@ export type { DashboardOverviewCounts, DashboardProcess } from "./pages/dashboar
 export { messagePageView, viewLockdownPageView } from "./pages/message.js";
 export { accessForm, transferForm } from "./pages/access.js";
 export { jsonFileEditorPageView } from "./pages/json-editor.js";
+export { questsPageView } from "./pages/quests.js";
 export { groupsIndexPageView, groupPageView } from "./pages/groups.js";
 export type { GroupListItem } from "./pages/groups.js";
 export { inventoryPageView } from "./pages/inventory.js";

@@ -136,7 +136,8 @@ These pages no longer build HTML/text strings in routes or `html.ts`:
 Shared composers:
 
 - `accessForm` — profile share-all and group access
-- `jsonFileEditorPageView` — `/quests`, `/alchemy`, `/data/quests/:name`, `/data/quests/users/:username`, `/data/alchemy`
+- `jsonFileEditorPageView` — `/alchemy`, `/data/quests/:name`, `/data/quests/users/:username`, `/data/alchemy`
+- `questsPageView` — `/quests` (quest JSON plus collapsible flags/badges editors)
 - `messagePageView` — `apiError` HTML and short notices
 
 Error notices use `.notice.notice-error`, not the unstyled `.error` class.
@@ -208,7 +209,8 @@ Automated tests cover ACL, navigation, inbox, live SSE plumbing, and HTML snippe
 ### Inventory, alchemy, quests
 
 - `/inv` alchemy panel: combine UI lives in `<details data-persist-open="proseden-alchemy-open">` (open state via `wirePersistedDetails`). Success (`?alchemy=`) and error (`?alchemy-error=`) notices render at the top of the page, not inside the panel.
-- `/alchemy` and `/quests` (questor): save JSON, `?saved=1`. Invalid JSON must re-show the editor with an error, not a blank page.
+- `/alchemy`: save JSON, `?saved=1`. Invalid JSON must re-show the editor with an error, not a blank page.
+- `/quests` (questor): three collapsible panels (`data-persist-open`) — Quests / Flags / Badges editors. Quest save `?saved=1`; flags `?saved=flags`; badges `?saved=badges`. Invalid JSON must re-show the editor with an error, not a blank page.
 - Manager `/data/quests` and `/data/alchemy` are the same editor composer — confirm save/delete and the back crumb to `/data`. `/data/quests` also lists personal `quests/users/*` files for managers.
 
 ### Live
