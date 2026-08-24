@@ -1,0 +1,20 @@
+[
+  {
+    "exitId": 34,
+    "nickname": "lobby",
+    "toSceneId": 1,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 35,
+    "nickname": "yard",
+    "toSceneId": 14,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 36,
+    "nickname": "oak",
+    "toSceneId": 16,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  }
+]

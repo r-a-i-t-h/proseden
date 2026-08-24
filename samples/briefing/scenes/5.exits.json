@@ -1,0 +1,14 @@
+[
+  {
+    "exitId": 18,
+    "nickname": "corridor",
+    "toSceneId": 2,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 19,
+    "nickname": "director",
+    "toSceneId": 6,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  }
+]

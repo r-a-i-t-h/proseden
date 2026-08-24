@@ -1,0 +1,17 @@
+[
+  {
+    "exitId": 37,
+    "nickname": "park",
+    "toSceneId": 15,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 38,
+    "nickname": "up",
+    "toSceneId": 17,
+    "createdAt": "2026-08-24T16:00:00.000Z",
+    "when": "flag:spy.upTree",
+    "whenDenied": "Too high without a ladder — and clearer with the leaves gone.",
+    "hidden": true
+  }
+]

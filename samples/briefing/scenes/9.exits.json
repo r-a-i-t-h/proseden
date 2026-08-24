@@ -1,0 +1,17 @@
+[
+  {
+    "exitId": 25,
+    "nickname": "stacks",
+    "toSceneId": 8,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 26,
+    "nickname": "hatch",
+    "toSceneId": 10,
+    "createdAt": "2026-08-24T16:00:00.000Z",
+    "when": "flag:spy.readyToDive",
+    "whenDenied": "You need proper dive kit before that hatch is more than a rumour.",
+    "hidden": true
+  }
+]

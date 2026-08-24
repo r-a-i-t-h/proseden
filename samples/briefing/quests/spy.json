@@ -1,0 +1,292 @@
+{
+  "name": "spy",
+  "title": "Night Briefing",
+  "description": "Sample spy-HQ adventure for samples/briefing. Soft ticks, lamp drain, wait/season, alchemy dive kit, pass/safe/ladder gates. Not a port of any commercial game.",
+  "rules": [
+    {
+      "id": "tick",
+      "when": {
+        "scenesOwned": 0
+      },
+      "then": [
+        {
+          "incVar": "spy.tick"
+        }
+      ]
+    },
+    {
+      "id": "lamp-drain",
+      "when": {
+        "var": "spy.lamp",
+        ">": 0
+      },
+      "then": [
+        {
+          "decVar": "spy.lamp"
+        }
+      ]
+    },
+    {
+      "id": "shift-late",
+      "when": {
+        "all": [
+          {
+            "var": "spy.tick",
+            ">": 24
+          },
+          {
+            "flag": "not.spy.shiftLate"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "spy.shiftLate"
+        }
+      ]
+    },
+    {
+      "id": "torch-on",
+      "on": "use",
+      "when": {
+        "use": 3
+      },
+      "then": [
+        {
+          "setVar": "spy.lamp",
+          "to": 12
+        }
+      ],
+      "ok": "The torch throws a clean white cone. The charge will not last forever."
+    },
+    {
+      "id": "pass-reader",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 1
+          },
+          {
+            "atScene": 2
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "spy.passAccepted"
+        }
+      ],
+      "ok": "The reader chirps. The evidence gate unlatches with a tired click."
+    },
+    {
+      "id": "safe-combo",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "3719"
+          },
+          {
+            "atScene": 6
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "spy.safeOpen"
+        }
+      ],
+      "ok": "The safe dials home. Inside: a clearance chit."
+    },
+    {
+      "id": "wait-season-held",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "wait"
+          },
+          {
+            "atScene": 15
+          },
+          {
+            "var": "spy.season",
+            "=": 2
+          }
+        ]
+      },
+      "then": [
+        {
+          "setVar": "spy.season",
+          "to": 2
+        }
+      ],
+      "ok": "The park holds. The canister is still up there."
+    },
+    {
+      "id": "wait-season-2",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "wait"
+          },
+          {
+            "atScene": 15
+          },
+          {
+            "var": "spy.season",
+            "=": 1
+          }
+        ]
+      },
+      "then": [
+        {
+          "setVar": "spy.season",
+          "to": 2
+        },
+        {
+          "setFlag": "spy.leavesFallen"
+        }
+      ],
+      "ok": "Leaves carpet the grass. Something dark sits obvious in the oak's fork."
+    },
+    {
+      "id": "wait-season-1",
+      "on": "input",
+      "when": {
+        "all": [
+          {
+            "input": "wait"
+          },
+          {
+            "atScene": 15
+          },
+          {
+            "var": "spy.season",
+            "=": 0
+          }
+        ]
+      },
+      "then": [
+        {
+          "setVar": "spy.season",
+          "to": 1
+        }
+      ],
+      "ok": "A breeze. The canopy thins. Time is being unreasonable — and useful."
+    },
+    {
+      "id": "ladder-oak",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 7
+          },
+          {
+            "atScene": 16
+          },
+          {
+            "flag": "spy.leavesFallen"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "spy.upTree"
+        }
+      ],
+      "ok": "The ladder bites bark. You can climb to the fork."
+    },
+    {
+      "id": "ladder-oak-early",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 7
+          },
+          {
+            "atScene": 16
+          },
+          {
+            "flag": "not.spy.leavesFallen"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "spy.triedLadderEarly"
+        }
+      ],
+      "ok": "Leaves still hide the fork. You could climb — but you would find only green. Wait in the park until the canopy thins."
+    },
+    {
+      "id": "dive-ready",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 6
+          },
+          {
+            "atScene": 9
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "spy.readyToDive"
+        }
+      ],
+      "ok": "Mask sealed, snorkel clear. The hatch is no longer a rumour."
+    },
+    {
+      "id": "briefing-complete",
+      "when": {
+        "all": [
+          {
+            "holds": 8
+          },
+          {
+            "holds": 9
+          },
+          {
+            "holds": 10
+          },
+          {
+            "flag": "not.spy.briefed"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "spy.briefed"
+        },
+        {
+          "grantBadge": "spy.briefed"
+        }
+      ]
+    }
+  ],
+  "badges": [
+    {
+      "id": "spy.briefed",
+      "title": "Night briefed",
+      "description": "Collected film, wet notebook, and clearance chit from the Bureau night shift."
+    }
+  ],
+  "alchemy": [
+    {
+      "id": "improv-dive",
+      "inputs": [
+        4,
+        5
+      ],
+      "gives": 6,
+      "ok": "Parka snorkel and welding glass tape into a crude dive kit. Lateral thinking: authorised."
+    }
+  ]
+}

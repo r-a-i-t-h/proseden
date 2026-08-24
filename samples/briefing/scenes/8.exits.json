@@ -1,0 +1,16 @@
+[
+  {
+    "exitId": 23,
+    "nickname": "landing",
+    "toSceneId": 7,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 24,
+    "nickname": "down",
+    "toSceneId": 9,
+    "createdAt": "2026-08-24T16:00:00.000Z",
+    "when": "var:spy.lamp>0",
+    "whenDenied": "Too dark to find the lower door safely."
+  }
+]

@@ -1,0 +1,70 @@
+[
+  {
+    "exitId": 4,
+    "nickname": "lobby",
+    "toSceneId": 1,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 5,
+    "nickname": "desk",
+    "toSceneId": 3,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 6,
+    "nickname": "records",
+    "toSceneId": 4,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 7,
+    "nickname": "annexe",
+    "toSceneId": 5,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 8,
+    "nickname": "archive",
+    "toSceneId": 7,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 9,
+    "nickname": "plant",
+    "toSceneId": 11,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 10,
+    "nickname": "roof",
+    "toSceneId": 12,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 11,
+    "nickname": "canteen",
+    "toSceneId": 19,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 12,
+    "nickname": "yard",
+    "toSceneId": 14,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 13,
+    "nickname": "comms",
+    "toSceneId": 18,
+    "createdAt": "2026-08-24T16:00:00.000Z"
+  },
+  {
+    "exitId": 14,
+    "nickname": "evidence",
+    "toSceneId": 20,
+    "createdAt": "2026-08-24T16:00:00.000Z",
+    "when": "flag:spy.passAccepted",
+    "hidden": true
+  }
+]
