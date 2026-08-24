@@ -1,0 +1,16 @@
+[
+  {
+    "exitId": 11,
+    "nickname": "meadow",
+    "toSceneId": 2,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 12,
+    "nickname": "up",
+    "toSceneId": 6,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "flag:camp.ladderSet,var:camp.energy>1",
+    "whenDenied": "Need a rope-ladder set on the oak — and energy enough to climb (eat first if spent)."
+  }
+]

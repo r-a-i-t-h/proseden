@@ -1,0 +1,14 @@
+[
+  {
+    "exitId": 17,
+    "nickname": "gloom",
+    "toSceneId": 7,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 18,
+    "nickname": "thick",
+    "toSceneId": 9,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  }
+]

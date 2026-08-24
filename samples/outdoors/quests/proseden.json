@@ -1,0 +1,7 @@
+{
+  "name": "proseden",
+  "title": "Proseden",
+  "description": "Platform namespace for Proseden itself. Keeps the proseden.* flag and badge prefix reserved so other quests cannot claim it. Add built-in marks here when needed.",
+  "rules": [],
+  "badges": []
+}

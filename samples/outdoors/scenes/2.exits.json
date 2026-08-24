@@ -1,0 +1,47 @@
+[
+  {
+    "exitId": 2,
+    "nickname": "lane",
+    "toSceneId": 1,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 3,
+    "nickname": "brook",
+    "toSceneId": 4,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 4,
+    "nickname": "oak",
+    "toSceneId": 5,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 5,
+    "nickname": "pines",
+    "toSceneId": 7,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 6,
+    "nickname": "berries",
+    "toSceneId": 11,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 7,
+    "nickname": "stump",
+    "toSceneId": 12,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 8,
+    "nickname": "tent",
+    "toSceneId": 3,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "flag:camp.tentUp",
+    "whenDenied": "Pitch a tent on this shelf first.",
+    "hidden": true
+  }
+]

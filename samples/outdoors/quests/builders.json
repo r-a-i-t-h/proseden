@@ -1,0 +1,27 @@
+{
+  "name": "builders",
+  "title": "Builders",
+  "description": "Threshold badges for scenes owned. Evaluated on login/go/collect — not on scene create.",
+  "rules": [
+    {
+      "id": "hamlet",
+      "when": { "all": [{ "scenesOwned": 5 }, { "flag": "not.builders.hamlet" }] },
+      "then": [{ "setFlag": "builders.hamlet" }, { "grantBadge": "builders.hamlet" }]
+    },
+    {
+      "id": "city",
+      "when": { "all": [{ "scenesOwned": 20 }, { "flag": "not.builders.city" }] },
+      "then": [{ "setFlag": "builders.city" }, { "grantBadge": "builders.city" }]
+    },
+    {
+      "id": "world",
+      "when": { "all": [{ "scenesOwned": 100 }, { "flag": "not.builders.world" }] },
+      "then": [{ "setFlag": "builders.world" }, { "grantBadge": "builders.world" }]
+    }
+  ],
+  "badges": [
+    { "id": "builders.hamlet", "title": "Hamlet builder", "description": "Own 5 scenes." },
+    { "id": "builders.city", "title": "City builder", "description": "Own 20 scenes." },
+    { "id": "builders.world", "title": "World builder", "description": "Own 100 scenes." }
+  ]
+}

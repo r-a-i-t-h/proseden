@@ -1,0 +1,469 @@
+{
+  "name": "camp",
+  "title": "Pitch & Pine",
+  "description": "Outdoors sample: alchemy kits, pitched tent detail+exit, sleep→fleas/miscreant, energy, dynamic bike/fire/stew details, woods loop vs vantage exit, flea vs bear. Transformation win via bicycle.",
+  "rules": [
+    {
+      "id": "energy-init",
+      "when": {
+        "all": [
+          {
+            "var": "camp.energy",
+            "=": 0
+          },
+          {
+            "flag": "not.camp.awake"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setVar": "camp.energy",
+          "to": 2
+        },
+        {
+          "setFlag": "camp.awake"
+        }
+      ]
+    },
+    {
+      "id": "pitch-tent",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 4
+          },
+          {
+            "atScene": 2
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "camp.tentUp"
+        }
+      ],
+      "ok": "Poles bite turf, sheet tautens, the shelf becomes a camp. A tent detail — and a way in — appear."
+    },
+    {
+      "id": "sleep",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 5
+          },
+          {
+            "atScene": 3
+          }
+        ]
+      },
+      "then": [
+        {
+          "incVar": "camp.night"
+        },
+        {
+          "setFlag": "camp.hasFleas"
+        },
+        {
+          "setFlag": "camp.slept"
+        }
+      ],
+      "ok": "You sleep. Night deepens. Something tiny celebrates on your ankles."
+    },
+    {
+      "id": "night-mischief",
+      "on": {
+        "flag": "camp.slept"
+      },
+      "when": {
+        "all": [
+          {
+            "flag": "camp.slept"
+          },
+          {
+            "flag": "not.camp.nightResolved"
+          },
+          {
+            "flag": "not.camp.trapArmed"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "camp.tiresFlat"
+        },
+        {
+          "setFlag": "camp.nightResolved"
+        },
+        {
+          "clearFlag": "camp.slept"
+        }
+      ]
+    },
+    {
+      "id": "night-trap",
+      "on": {
+        "flag": "camp.slept"
+      },
+      "when": {
+        "all": [
+          {
+            "flag": "camp.slept"
+          },
+          {
+            "flag": "not.camp.nightResolved"
+          },
+          {
+            "flag": "camp.trapArmed"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "camp.trapSprung"
+        },
+        {
+          "setFlag": "camp.nightResolved"
+        },
+        {
+          "clearFlag": "camp.slept"
+        },
+        {
+          "clearFlag": "camp.trapArmed"
+        }
+      ]
+    },
+    {
+      "id": "tweezers",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 6
+          },
+          {
+            "flag": "camp.hasFleas"
+          }
+        ]
+      },
+      "then": [
+        {
+          "clearFlag": "camp.hasFleas"
+        },
+        {
+          "giveArtefact": 7
+        },
+        {
+          "setFlag": "camp.fleaCaught"
+        }
+      ],
+      "ok": "Tweezers close. The flea is yours — a diplomat in a matchbox."
+    },
+    {
+      "id": "bear-arrives",
+      "when": {
+        "all": [
+          {
+            "atScene": 7
+          },
+          {
+            "var": "camp.night",
+            ">": 0
+          },
+          {
+            "flag": "not.camp.bearGone"
+          },
+          {
+            "flag": "not.camp.bearHere"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "camp.bearHere"
+        }
+      ]
+    },
+    {
+      "id": "flea-bear",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 7
+          },
+          {
+            "atScene": 7
+          },
+          {
+            "flag": "camp.bearHere"
+          }
+        ]
+      },
+      "then": [
+        {
+          "clearFlag": "camp.bearHere"
+        },
+        {
+          "setFlag": "camp.bearGone"
+        }
+      ],
+      "ok": "You introduce the flea. The bear reconsiders every life choice and leaves at speed."
+    },
+    {
+      "id": "light-fire",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 10
+          },
+          {
+            "atScene": 2
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "camp.fireLit"
+        }
+      ],
+      "ok": "Spark eats tinder. The stone ring becomes a fire — a detail with heat."
+    },
+    {
+      "id": "eat-stew",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 13
+          },
+          {
+            "atScene": 2
+          },
+          {
+            "flag": "camp.fireLit"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setVar": "camp.energy",
+          "to": 3
+        },
+        {
+          "setFlag": "camp.stewEaten"
+        },
+        {
+          "setFlag": "camp.fed"
+        }
+      ],
+      "ok": "Stew lands like courage. Energy returns. A pot detail remembers the meal."
+    },
+    {
+      "id": "set-ladder",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 16
+          },
+          {
+            "atScene": 5
+          },
+          {
+            "var": "camp.energy",
+            ">": 1
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "camp.ladderSet"
+        }
+      ],
+      "ok": "The rope-ladder hugs the oak. Climb when you still have legs."
+    },
+    {
+      "id": "set-ladder-tired",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 16
+          },
+          {
+            "atScene": 5
+          },
+          {
+            "var": "camp.energy",
+            "<": 2
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "camp.triedClimbTired"
+        }
+      ],
+      "ok": "You fumble the ladder against the bark and fail. Eat. Then try again."
+    },
+    {
+      "id": "vantage",
+      "when": {
+        "all": [
+          {
+            "atScene": 6
+          },
+          {
+            "flag": "not.camp.sawVantage"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "camp.sawVantage"
+        }
+      ]
+    },
+    {
+      "id": "arm-trap",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 20
+          },
+          {
+            "atScene": 2
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "camp.trapArmed"
+        }
+      ],
+      "ok": "Snare set by the path. A detail of spite. Sleep safer."
+    },
+    {
+      "id": "pump",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 17
+          },
+          {
+            "atScene": 1
+          },
+          {
+            "flag": "camp.tiresFlat"
+          }
+        ]
+      },
+      "then": [
+        {
+          "clearFlag": "camp.tiresFlat"
+        },
+        {
+          "setVar": "camp.energy",
+          "to": 0
+        }
+      ],
+      "ok": "Tyres rise; you fall inward. Energy gone. The bike detail firms up — you will need food before the oak."
+    },
+    {
+      "id": "ride-home",
+      "on": "use",
+      "when": {
+        "all": [
+          {
+            "use": 21
+          },
+          {
+            "atScene": 1
+          },
+          {
+            "flag": "not.camp.tiresFlat"
+          },
+          {
+            "flag": "camp.sawVantage"
+          },
+          {
+            "flag": "camp.fed"
+          },
+          {
+            "flag": "not.camp.home"
+          }
+        ]
+      },
+      "then": [
+        {
+          "setFlag": "camp.home"
+        },
+        {
+          "grantBadge": "camp.trailwise"
+        }
+      ],
+      "ok": "You ride out less foolish than you arrived. The lane takes a different person home."
+    }
+  ],
+  "badges": [
+    {
+      "id": "camp.trailwise",
+      "title": "Trailwise",
+      "description": "Pitched, slept, read the woods from above, and rode home fed with firm tyres."
+    }
+  ],
+  "alchemy": [
+    {
+      "id": "make-tent",
+      "inputs": [
+        1,
+        2,
+        3
+      ],
+      "gives": 4,
+      "ok": "Sticks, cord, and sheet become an unpitched tent."
+    },
+    {
+      "id": "make-firekit",
+      "inputs": [
+        8,
+        9
+      ],
+      "gives": 10,
+      "ok": "Spark and tinder agree to be a fire kit."
+    },
+    {
+      "id": "make-stew",
+      "inputs": [
+        11,
+        12
+      ],
+      "gives": 13,
+      "ok": "Berries and oats become trail stew — still needs fire to matter."
+    },
+    {
+      "id": "make-ladder",
+      "inputs": [
+        14,
+        15
+      ],
+      "gives": 16,
+      "ok": "Vine and stake become a rope-ladder."
+    },
+    {
+      "id": "make-snare",
+      "inputs": [
+        18,
+        19
+      ],
+      "gives": 20,
+      "ok": "Wrapper and wire become a pest snare."
+    }
+  ]
+}

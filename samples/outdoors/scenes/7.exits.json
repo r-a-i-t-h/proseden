@@ -1,0 +1,25 @@
+[
+  {
+    "exitId": 14,
+    "nickname": "meadow",
+    "toSceneId": 2,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "flag:not.camp.bearHere;flag:camp.bearGone",
+    "whenDenied": "The bear fills the way back. Use a flea — or wait until it is gone."
+  },
+  {
+    "exitId": 15,
+    "nickname": "drift",
+    "toSceneId": 8,
+    "createdAt": "2026-08-24T17:00:00.000Z"
+  },
+  {
+    "exitId": 16,
+    "nickname": "ridge",
+    "toSceneId": 10,
+    "createdAt": "2026-08-24T17:00:00.000Z",
+    "when": "flag:camp.sawVantage,flag:not.camp.bearHere;flag:camp.sawVantage,flag:camp.bearGone",
+    "whenDenied": "Without the crown's seam, this gap is only more pine.",
+    "hidden": true
+  }
+]
