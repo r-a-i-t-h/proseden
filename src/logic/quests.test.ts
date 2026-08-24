@@ -17,6 +17,8 @@ import {
   matchAlchemyRecipe,
   parseQuestFile,
   questActionMessage,
+  questFileForDisk,
+  questGiveArtefactIds,
   sanitizeUserFlags,
   sanitizeUserVars,
   userQuestNamespace,
@@ -154,6 +156,37 @@ describe("quest names", () => {
       ],
     });
     expect(q.rules.map((r) => r.id)).toEqual(["ok"]);
+  });
+  it("parses and strips quest alchemy on disk; grants include alchemy gives", () => {
+    const q = parseQuestFile({
+      name: "demo",
+      rules: [{ id: "r", when: { holds: 1 }, then: [{ giveArtefact: 5 }] }],
+      alchemy: [
+        { id: "brew", inputs: [1, 2], gives: 9 },
+        { id: "mix", inputs: [3, { tag: "herb" }], gives: [10, 11] },
+      ],
+    });
+    expect(q.alchemy?.map((r) => r.id)).toEqual(["brew", "mix"]);
+    expect(questGiveArtefactIds(q).sort((a, b) => a - b)).toEqual([5, 9, 10, 11]);
+    const disk = questFileForDisk({ ...q, author: "alice" });
+    expect(disk).not.toHaveProperty("author");
+    expect(disk.alchemy).toEqual([
+      { id: "brew", inputs: [1, 2], gives: 9 },
+      { id: "mix", inputs: [3, { tag: "herb" }], gives: [10, 11] },
+    ]);
+    expect(questFileForDisk({ name: "demo", rules: [], alchemy: [] })).not.toHaveProperty(
+      "alchemy",
+    );
+  });
+
+  it("rejects invalid quest alchemy arrays", () => {
+    expect(() =>
+      parseQuestFile({
+        name: "demo",
+        rules: [],
+        alchemy: [{ id: "bad", inputs: [1], gives: 2 }],
+      }),
+    ).toThrow(QuestValidationError);
   });
 });
 

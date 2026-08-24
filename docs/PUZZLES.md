@@ -33,11 +33,11 @@ Rewards are prose (artefacts) and public badges — not a win screen.
 
 | Logic | Prose |
 |---|---|
-| Quests (`data/quests/<name>.json`) | Scenes, artefacts, exits |
+| Quests (`data/quests/<name>.json`, optional embedded `alchemy`) | Scenes, artefacts, exits |
 | Flags (`data/users/<name>.flags.json`) — invisible | Scene **body** — never conditional |
 | Vars (`data/users/<name>.vars.json`) — numeric | **Details** — hide by FlagRef condition |
 | Badges (`data/users/<name>.badges.json`) — profile | Scene **access** — FlagRef condition (teleport bypass lock) |
-| Alchemy recipes (`data/alchemy/recipes.json` + `alchemy/users/*.json`) | |
+| Alchemy recipes (`data/alchemy/recipes.json` + quest `alchemy` + `alchemy/users/*.json`) | |
 
 ---
 
@@ -206,14 +206,17 @@ badge …`, body = catalogue description when set).
 
 ## Alchemy (separate)
 
-Master file `data/alchemy/recipes.json` (managers via **Data → Alchemy**) plus
-per-user files `data/alchemy/users/<username>.json` (every signed-in user via
-Edit toolbar **Alchemy**). Editors load and save **file content**, not the
-merged in-memory list; a successful save rebuilds the merge immediately.
+Master file `data/alchemy/recipes.json` (managers via **Data → Alchemy**),
+optional **`alchemy` arrays on quest JSON** (manager and personal quest
+editors), plus per-user files `data/alchemy/users/<username>.json` (every
+signed-in user via Edit toolbar **Alchemy**). Master and user editors load
+and save **file content**, not the merged in-memory list; quest recipes are
+edited with the quest JSON. A successful save rebuilds the merge immediately.
 
 Alchemy files are **per-user / master**, not ACL-shared: friends with scene
 manage rights cannot edit your recipe file. Scene `canManage` only limits which
-artefacts a **user** recipe may `gives`.
+artefacts a **user** recipe (or personal-quest recipe) may `gives`. Manager
+quest recipes are unrestricted like master recipes.
 
 Inventory UI: collapsible **Alchemy** panel on `/inv`.
 
@@ -223,15 +226,16 @@ interface AlchemyRecipe {
   inputs: Array<number | { tag: string }>; // length >= 2
   gives: number | number[];
   ok?: string;
-  // author?: string — in-memory only for user recipes
+  // author?: string — in-memory only for user / personal-quest recipes
 }
 ```
 
-Combine uses master recipes first, then user files (sorted by username). User
-recipe ids are namespaced as `<username>/<id>`. Malformed user files are
-skipped. User recipes whose `gives` are not allowed for the author (missing
-artefact or no manage on home) are omitted from the merge and skipped again at
-combine time.
+Combine uses master recipes first, then quest-embedded recipes (loaded quest
+order), then user files (sorted by username). Quest recipe ids are namespaced
+as `<questName>/<id>`; user recipe ids as `<username>/<id>`. Malformed user
+files are skipped. User and personal-quest recipes whose `gives` are not
+allowed for the author (missing artefact or no manage on home) are omitted
+from the merge and skipped again at combine time.
 
 `POST /alchemy/combine` with 2+ artefact ids from inventory. First matching
 recipe wins. Gives result if not already held; inputs stay. Uncollect result
@@ -251,7 +255,7 @@ Quests may later notice results via `holds` → `setFlag`.
 ## Storage
 
 ```
-data/quests/<name>.json
+data/quests/<name>.json          # may include optional alchemy[]
 data/quests/users/<username>.json
 data/alchemy/recipes.json
 data/alchemy/users/<username>.json

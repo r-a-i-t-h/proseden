@@ -60,7 +60,8 @@ namespaces cannot collide.
   "title": "Demo quest",
   "description": "Manager notes only. Not shown to readers.",
   "rules": [],
-  "badges": []
+  "badges": [],
+  "alchemy": []
 }
 ```
 
@@ -70,6 +71,7 @@ namespaces cannot collide.
 | `title` / `description` | Optional labels for editors. |
 | `rules` | May be empty (still reserves the prefix). |
 | `badges` | Catalogue copy for the profile shelf. Granting needs a `grantBadge` in some rule’s `then`. |
+| `alchemy` | Optional recipes for this quest (same shape as master alchemy). Merged into live combine after master recipes; ids become `<questName>/<id>`. Omit or `[]` when unused. |
 
 ---
 
@@ -250,8 +252,32 @@ After Use or Input, the reader sees that rule’s `ok`, or **Done.**, or
 
 ---
 
+## Alchemy (optional on the quest)
+
+Same recipe objects as master / user alchemy files. Prefer this when the
+recipe belongs to the quest’s puzzle rather than the world-wide master list.
+
+```json
+{
+  "id": "brew-tonic",
+  "inputs": [12, { "tag": "herb" }],
+  "gives": 99,
+  "ok": "The tonic clarifies."
+}
+```
+
+Live merge order for combine: master `alchemy/recipes.json`, then each loaded
+quest’s `alchemy` (manager quests first, then personal), then
+`alchemy/users/*.json`. Quest recipe ids are namespaced as
+`<quest.name>/<id>` (for example `demo/brew-tonic` or `user.bob/brew-tonic`).
+
+Personal quest alchemy uses the same home-scene manage ACL as `giveArtefact`
+and user alchemy `gives`.
+
+---
+
 ## Validation
 
 On save, bad rules are rejected for the editor path; on load, bad rules are
 skipped so the rest of the file still runs. Whole-file failures still apply
-for a missing/invalid `name` or non-object JSON.
+for a missing/invalid `name`, non-object JSON, or invalid `alchemy` array.

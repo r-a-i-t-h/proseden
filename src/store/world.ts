@@ -505,7 +505,7 @@ export class WorldStore implements AccessWorld {
         if (!this.userQuestGrantsAllowed(username, parsed)) {
           logQuestFault(
             `quest user ${username}: grant not allowed`,
-            new Error("canManage required on home scene for each giveArtefact"),
+            new Error("canManage required on home scene for each giveArtefact / quest alchemy gives"),
           );
           continue;
         }
@@ -539,8 +539,27 @@ export class WorldStore implements AccessWorld {
     }
     this.masterAlchemyRecipes = master;
 
-    const userFiles = new Map<string, AlchemyRecipe[]>();
     const merged: AlchemyRecipe[] = [...master];
+
+    // Quest-embedded recipes (manager + ACL-approved personal), after master.
+    for (const quest of this.quests) {
+      for (const recipe of quest.alchemy ?? []) {
+        if (quest.author && !this.userAlchemyRecipeGrantsAllowed(quest.author, recipe)) {
+          logQuestFault(
+            `alchemy quest ${quest.name} recipe ${recipe.id}: grant not allowed`,
+            new Error("canManage required on home scene for each gives artefact"),
+          );
+          continue;
+        }
+        merged.push({
+          ...recipe,
+          id: `${quest.name}/${recipe.id}`,
+          ...(quest.author ? { author: quest.author } : {}),
+        });
+      }
+    }
+
+    const userFiles = new Map<string, AlchemyRecipe[]>();
     const usersDir = join(this.dataDir, "alchemy", "users");
     for (const file of await listFiles(usersDir, ".json")) {
       const username = file.replace(/\.json$/, "");
@@ -565,7 +584,7 @@ export class WorldStore implements AccessWorld {
         logQuestFault(`load alchemy users/${file}`, err);
       }
     }
-    // Stable order among users (listFiles is sorted); master already first.
+    // Order: master → quests (this.quests order) → users (listFiles sorted).
     this.userAlchemyFiles = userFiles;
     this.alchemyRecipes = merged;
   }
@@ -636,12 +655,12 @@ export class WorldStore implements AccessWorld {
     for (const gid of questGiveArtefactIds(quest)) {
       const artefact = this.getArtefact(gid);
       if (!artefact) {
-        throw new QuestValidationError(`giveArtefact ${gid} does not exist`);
+        throw new QuestValidationError(`grant artefact ${gid} does not exist`);
       }
       const home = this.getScene(artefact.homeSceneId);
       if (!home || !canManage(author, home, this)) {
         throw new QuestValidationError(
-          `can only giveArtefact ${gid} if you own or manage its home scene`,
+          `can only grant artefact ${gid} if you own or manage its home scene`,
         );
       }
     }

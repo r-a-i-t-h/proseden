@@ -82,12 +82,15 @@ export function parseQuestFile(raw: unknown): QuestFile {
     }
   }
   const badges = o.badges !== undefined ? parseBadges(o.badges, name) : undefined;
+  const alchemy =
+    o.alchemy !== undefined ? parseAlchemyRecipes(o.alchemy) : undefined;
   return {
     name,
     title: o.title !== undefined ? String(o.title) : undefined,
     description: o.description !== undefined ? String(o.description) : undefined,
     rules,
     badges,
+    ...(alchemy && alchemy.length > 0 ? { alchemy } : {}),
   };
 }
 
@@ -692,7 +695,10 @@ export function alchemyGivesIds(recipe: AlchemyRecipe): number[] {
   return Array.isArray(recipe.gives) ? recipe.gives : [recipe.gives];
 }
 
-/** Artefact ids a quest may grant via then giveArtefact. */
+/**
+ * Artefact ids a quest may grant via `giveArtefact` or quest-embedded alchemy
+ * `gives` (used for personal-quest ACL).
+ */
 export function questGiveArtefactIds(quest: QuestFile): number[] {
   const ids: number[] = [];
   for (const rule of quest.rules ?? []) {
@@ -700,13 +706,23 @@ export function questGiveArtefactIds(quest: QuestFile): number[] {
       if ("giveArtefact" in effect) ids.push(effect.giveArtefact);
     }
   }
+  for (const recipe of quest.alchemy ?? []) {
+    ids.push(...alchemyGivesIds(recipe));
+  }
   return ids;
 }
 
 /** Strip in-memory-only fields before writing a quest file. */
 export function questFileForDisk(quest: QuestFile): QuestFile {
   const { author: _author, ...rest } = quest;
-  return rest;
+  if (!rest.alchemy?.length) {
+    const { alchemy: _alchemy, ...withoutAlchemy } = rest;
+    return withoutAlchemy;
+  }
+  return {
+    ...rest,
+    alchemy: alchemyRecipesForDisk(rest.alchemy),
+  };
 }
 
 /** Strip in-memory-only fields before writing a recipe file. */

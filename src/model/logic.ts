@@ -81,6 +81,8 @@ export interface QuestFile {
   description?: string;
   rules: QuestRule[];
   badges?: BadgeDef[];
+  /** Optional alchemy recipes owned by this quest (merged into live recipes on load). */
+  alchemy?: AlchemyRecipe[];
   /**
    * In-memory only: set when loaded from `quests/users/<author>.json`
    * (`name` is `user.<author>`). Absent on manager quests. Never persisted to disk.
@@ -94,8 +96,8 @@ export interface AlchemyRecipe {
   gives: number | number[];
   ok?: string;
   /**
-   * In-memory only: set when loaded from `alchemy/users/<author>.json`.
-   * Absent on master recipes. Never persisted to disk.
+   * In-memory only: set for user alchemy files and personal-quest alchemy.
+   * Absent on master and manager-quest recipes. Never persisted to disk.
    */
   author?: string;
 }

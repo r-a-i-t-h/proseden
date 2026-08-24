@@ -261,4 +261,80 @@ describe("multi-user alchemy", () => {
     expect(world.getUserAlchemyRecipes("bob")[0]?.id).toBe("from-form");
     expect(world.masterAlchemyRecipes).toEqual([]);
   });
+
+  it("merges manager quest alchemy after master and before user recipes", async () => {
+    await world.saveAlchemyRecipes([
+      { id: "master-mix", inputs: [ingredientA, ingredientB], gives: aliceArt },
+    ]);
+    await world.saveQuest({
+      name: "lab",
+      rules: [],
+      alchemy: [{ id: "tonic", inputs: [ingredientA, ingredientB], gives: aliceArt }],
+    });
+    await world.saveUserAlchemy("bob", [
+      { id: "bob-mix", inputs: [ingredientA, ingredientB], gives: bobArt },
+    ]);
+
+    expect(world.alchemyRecipes.map((r) => r.id)).toEqual([
+      "master-mix",
+      "lab/tonic",
+      "bob/bob-mix",
+    ]);
+    expect(world.alchemyRecipes.find((r) => r.id === "lab/tonic")?.author).toBeUndefined();
+  });
+
+  it("combine matches manager quest alchemy recipes", async () => {
+    await world.saveQuest({
+      name: "lab",
+      rules: [],
+      alchemy: [{ id: "tonic", inputs: [ingredientA, ingredientB], gives: aliceArt, ok: "Brewed." }],
+    });
+    await world.collectArtefact("bob", ingredientA);
+    await world.collectArtefact("bob", ingredientB);
+
+    const res = await app().request("/alchemy/combine", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${bobToken}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ artefactIds: [ingredientA, ingredientB] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { recipeId: string; gives: number[]; ok?: string };
+    expect(body.recipeId).toBe("lab/tonic");
+    expect(body.gives).toEqual([aliceArt]);
+  });
+
+  it("personal quest alchemy is ACL-checked like giveArtefact", async () => {
+    await world.setStaffRoles("bob", ["questor"]);
+    await expect(
+      world.saveUserQuest("bob", {
+        name: "user.bob",
+        rules: [],
+        alchemy: [{ id: "steal", inputs: [ingredientA, ingredientB], gives: aliceArt }],
+      }),
+    ).rejects.toThrow(/own or manage its home scene/);
+
+    await world.saveUserQuest("bob", {
+      name: "user.bob",
+      rules: [],
+      alchemy: [{ id: "brew", inputs: [ingredientA, ingredientB], gives: bobArt }],
+    });
+    expect(world.alchemyRecipes.map((r) => r.id)).toContain("user.bob/brew");
+    expect(world.alchemyRecipes.find((r) => r.id === "user.bob/brew")?.author).toBe("bob");
+  });
+
+  it("cold-loads quest alchemy after restart", async () => {
+    await world.saveQuest({
+      name: "lab",
+      rules: [],
+      alchemy: [{ id: "tonic", inputs: [ingredientA, ingredientB], gives: aliceArt }],
+    });
+    const reloaded = new WorldStore(dataDir);
+    await reloaded.load();
+    expect(reloaded.alchemyRecipes.map((r) => r.id)).toContain("lab/tonic");
+    expect(reloaded.getQuest("lab")?.alchemy?.[0]?.id).toBe("tonic");
+  });
 });
