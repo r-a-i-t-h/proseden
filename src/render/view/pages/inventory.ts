@@ -34,8 +34,7 @@ export function inventoryPageView(
       )
     : para("Empty — collect artefacts you love.", "muted");
 
-  const alchemyOpen = Boolean(alchemy?.alchemyOk || alchemy?.alchemyError);
-  const alchemyNotice = alchemy?.alchemyOk
+  const flash = alchemy?.alchemyOk
     ? notice(alchemy.alchemyOk)
     : alchemy?.alchemyError
       ? notice(alchemy.alchemyError, "error")
@@ -61,38 +60,42 @@ export function inventoryPageView(
         button("Combine selected"),
       );
 
+  const textLines = ["[Inventory]", ""];
+  if (alchemy?.alchemyOk) textLines.push(alchemy.alchemyOk, "");
+  else if (alchemy?.alchemyError) textLines.push(alchemy.alchemyError, "");
+  textLines.push(
+    items.length
+      ? items
+          .map((a) => {
+            const label = a.title ?? `artefact ${a.id}`;
+            const tags = a.tags.length ? ` [${a.tags.join(", ")}]` : "";
+            return `  ${a.id}. ${label}${tags}  {base}/a/${a.id}`;
+          })
+          .join("\n")
+      : "(empty)",
+  );
+
   return pageView(
     "Inventory",
     nodes(
       backCrumb(back),
       heading(1, "Inventory"),
+      flash,
       list,
       htmlOnly(
         detailsSection(
           "Alchemy",
           nodes(
-            alchemyNotice,
             muted("Select two or more holdings and combine them. Recipes are world-defined."),
             picks,
           ),
-          { open: alchemyOpen, class: "alchemy-panel", attrs: { "data-alchemy-panel": "" } },
+          {
+            class: "alchemy-panel",
+            attrs: { "data-persist-open": "proseden-alchemy-open" },
+          },
         ),
       ),
-      textOnly(
-        rawText([
-          "[Inventory]",
-          "",
-          items.length
-            ? items
-                .map((a) => {
-                  const label = a.title ?? `artefact ${a.id}`;
-                  const tags = a.tags.length ? ` [${a.tags.join(", ")}]` : "";
-                  return `  ${a.id}. ${label}${tags}  {base}/a/${a.id}`;
-                })
-                .join("\n")
-            : "(empty)",
-        ]),
-      ),
+      textOnly(rawText(textLines)),
     ),
   );
 }

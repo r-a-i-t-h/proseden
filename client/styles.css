@@ -647,22 +647,26 @@ details.edit-condition > summary:hover {
 details.alchemy-panel,
 details.profile-section,
 details.messages-compose,
-details.live-online-wrap {
+details.live-online-wrap,
+details.live-admin-section {
   margin-top: 2rem;
 }
 
-.profile-section {
+.profile-section,
+.live-admin-section {
   margin-bottom: 0;
 }
 
-.profile-section > summary {
+.profile-section > summary,
+.live-admin-section > summary {
   font-family: Fraunces, Georgia, serif;
   font-size: 1.15rem;
   color: var(--moss);
   cursor: pointer;
 }
 
-.profile-section > summary:hover {
+.profile-section > summary:hover,
+.live-admin-section > summary:hover {
   color: var(--leaf);
 }
 
@@ -1046,8 +1050,15 @@ button.linkish {
 .live-admin-table th,
 .live-admin-table td {
   text-align: left;
-  padding: 0.35rem 0.5rem;
+  vertical-align: baseline;
+  padding: 0.25rem 0.5rem 0.25rem 0;
   border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.live-admin-table td > p {
+  margin: 0;
+  display: inline;
 }
 
 .live-toasts {

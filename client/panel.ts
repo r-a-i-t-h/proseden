@@ -198,24 +198,26 @@ function wireAuthPanelFocus(): void {
 }
 
 wireAuthPanelFocus();
-wireAlchemyPanel();
+wirePersistedDetails();
 bootPanel();
 
-const ALCHEMY_OPEN_KEY = "proseden-alchemy-open";
+/**
+ * Persist <details data-persist-open="storage-key"> open/closed across navigations.
+ * Stored "1"/"0" overrides the markup default; absent key leaves the server default.
+ */
+function wirePersistedDetails(): void {
+  for (const panel of Array.from(
+    document.querySelectorAll<HTMLDetailsElement>("details[data-persist-open]"),
+  )) {
+    const key = panel.getAttribute("data-persist-open");
+    if (!key) continue;
 
-/** Persist Inventory Alchemy <details> open state across combine redirects. */
-function wireAlchemyPanel(): void {
-  const panel = document.querySelector<HTMLDetailsElement>("details[data-alchemy-panel]");
-  if (!panel) return;
+    const stored = localStorage.getItem(key);
+    if (stored === "1") panel.open = true;
+    else if (stored === "0") panel.open = false;
 
-  if (panel.open) {
-    localStorage.setItem(ALCHEMY_OPEN_KEY, "1");
-  } else if (localStorage.getItem(ALCHEMY_OPEN_KEY) === "1") {
-    panel.open = true;
+    panel.addEventListener("toggle", () => {
+      localStorage.setItem(key, panel.open ? "1" : "0");
+    });
   }
-
-  panel.addEventListener("toggle", () => {
-    if (panel.open) localStorage.setItem(ALCHEMY_OPEN_KEY, "1");
-    else localStorage.removeItem(ALCHEMY_OPEN_KEY);
-  });
 }

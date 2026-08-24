@@ -1,14 +1,19 @@
+import { userPath } from "../../entity.js";
+import { escapeHtml } from "../../prose.js";
+import { relativeAgeHtml } from "../../relative-age.js";
 import {
   button,
+  detailsSection,
   form,
   heading,
+  htmlOnly,
   muted,
   nodes,
   pageView,
   rawText,
   table,
   textOnly,
-  userLink,
+  unsafeHtml,
 } from "../factories.js";
 import type { Node, PageView } from "../types.js";
 import { backCrumb, type PageBackLink } from "./profile.js";
@@ -61,6 +66,18 @@ function securityToggle(opts: {
   };
 }
 
+function persistDetails(
+  summary: string,
+  children: Node[],
+  storageKey: string,
+): Node {
+  return detailsSection(summary, children, {
+    open: true,
+    class: "live-admin-section",
+    attrs: { "data-persist-open": storageKey },
+  });
+}
+
 export function liveAdminPageView(opts: {
   users: LiveAdminUser[];
   buffers: LiveAdminBuffer[];
@@ -68,12 +85,12 @@ export function liveAdminPageView(opts: {
   security?: LiveAdminSecurity;
 }): PageView {
   const userRows = opts.users.map((u) => {
-    const name: Node = u.userKey.startsWith("g:")
-      ? { type: "para", text: u.username }
-      : userLink(u.username);
+    const name = u.userKey.startsWith("g:")
+      ? escapeHtml(u.username)
+      : `<a href="${userPath(u.username)}">${escapeHtml(u.username)}</a>`;
     const loc =
       u.lastSceneId !== undefined
-        ? `${u.sceneTitle ?? "Untitled"} (#${u.lastSceneId})`
+        ? `${escapeHtml(u.sceneTitle ?? "Untitled")} (#${u.lastSceneId})`
         : "—";
     const kick: Node = u.live
       ? form(
@@ -81,17 +98,12 @@ export function liveAdminPageView(opts: {
           { type: "field", label: "", control: { type: "hidden", name: "userKey", value: u.userKey } },
           button("Kick"),
         )
-      : { type: "para", text: "" };
+      : unsafeHtml("");
     return {
       cells: [
-        {
-          type: "fragment" as const,
-          children: [name, u.live ? muted("live") : undefined].filter(Boolean) as Node[],
-        },
-        u.lastSeenAt
-          ? { type: "muted" as const, parts: [{ type: "relativeAge" as const, iso: u.lastSeenAt }] }
-          : { type: "para" as const, text: "—" },
-        { type: "para" as const, text: loc },
+        unsafeHtml(`${name}${u.live ? ' <span class="muted">live</span>' : ""}`),
+        unsafeHtml(u.lastSeenAt ? relativeAgeHtml(u.lastSeenAt) : "—"),
+        unsafeHtml(loc),
         kick,
       ],
     };
@@ -99,73 +111,74 @@ export function liveAdminPageView(opts: {
 
   const bufRows = opts.buffers.map((b) => {
     const label =
-      b.sceneId === "shouts" ? "Shouts" : `${b.sceneTitle ?? "Untitled"} (#${b.sceneId})`;
+      b.sceneId === "shouts"
+        ? "Shouts"
+        : `${escapeHtml(b.sceneTitle ?? "Untitled")} (#${b.sceneId})`;
     return {
       cells: [
-        { type: "para" as const, text: label },
-        { type: "para" as const, text: String(b.count) },
-        b.oldestAt
-          ? { type: "muted" as const, parts: [{ type: "relativeAge" as const, iso: b.oldestAt }] }
-          : { type: "para" as const, text: "—" },
-        b.newestAt
-          ? { type: "muted" as const, parts: [{ type: "relativeAge" as const, iso: b.newestAt }] }
-          : { type: "para" as const, text: "—" },
+        unsafeHtml(label),
+        unsafeHtml(String(b.count)),
+        unsafeHtml(b.oldestAt ? relativeAgeHtml(b.oldestAt) : "—"),
+        unsafeHtml(b.newestAt ? relativeAgeHtml(b.newestAt) : "—"),
       ],
     };
   });
 
   const security = opts.security;
-  const securityNodes = security
-    ? nodes(
-        heading(2, "Security"),
-        muted("Manager-only kill switches for abuse response. Existing sessions may linger briefly."),
-        heading(3, "Live"),
-        securityToggle({
-          enabled: security.guestLiveEnabled,
-          action: "live/admin/guest-live",
-          onHelp: "Guests may open Live on public scenes. Disable if anonymous presence or chat becomes abusive.",
-          offHelp: "Guest Live is off. Only signed-in readers can connect.",
-          disableLabel: "Disable guest live",
-          enableLabel: "Enable guest live",
-        }),
-        securityToggle({
-          enabled: security.liveChatEnabled,
-          action: "live/admin/live-chat",
-          onHelp: "Say and shout are allowed. Disable to keep presence while blocking new chat.",
-          offHelp: "Live chat is off. Presence and join still work; say and shout are blocked.",
-          disableLabel: "Disable live chat",
-          enableLabel: "Enable live chat",
-        }),
-        heading(3, "Access"),
-        securityToggle({
-          enabled: security.registrationEnabled,
-          action: "live/admin/registration",
-          onHelp: "Anyone may create an account. Disable to stop new sign-ups during abuse.",
-          offHelp: "New registrations are off. Existing accounts may still log in.",
-          disableLabel: "Disable registration",
-          enableLabel: "Enable registration",
-        }),
-        securityToggle({
-          enabled: security.nonManagerEditingEnabled,
-          action: "live/admin/non-manager-editing",
-          onHelp:
-            "Signed-in readers may edit scenes, artefacts, exits, and profile when they have rights.",
-          offHelp:
-            "Editing is off for non-managers. Gameplay, chat, and inbox still work; only managers may change content.",
-          disableLabel: "Disable non-manager editing",
-          enableLabel: "Enable non-manager editing",
-        }),
-        securityToggle({
-          enabled: security.nonManagerViewEnabled,
-          action: "live/admin/non-manager-view",
-          onHelp: "The site is readable as usual.",
-          offHelp:
-            "The site is closed to non-managers. Only managers may view pages; others see a login screen.",
-          disableLabel: "Close site to non-managers",
-          enableLabel: "Open site to non-managers",
-        }),
+  const securitySection = security
+    ? persistDetails(
+        "Security",
+        nodes(
+          muted("Manager-only kill switches for abuse response. Existing sessions may linger briefly."),
+          heading(3, "Live"),
+          securityToggle({
+            enabled: security.guestLiveEnabled,
+            action: "live/admin/guest-live",
+            onHelp: "Guests may open Live on public scenes. Disable if anonymous presence or chat becomes abusive.",
+            offHelp: "Guest Live is off. Only signed-in readers can connect.",
+            disableLabel: "Disable guest live",
+            enableLabel: "Enable guest live",
+          }),
+          securityToggle({
+            enabled: security.liveChatEnabled,
+            action: "live/admin/live-chat",
+            onHelp: "Say and shout are allowed. Disable to keep presence while blocking new chat.",
+            offHelp: "Live chat is off. Presence and join still work; say and shout are blocked.",
+            disableLabel: "Disable live chat",
+            enableLabel: "Enable live chat",
+          }),
+          heading(3, "Access"),
+          securityToggle({
+            enabled: security.registrationEnabled,
+            action: "live/admin/registration",
+            onHelp: "Anyone may create an account. Disable to stop new sign-ups during abuse.",
+            offHelp: "New registrations are off. Existing accounts may still log in.",
+            disableLabel: "Disable registration",
+            enableLabel: "Enable registration",
+          }),
+          securityToggle({
+            enabled: security.nonManagerEditingEnabled,
+            action: "live/admin/non-manager-editing",
+            onHelp:
+              "Signed-in readers may edit scenes, artefacts, exits, and profile when they have rights.",
+            offHelp:
+              "Editing is off for non-managers. Gameplay, chat, and inbox still work; only managers may change content.",
+            disableLabel: "Disable non-manager editing",
+            enableLabel: "Enable non-manager editing",
+          }),
+          securityToggle({
+            enabled: security.nonManagerViewEnabled,
+            action: "live/admin/non-manager-view",
+            onHelp: "The site is readable as usual.",
+            offHelp:
+              "The site is closed to non-managers. Only managers may view pages; others see a login screen.",
+            disableLabel: "Close site to non-managers",
+            enableLabel: "Open site to non-managers",
+          }),
+        ),
+        "proseden-live-admin-security",
       )
-    : [];
+    : undefined;
 
   const textLines = [
     "Live admin",
@@ -205,21 +218,35 @@ export function liveAdminPageView(opts: {
       muted(
         "Recently seen users and in-memory chat buffer stats (no message text). Kick drops a live connection immediately.",
       ),
-      heading(2, "Users"),
-      table(["User", "Last seen", "Location", ""], userRows, {
-        class: "live-admin-table",
-        empty: "None yet",
-      }),
-      heading(2, "Chat buffers"),
-      table(["Scene", "Count", "Oldest", "Newest"], bufRows, {
-        class: "live-admin-table",
-        empty: "Empty",
-      }),
-      form(
-        { method: "post", action: "live/admin/purge", class: "stack" },
-        button("Purge all chats", { class: "edit-danger" }),
+      htmlOnly(
+        ...nodes(
+          persistDetails(
+            "Users",
+            [
+              table(["User", "Last seen", "Location", ""], userRows, {
+                class: "live-admin-table",
+                empty: "None yet",
+              }),
+            ],
+            "proseden-live-admin-users",
+          ),
+          persistDetails(
+            "Chat buffers",
+            [
+              table(["Scene", "Count", "Oldest", "Newest"], bufRows, {
+                class: "live-admin-table",
+                empty: "Empty",
+              }),
+              form(
+                { method: "post", action: "live/admin/purge", class: "stack" },
+                button("Purge all chats", { class: "edit-danger" }),
+              ),
+            ],
+            "proseden-live-admin-buffers",
+          ),
+          securitySection,
+        ),
       ),
-      ...securityNodes,
       textOnly(rawText(textLines)),
     ),
   );
