@@ -2,7 +2,7 @@
 
 A prose-driven textual world served over HTTP. Scenes and artefacts are plain descriptions with optional closer details. Public scenes are open to anyone; private scenes and edits require authentication.
 
-See [LIVE.md](docs/LIVE.md) for presence/chat and [SPEC.md](docs/SPEC.md) for the product vision, [NAVIGATION.md](docs/NAVIGATION.md) for teleport vs exit navigation, and [MULTI_INSTANCE.md](docs/MULTI_INSTANCE.md) for hosting several worlds under one domain. Quests, flags, gated prose, and artefact alchemy are described in **[PUZZLES.md](docs/PUZZLES.md)**; the quest file format is **[QUESTS.md](docs/QUESTS.md)**. To put Proseden on a VPS behind nginx, follow **[DEPLOY.md](DEPLOY.md)** (installer, updates, DNS, HTTPS). How a version bump becomes that tarball is **[RELEASE.md](docs/RELEASE.md)**. This README covers the v1 implementation.
+See [LIVE.md](docs/LIVE.md) for presence/chat and [SPEC.md](docs/SPEC.md) for the product vision, [NAVIGATION.md](docs/NAVIGATION.md) for teleport vs exit navigation, and [MULTI_INSTANCE.md](docs/MULTI_INSTANCE.md) for hosting several worlds under one domain. Quests, flags, gated prose, and artefact alchemy are described in **[PUZZLES.md](docs/PUZZLES.md)**; the quest file format is **[QUESTS.md](docs/QUESTS.md)**. To put Proseden on a VPS behind nginx, follow **[DEPLOY.md](DEPLOY.md)** (unpack a release, systemd, DNS, HTTPS). Scripted installation and management live in **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)**. How a version bump becomes a tarball is **[RELEASE.md](docs/RELEASE.md)**. This README covers the v1 implementation.
 
 ## Quick start
 
@@ -30,21 +30,17 @@ Environment:
 | `PROSEDEN_BASE_PATH` | _(empty)_ | URL prefix for subdirectory deploy, e.g. `proseden` or `worlds/alpha` |
 | `PROSEDEN_MANAGERS` | _(empty)_ | Comma-separated usernames granted `manager` on boot (may pre-provision names not yet registered) |
 | `PROSEDEN_SECURE_COOKIES` | _(empty)_ | Set `1` to mark session cookies `Secure` (also on when `NODE_ENV=production`) |
-| `PROSEDEN_BACKUP` | sibling `backup/` of the data dir | Timestamped `data/` archives (Admin + `proseden-update`) |
+| `PROSEDEN_BACKUP` | sibling `backup/` of the data dir | Timestamped `data/` archives (Data page and `deploy/backup-data.sh`) |
 
 Seed login: **admin** / **admin**. Change it from **Profile** after you log in.
 
 ## Deploy on a VPS
 
-Novice-friendly walkthrough (DNS, Node, nginx, two subdomains, HTTPS, updates): **[DEPLOY.md](DEPLOY.md)**.
+Hand-install walkthrough (DNS, Node, nginx, systemd, HTTPS, updates): **[DEPLOY.md](DEPLOY.md)**.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/r-a-i-t-h/node-vps-kit/main/install.sh \
-  | sudo bash -s -- --app proseden \
-      --name www --server-name www.proseden.co.uk --port 3336
-```
+For scripted installation and instance management, use **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)**.
 
-Install/update live in **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)** (`--app proseden`). Each instance keeps its own app copy and `data/` directory. `sudo proseden-update --name test` upgrades only that world. Releases are GitHub Release tarballs (`npm run release` then CI `npm run pack` on tag `v*`), not a live git checkout — see **[RELEASE.md](docs/RELEASE.md)**.
+Each instance keeps its own app copy and `data/` directory. Releases are GitHub Release tarballs (`npm run release` then CI `npm run pack` on tag `v*`), not a live git checkout — see **[RELEASE.md](docs/RELEASE.md)**.
 
 ### Subdirectory / multiple copies
 
@@ -158,7 +154,7 @@ backup/
   2026-08-11T201530Z.tar.gz   # data/ only; sibling of data/, never nested inside it
 ```
 
-Managers can create, download, and delete archives from **Data**. `proseden-update` writes one snapshot before it touches the app. See [DEPLOY.md](DEPLOY.md) for the SSH one-liner and restore notes.
+Managers can create, download, and delete archives from **Data**. Back up `data/` before swapping a release. See [DEPLOY.md](DEPLOY.md) for the SSH helper and restore notes.
 
 Prose files use YAML frontmatter plus `## detail:<slug>` sections. Hash-leading lines in body/detail text are saved escaped (`\#`, `\##`) so they cannot be mistaken for section markers.
 

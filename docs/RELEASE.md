@@ -1,8 +1,8 @@
 # Proseden release build
 
-This is the maintainer walkthrough of how a version bump becomes a tarball a VPS can install. The operator-facing install/update steps live in [DEPLOY.md](../DEPLOY.md). This document is the *why* and *how* of packaging.
+This is the maintainer walkthrough of how a version bump becomes a tarball a VPS can install. The operator-facing unpack, systemd, nginx, and update steps live in [DEPLOY.md](../DEPLOY.md). This document is the *why* and *how* of packaging.
 
-The VPS never clones this git repo. `dist/` is not in git. A running instance downloads a **built** archive from a GitHub Release: compiled server, client CSS/JS, seed world, production libraries, and deploy hooks.
+The VPS never clones this git repo. `dist/` is not in git. A running instance is a **built** archive from a GitHub Release: compiled server, client CSS/JS, seed world, production libraries, and deploy hooks.
 
 ```
 laptop                          GitHub                            VPS
@@ -16,8 +16,7 @@ npm run release -- --patch
                                    npm run pack
                                      (scripts/pack-release.sh)
                                    gh release create
-                                     + attach tarballs     →  proseden-install / -update
-                                                                download proseden.tar.gz
+                                     + attach tarballs     →  download proseden.tar.gz
                                                                 unpack to releases/vX.Y.Z
                                                                 point current, migrate, restart
 ```
@@ -41,7 +40,7 @@ Pushing the tag is the trigger. Packaging is CI.
 | `package.json` scripts `release` / `pack` | Thin wrappers around those two files. |
 | `package-lock.json` | Pins every npm package. `npm ci` refuses to guess. |
 | `.gitignore` | Ignores `dist/`, `dist-release/`, `public/assets/`, `/data/`. |
-| `deploy/*.sh` | Shipped *inside* the tarball. Install/update are shims to [node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit); `post-update.sh` / `migrate.sh` run on the VPS after a swap. |
+| `deploy/*.sh` | Shipped *inside* the tarball. `post-update.sh` / `migrate.sh` run on the VPS after a swap; `backup-data.sh` archives `data/`. |
 
 `dist-release/` is **this repo’s** output directory, not a GitHub platform convention. The pack script writes it; the workflow YAML hardcodes the same path when attaching assets. It is gitignored so local packs never get committed.
 
@@ -233,7 +232,7 @@ Two identical files, two names:
 
 | File | Why |
 |---|---|
-| `dist-release/proseden.tar.gz` | Stable name. node-vps-kit asks GitHub for the latest Release and downloads this asset. |
+| `dist-release/proseden.tar.gz` | Stable name. GitHub Releases serve this as `…/latest/download/proseden.tar.gz`. |
 | `dist-release/proseden-v0.2.4.tar.gz` | Versioned name, so older Releases stay identifiable if you keep copies around. |
 
 On Actions, `gh release create` attaches **both**. After `trap` runs, `$STAGE` is gone; `$ROOT/dist-release/` is what the next workflow step uploads.
@@ -251,7 +250,7 @@ proseden/
   dist/                   # compiled server
   public/assets/          # Vite CSS/JS
   seed/                   # copied into data/ on first boot only
-  deploy/                 # shims + post-update + migrations + nginx snippets
+  deploy/                 # post-update, migrations, backup helper, nginx snippets, systemd unit
   node_modules/           # production deps only
 ```
 
@@ -263,7 +262,7 @@ proseden/
 - `devDependencies` — no TypeScript, Vite, or Vitest on the server.
 - `package-lock.json` and `*.map` — stripped after the production install.
 
-That split is the whole point of packing: the VPS gets a runnable tree; world state lives beside it (`data/`, `env`) and survives `proseden-update`.
+That split is the whole point of packing: the VPS gets a runnable tree; world state lives beside it (`data/`, `env`) and survives swapping `current` to a new release.
 
 ---
 
@@ -271,14 +270,14 @@ That split is the whole point of packing: the VPS gets a runnable tree; world st
 
 Covered in detail in [DEPLOY.md](../DEPLOY.md). Short version:
 
-1. `proseden-install` / `proseden-update` (from node-vps-kit, `--app proseden`) ask GitHub for a Release (`latest` or `--version vX.Y.Z`) and download `proseden.tar.gz`.
+1. Download `proseden.tar.gz` from a GitHub Release (`latest` or a pinned tag).
 2. Unpack to `/opt/proseden/<name>/releases/vX.Y.Z/`.
 3. Point `current` at that directory. `data/` and `env` sit next to `releases/` and are **not** inside the tarball.
 4. On update: backup `data/`, run `deploy/post-update.sh` (migrations), restart systemd.
 
-`--tarball dist-release/proseden.tar.gz` skips GitHub and installs a pack you built locally. Useful before you trust a tag.
+A local `dist-release/proseden.tar.gz` unpacks the same way. Useful before you trust a tag.
 
-`deploy/install.sh` and `deploy/update.sh` in the repo (and therefore in the tarball) are thin shims that exec node-vps-kit. The kit is the installer; the release only needs to be a complete app tree plus `post-update.sh`.
+The release is a complete app tree plus `post-update.sh`. It does not install itself.
 
 ---
 
@@ -333,7 +332,7 @@ Terms the pack script uses that are easy to skim past:
 | `npm ci` fails on the runner | `package.json` and `package-lock.json` disagree. `npm run release` updates both; a hand-edited version bump that skipped the lockfile will fail here. |
 | `pack-release: dist/server.js missing` | `tsc` did not emit. Check `npm run build` locally. |
 | `pack-release: public/assets missing` | Vite did not emit. Same. |
-| GitHub Release exists but VPS `could not read …/releases/latest` | Repo is private without `GITHUB_TOKEN` on the VPS, or no Release was published (the workflow failed after tagging). See [DEPLOY.md](../DEPLOY.md) troubleshooting. |
+| GitHub Release exists but the VPS cannot download `proseden.tar.gz` | Repo is private without a token on the VPS, or no Release was published (the workflow failed after tagging). See [DEPLOY.md](../DEPLOY.md) troubleshooting. |
 | Styles 404 on a fresh install | The process is running from a git clone or an incomplete pack, not a Release tarball that includes `public/assets`. |
 
 A failed pack fails the workflow; `gh release create` does not run. The git tag still exists. Fix, delete the GitHub-side draft if any, and either re-run the workflow or move to a new patch version. Do not retag a different commit with the same `vX.Y.Z` if that tag already reached other clones.
@@ -342,6 +341,6 @@ A failed pack fails the workflow; `gh release create` does not run. The git tag 
 
 ## 9. Related docs
 
-- [DEPLOY.md](../DEPLOY.md) — VPS install, nginx, HTTPS, updates, data backups.
+- [DEPLOY.md](../DEPLOY.md) — Hand unpack, systemd, nginx, HTTPS, updates, data backups.
 - [MULTI_INSTANCE.md](MULTI_INSTANCE.md) — several worlds on one host; the tarball is the same, `env` differs.
 - [README.md](../README.md) — local `npm run dev` / `npm start` (source tree, not a Release).
