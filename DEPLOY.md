@@ -277,18 +277,15 @@ Private repo: export `GITHUB_TOKEN` with `repo` read access before running insta
 
 ## Publishing a release (project maintainer)
 
-The VPS downloads a **built** archive, not the git tree. `dist/` is not in git.
+The VPS downloads a **built** archive, not the git tree. `dist/` is not in git. The full walkthrough of bump → tag → pack → GitHub Release is **[docs/RELEASE.md](docs/RELEASE.md)**.
 
-1. Make the GitHub repository public (or use a token on the VPS).
-2. From a clean checkout: bump `version` in `package.json` if needed, commit.
-3. Tag and push:
+Short version:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+npm run release -- --patch   # also --minor / --major
+# bumps package.json, commits, tags vX.Y.Z, pushes
+# GitHub Actions packs and attaches dist-release/proseden.tar.gz
 ```
-
-4. GitHub Actions (`.github/workflows/release.yml`) runs `npm run pack` and attaches `proseden.tar.gz` to the Release.
 
 To pack locally without tagging:
 

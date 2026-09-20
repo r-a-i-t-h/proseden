@@ -2,7 +2,7 @@
 
 A prose-driven textual world served over HTTP. Scenes and artefacts are plain descriptions with optional closer details. Public scenes are open to anyone; private scenes and edits require authentication.
 
-See [LIVE.md](docs/LIVE.md) for presence/chat and [SPEC.md](docs/SPEC.md) for the product vision, [NAVIGATION.md](docs/NAVIGATION.md) for teleport vs exit navigation, and [MULTI_INSTANCE.md](docs/MULTI_INSTANCE.md) for hosting several worlds under one domain. Quests, flags, gated prose, and artefact alchemy are described in **[PUZZLES.md](docs/PUZZLES.md)**; the quest file format is **[QUESTS.md](docs/QUESTS.md)**. To put Proseden on a VPS behind nginx, follow **[DEPLOY.md](DEPLOY.md)** (installer, updates, DNS, HTTPS). This README covers the v1 implementation.
+See [LIVE.md](docs/LIVE.md) for presence/chat and [SPEC.md](docs/SPEC.md) for the product vision, [NAVIGATION.md](docs/NAVIGATION.md) for teleport vs exit navigation, and [MULTI_INSTANCE.md](docs/MULTI_INSTANCE.md) for hosting several worlds under one domain. Quests, flags, gated prose, and artefact alchemy are described in **[PUZZLES.md](docs/PUZZLES.md)**; the quest file format is **[QUESTS.md](docs/QUESTS.md)**. To put Proseden on a VPS behind nginx, follow **[DEPLOY.md](DEPLOY.md)** (installer, updates, DNS, HTTPS). How a version bump becomes that tarball is **[RELEASE.md](docs/RELEASE.md)**. This README covers the v1 implementation.
 
 ## Quick start
 
@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/r-a-i-t-h/node-vps-kit/main/install
       --name www --server-name www.proseden.co.uk --port 3336
 ```
 
-Install/update live in **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)** (`--app proseden`). Each instance keeps its own app copy and `data/` directory. `sudo proseden-update --name test` upgrades only that world. Releases are GitHub Release tarballs (`npm run pack` / tag `v*`), not a live git checkout.
+Install/update live in **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)** (`--app proseden`). Each instance keeps its own app copy and `data/` directory. `sudo proseden-update --name test` upgrades only that world. Releases are GitHub Release tarballs (`npm run release` then CI `npm run pack` on tag `v*`), not a live git checkout — see **[RELEASE.md](docs/RELEASE.md)**.
 
 ### Subdirectory / multiple copies
 
