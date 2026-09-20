@@ -415,7 +415,7 @@ describe("HTTP teleport vs rights", () => {
     expect(location(res)).toBe(`/s/${ids.entrance}`);
   });
 
-  it("returns from an artefact to its inner home without entrance redirect", async () => {
+  it("returns from an artefact without moving Live off the current scene", async () => {
     const { app, world, tokens, ids } = harness;
     const art = await world.createArtefact({
       owner: "alice",
@@ -424,22 +424,57 @@ describe("HTTP teleport vs rights", () => {
       body: "A plaque on the wall.",
     });
 
+    const visit = await app.request(`/s/${ids.inner}?from=${ids.entrance}`, {
+      headers: auth(tokens.bob),
+    });
+    expect(visit.status).toBe(200);
+    expect(world.getUser("bob")?.lastSceneId).toBe(ids.inner);
+
     const page = await app.request(`/a/${art.id}`, {
       headers: auth(tokens.bob),
     });
     expect(page.status).toBe(200);
     const text = await page.text();
-    const homeHref = `/s/${ids.inner}?from=${ids.inner}`;
-    expect(text).toContain(homeHref);
+    expect(world.getUser("bob")?.lastSceneId).toBe(ids.inner);
+    expect(text).toContain(`← Scene ${ids.inner}`);
+    expect(text).toContain(`/s/${ids.inner}`);
+    expect(text).toContain(`home: /s/${ids.inner}?from=${ids.inner}`);
 
-    const home = await app.request(homeHref, {
+    const back = await app.request(`/s/${ids.inner}`, {
       headers: auth(tokens.bob, {
         Referer: `http://example.test/a/${art.id}`,
       }),
       redirect: "manual",
     });
-    expect(home.status).toBe(200);
-    expect(await home.text()).toContain("Inner Chamber");
+    expect(back.status).toBe(200);
+    expect(await back.text()).toContain("Inner Chamber");
+  });
+
+  it("forbids collecting an inner-home artefact from outside the entrance group", async () => {
+    const { app, tokens, ids, world } = harness;
+    const art = await world.createArtefact({
+      owner: "alice",
+      homeSceneId: ids.inner,
+      title: "Inner relic",
+      body: "Hidden.",
+    });
+
+    const outside = await app.request(`/a/${art.id}/collect`, {
+      method: "POST",
+      headers: { ...auth(tokens.bob), Accept: "application/json" },
+    });
+    expect(outside.status).toBe(403);
+    expect(await outside.json()).toMatchObject({
+      error: "Entrance to this area is not reachable.",
+    });
+    expect(world.getUser("bob")?.inventory.some((i) => i.artefactId === art.id)).toBe(false);
+
+    const inside = await app.request(`/a/${art.id}/collect?from=${ids.entrance}`, {
+      method: "POST",
+      headers: { ...auth(tokens.bob), Accept: "application/json" },
+    });
+    expect(inside.status).toBe(200);
+    expect(world.getUser("bob")?.inventory.some((i) => i.artefactId === art.id)).toBe(true);
   });
 });
 

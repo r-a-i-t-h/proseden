@@ -383,6 +383,29 @@ button:hover:not(.editor-tool):not(.mode-switch-btn):not(.linkish):not(.edit-too
   margin: 0.35rem 0;
 }
 
+.stat-list {
+  display: grid;
+  gap: 0.2rem 0;
+  margin: 0;
+}
+
+.stat-list .stat {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto;
+  gap: 0.35rem 1.25rem;
+  align-items: baseline;
+}
+
+.stat-list dt {
+  margin: 0;
+}
+
+.stat-list dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .exit-remove-item {
   display: flex;
   flex-direction: row;
@@ -396,6 +419,21 @@ button:hover:not(.editor-tool):not(.mode-switch-btn):not(.linkish):not(.edit-too
 
 .manage-exit-list input[type="checkbox"] {
   margin: 0;
+  flex-shrink: 0;
+}
+
+.manage-exit-order-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.manage-exit-order-item .exit-order-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.manage-exit-order-item .editor-tool {
   flex-shrink: 0;
 }
 
@@ -607,24 +645,32 @@ details.edit-condition > summary:hover {
 /* Section-scale collapsibles (not the tiny JSON format "i" tip).
    Login/Register stay flush in the panel chrome — no section gap. */
 details.alchemy-panel,
+details.quests-panel,
 details.profile-section,
 details.messages-compose,
-details.live-online-wrap {
+details.live-online-wrap,
+details.live-admin-section {
   margin-top: 2rem;
 }
 
-.profile-section {
+.profile-section,
+.quests-panel,
+.live-admin-section {
   margin-bottom: 0;
 }
 
-.profile-section > summary {
+.profile-section > summary,
+.quests-panel > summary,
+.live-admin-section > summary {
   font-family: Fraunces, Georgia, serif;
   font-size: 1.15rem;
   color: var(--moss);
   cursor: pointer;
 }
 
-.profile-section > summary:hover {
+.profile-section > summary:hover,
+.quests-panel > summary:hover,
+.live-admin-section > summary:hover {
   color: var(--leaf);
 }
 
@@ -723,17 +769,22 @@ details.live-online-wrap {
   z-index: 5;
   left: 0;
   top: calc(100% + 0.3rem);
-  width: min(16.5rem, calc(100vw - 3rem));
+  width: min(28rem, calc(100vw - 3rem));
+  max-height: min(70vh, 32rem);
+  overflow: auto;
   padding: 0.55rem 0.65rem;
   background: #f7faf5;
   border: 1px solid var(--line);
   color: var(--ink);
 }
 
-.json-format-example .muted {
+.json-format-example .muted,
+.json-format-example .json-format-note {
   margin: 0 0 0.4rem;
   font-size: 0.78rem;
   line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .json-format-example pre {
@@ -761,11 +812,25 @@ details.live-online-wrap {
   border-bottom: 1px solid var(--line);
 }
 
+.backup-table th:nth-child(1),
+.backup-table td:nth-child(1),
+.backup-table th:nth-child(2),
+.backup-table td:nth-child(2) {
+  width: 1%;
+  white-space: nowrap;
+  padding-right: 1rem;
+}
+
 .backup-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: baseline;
   gap: 0.6rem;
+}
+
+.backup-actions .inline {
+  display: inline-flex;
+  flex-wrap: nowrap;
 }
 
 .stack {
@@ -989,8 +1054,78 @@ button.linkish {
 .live-admin-table th,
 .live-admin-table td {
   text-align: left;
-  padding: 0.35rem 0.5rem;
+  vertical-align: baseline;
+  padding: 0.25rem 0.5rem 0.25rem 0;
   border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.live-admin-table td > p {
+  margin: 0;
+  display: inline;
+}
+
+.live-toasts {
+  position: fixed;
+  z-index: 40;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.45rem;
+  width: min(28rem, calc(100% - 2rem));
+  pointer-events: none;
+}
+
+.live-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.7rem;
+  background: rgba(238, 243, 234, 0.96);
+  border: 1px solid var(--line);
+  box-shadow: 0 0.35rem 1rem rgba(28, 36, 28, 0.12);
+  pointer-events: auto;
+  animation: live-toast-in 0.2s ease-out;
+}
+
+.live-toast-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-toast-live {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--leaf);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+
+.live-toast-live:hover {
+  color: var(--ember);
+  border-color: rgba(180, 83, 42, 0.35);
+}
+
+@keyframes live-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .live-purge {

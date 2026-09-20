@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   canAddExit,
+  canDeleteArtefact,
+  canDeleteScene,
   canEdit,
   canEditArtefact,
-  canEditGroup,
+  canEjectArtefact,
+  canPlaceArtefact,
   canManage,
   canManageGroup,
   canTransferGroup,
@@ -12,9 +15,11 @@ import {
   canReadArtefact,
   canReadGroup,
   canRemoveExit,
+  canReorderExits,
   hasRight,
   isManager,
   isModerator,
+  isQuestor,
   isTopographer,
 } from "../src/access/permissions.js";
 import { artefact, group, scene, user, world } from "./helpers/fixtures.js";
@@ -153,6 +158,7 @@ describe("staff roles on scenes", () => {
     expect(isModerator(bob, w)).toBe(true);
     expect(isManager(bob, w)).toBe(false);
     expect(isTopographer(bob, w)).toBe(false);
+    expect(canReorderExits(bob, privateScene, w)).toBe(false);
   });
 
   it("lets topographers reshape exits but not edit prose or manage ACL", () => {
@@ -160,6 +166,7 @@ describe("staff roles on scenes", () => {
     expect(canEdit(bob, privateScene, w)).toBe(false);
     expect(canManage(bob, privateScene, w)).toBe(false);
     expect(isTopographer(bob, w)).toBe(true);
+    expect(canReorderExits(bob, privateScene, w)).toBe(true);
     expect(isModerator(bob, w)).toBe(false);
     expect(isManager(bob, w)).toBe(false);
   });
@@ -170,6 +177,16 @@ describe("staff roles on scenes", () => {
     expect(isTopographer(bob, w)).toBe(true);
     expect(isManager(bob, w)).toBe(true);
     expect(isModerator(bob, w)).toBe(true);
+    expect(isQuestor(bob, w)).toBe(true);
+  });
+
+  it("lets questors edit personal quests but not manage scenes", () => {
+    const w = world({ users: [alice, bob], roles: { bob: ["questor"] } });
+    expect(canEdit(bob, privateScene, w)).toBe(false);
+    expect(canManage(bob, privateScene, w)).toBe(false);
+    expect(isQuestor(bob, w)).toBe(true);
+    expect(isManager(bob, w)).toBe(false);
+    expect(isModerator(bob, w)).toBe(false);
   });
 
   it("returns false for staff helpers without a user", () => {
@@ -177,6 +194,7 @@ describe("staff roles on scenes", () => {
     expect(isTopographer(undefined, w)).toBe(false);
     expect(isModerator(undefined, w)).toBe(false);
     expect(isManager(undefined, w)).toBe(false);
+    expect(isQuestor(undefined, w)).toBe(false);
   });
 });
 
@@ -207,13 +225,81 @@ describe("artefact ACL", () => {
   });
 });
 
+describe("repository artefact placement", () => {
+  const repository = scene(1, "alice", { visibility: "public", isRepository: true });
+  const privateRepo = scene(2, "alice", { visibility: "private", isRepository: true });
+  const normal = scene(3, "alice", { visibility: "public" });
+
+  it("allows signed-in users to place on a public repository", () => {
+    const w = world({ users: [alice, bob] });
+    expect(canPlaceArtefact(bob, repository, w)).toBe(true);
+    expect(canPlaceArtefact(undefined, repository, w)).toBe(false);
+  });
+
+  it("requires edit rights when not a public repository", () => {
+    const w = world({ users: [alice, bob, carol] });
+    expect(canPlaceArtefact(bob, normal, w)).toBe(false);
+    expect(canPlaceArtefact(alice, normal, w)).toBe(true);
+    expect(canPlaceArtefact(bob, privateRepo, w)).toBe(false);
+  });
+
+  it("lets edit grantees place via scene edit rights", () => {
+    const granted = scene(4, "alice", {
+      visibility: "private",
+      grants: [{ who: "bob", rights: ["edit"] }],
+    });
+    const w = world({ users: [alice, bob] });
+    expect(canPlaceArtefact(bob, granted, w)).toBe(true);
+  });
+});
+
+describe("delete scene / artefact", () => {
+  it("lets managers and moderators delete scenes", () => {
+    const s = scene(1, "alice");
+    const w = world({ users: [alice, bob, carol], roles: { bob: ["moderator"] } });
+    expect(canDeleteScene(alice, s, w)).toBe(true);
+    expect(canDeleteScene(bob, s, w)).toBe(true);
+    expect(canDeleteScene(carol, s, w)).toBe(false);
+    expect(canDeleteScene(undefined, s, w)).toBe(false);
+  });
+
+  it("lets artefact owners, home managers, and moderators delete artefacts", () => {
+    const home = scene(1, "alice");
+    const art = artefact(1, "bob", 1);
+    const w = world({ users: [alice, bob, carol], roles: { carol: ["moderator"] } });
+    expect(canDeleteArtefact(bob, art, home, w)).toBe(true);
+    expect(canDeleteArtefact(alice, art, home, w)).toBe(true);
+    expect(canDeleteArtefact(carol, art, home, w)).toBe(true);
+    expect(canDeleteArtefact(undefined, art, home, w)).toBe(false);
+  });
+});
+
+describe("eject artefact", () => {
+  it("allows home-scene managers but not the artefact owner", () => {
+    const home = scene(1, "alice");
+    const art = artefact(1, "bob", 1);
+    const w = world({ users: [alice, bob, carol] });
+    expect(canEjectArtefact(alice, art, home, w)).toBe(true);
+    expect(canEjectArtefact(bob, art, home, w)).toBe(false);
+    expect(canEjectArtefact(undefined, art, home, w)).toBe(false);
+  });
+});
+
 describe("group ACL", () => {
   it("gives the group owner full access", () => {
     const g = group("1", "alice");
     const w = world({ users: [alice] });
     expect(canReadGroup(alice, g, w)).toBe(true);
-    expect(canEditGroup(alice, g, w)).toBe(true);
     expect(canManageGroup(alice, g, w)).toBe(true);
+  });
+
+  it("lets group denies beat the owner, matching scene ACL", () => {
+    const g = group("1", "alice", {
+      denies: [{ who: "alice", rights: ["manage"] }],
+    });
+    const w = world({ users: [alice] });
+    expect(canManageGroup(alice, g, w)).toBe(false);
+    expect(canReadGroup(alice, g, w)).toBe(true);
   });
 
   it("honours group grants and denies", () => {
@@ -305,6 +391,22 @@ describe("junction exit add / remove", () => {
     });
     expect(canRemoveExit(alice, junction, toBob, w)).toBe(true);
     expect(canRemoveExit(alice, junction, toCarol, w)).toBe(true);
+  });
+
+  it("lets owner, manage grantee, and topographer reorder, not junction visitors", () => {
+    const managed = scene(4, "alice", {
+      grants: [{ who: "bob", rights: ["manage"] }],
+    });
+    const w = world({
+      users: [alice, bob, carol],
+      scenes: [junction, bobRoom, carolRoom, managed],
+      roles: { carol: ["topographer"] },
+    });
+    expect(canReorderExits(alice, junction, w)).toBe(true);
+    expect(canReorderExits(bob, managed, w)).toBe(true);
+    expect(canReorderExits(carol, junction, w)).toBe(true);
+    expect(canReorderExits(bob, junction, w)).toBe(false);
+    expect(canReorderExits(undefined, junction, w)).toBe(false);
   });
 });
 

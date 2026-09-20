@@ -3,6 +3,7 @@ import type {
   ExitRecord,
   SceneRecord,
 } from "../../../model/types.js";
+import { INPUT_PHRASE_MAX } from "../../../model/logic.js";
 import { entityKindLabel, entityPath } from "../../entity.js";
 import {
   box,
@@ -18,6 +19,7 @@ import {
   meta,
   muted,
   nodes,
+  notice,
   pageView,
   prose,
   rawText,
@@ -91,17 +93,26 @@ export function entityDetailView(opts: {
   owner: string;
   detail: string;
   text?: string;
+  notice?: string;
 }): PageView {
   const path = entityPath(opts.kind, opts.id);
   const htmlText = opts.text ?? `No detail named “${opts.detail}”.`;
   const plainText = opts.text ?? `(No detail named "${opts.detail}".)`;
-  return pageView(`${entityKindLabel(opts.kind)} ${opts.id}`, [
-    crumb(path, `← ${entityKindLabel(opts.kind)} ${opts.id}`),
-    entityTitle(opts.kind, opts.id, opts.title, opts.detail),
-    byline(opts.owner),
-    htmlOnly(prose(htmlText)),
-    textOnly(rawText(["", plainText])),
-  ]);
+  const flash =
+    opts.notice !== undefined
+      ? fragment(htmlOnly(notice(opts.notice)), textOnly(rawText([opts.notice, ""])))
+      : undefined;
+  return pageView(
+    `${entityKindLabel(opts.kind)} ${opts.id}`,
+    nodes(
+      crumb(path, `← ${entityKindLabel(opts.kind)} ${opts.id}`),
+      flash,
+      entityTitle(opts.kind, opts.id, opts.title, opts.detail),
+      byline(opts.owner),
+      htmlOnly(prose(htmlText)),
+      textOnly(rawText(["", plainText])),
+    ),
+  );
 }
 
 export function scenePageView(opts: {
@@ -115,6 +126,9 @@ export function scenePageView(opts: {
   subscribed?: boolean;
   /** Subscriber count shown beside the subscribe control (likes-style). */
   subscriberCount?: number;
+  /** Signed-in readers get a private phrase box (not Live chat). */
+  showInput?: boolean;
+  notice?: string;
 }): PageView {
   const { scene, exits, artefacts, detail, isEntrance } = opts;
   const title = scene.title ?? `Scene ${scene.id}`;
@@ -127,13 +141,16 @@ export function scenePageView(opts: {
       owner: scene.owner,
       detail,
       text: scene.details[detail],
+      notice: opts.notice,
     });
   }
 
   const publicJunction = Boolean(scene.isJunction && scene.visibility === "public");
+  const publicRepository = Boolean(scene.isRepository && scene.visibility === "public");
   const badges = [
     scene.visibility,
     publicJunction ? "junction" : "",
+    publicRepository ? "repository" : "",
     isEntrance ? "entrance" : "",
   ].filter(Boolean);
 
@@ -198,9 +215,38 @@ export function scenePageView(opts: {
     textRecipes.push(`Unsubscribe: POST {base}/s/${scene.id}/subscribe/drop`);
   }
 
+  if (opts.showInput) {
+    textRecipes.push(`Input: POST {base}/s/${scene.id}/input  phrase=…`);
+  }
+
+  const flash =
+    opts.notice !== undefined
+      ? fragment(htmlOnly(notice(opts.notice)), textOnly(rawText([opts.notice, ""])))
+      : undefined;
+
+  const inputForm = opts.showInput
+    ? form(
+        {
+          method: "post",
+          action: `s/${scene.id}/input`,
+          class: "action-form",
+          id: "input-form",
+        },
+        field("Say or guess:", {
+          type: "text",
+          name: "phrase",
+          autocomplete: "off",
+          required: true,
+          maxlength: INPUT_PHRASE_MAX,
+        }),
+        button("Input"),
+      )
+    : undefined;
+
   return pageView(
     title,
     nodes(
+      flash,
       entityTitle("scene", scene.id, scene.title),
       byline(scene.owner),
       htmlOnly(meta(...badges)),
@@ -252,6 +298,7 @@ export function scenePageView(opts: {
             }),
             button("Invite"),
           ),
+          ...(inputForm ? [inputForm] : []),
         ]),
         script(SCENE_ACTION_SCRIPT),
       ),

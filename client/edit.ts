@@ -1,76 +1,12 @@
 import { jsonKindFromFieldName } from "../src/json-table.js";
 import { formatJsonTextarea } from "../src/json-textarea.js";
+import type { EditBootstrap, ManageContext, OwnedSceneLink } from "../src/render/bootstrap.js";
 import {
   DENIES_EXAMPLE,
   DETAILS_EXAMPLE,
   GRANTS_EXAMPLE,
 } from "../src/render/view/examples.js";
 import { applyEditorPreferences, editorPrefsControls } from "./editors.js";
-
-interface OwnedSceneLink {
-  id: number;
-  title?: string;
-}
-
-interface ManageContext {
-  kind: "scene" | "artefact" | "inventory" | "home";
-  scene?: {
-    id: number;
-    title?: string;
-    body: string;
-    details: Record<string, string>;
-    visibility: string;
-    isJunction?: boolean;
-    owner?: string;
-    groupId?: string | null;
-    entranceGroupId?: string | null;
-    grants?: unknown;
-    denies?: unknown;
-    when?: string;
-    whenDenied?: string;
-    detailWhen?: Record<string, string>;
-  };
-  artefact?: {
-    id: number;
-    title?: string;
-    body: string;
-    details: Record<string, string>;
-    homeSceneId: number;
-    tags: string[];
-    when?: string;
-    detailWhen?: Record<string, string>;
-  };
-  exits?: Array<{
-    exitId: number;
-    nickname: string;
-    toSceneId: number;
-    canRemove?: boolean;
-    when?: string;
-    whenDenied?: string;
-    hidden?: boolean;
-  }>;
-  canEdit?: boolean;
-  canManage?: boolean;
-  canAddExit?: boolean;
-  isTopographer?: boolean;
-  canDelete?: boolean;
-  canTransfer?: boolean;
-  groups?: Array<{ id: string; title: string }>;
-  entranceGroups?: Array<{ id: string; title: string; entranceSceneId: number }>;
-  sceneGroup?: { id: string; title: string };
-}
-
-interface EditBootstrap {
-  user?: { username: string };
-  manage?: ManageContext;
-  ownedScenes: OwnedSceneLink[];
-  isManager: boolean;
-  isModerator?: boolean;
-  editHref: string;
-  readHref: string;
-  liveSceneId?: number;
-  allowGuestLive?: boolean;
-}
 
 const FLASH_KEY = "proseden-edit-flash";
 const OLD_MODE_KEY = "proseden-edit";
@@ -168,7 +104,7 @@ function jsonField(label: string, name: string, rows: number, value: unknown, ex
   return wrap;
 }
 
-const FLAG_REF_PLACEHOLDER = "quest.flag or not.quest.flag";
+const FLAG_REF_PLACEHOLDER = "quest.flag, holds:1; badge:quest.x; var:quest.n=1";
 
 /** Closed-by-default opt-in for FlagRef gates. */
 function conditionCollapse(summary: string, ...children: Array<Node | string>): HTMLElement {
@@ -250,11 +186,15 @@ export function mountEdit(boot: EditBootstrap, pane: HTMLElement): { toolbar: HT
     el("a", { class: "edit-tool-link", href: "g" }, "Groups"),
     el("a", { class: "edit-tool-link", href: "alchemy" }, "Alchemy"),
   );
+  if (boot.isQuestor) {
+    links.append(el("a", { class: "edit-tool-link", href: "quests" }, "Quests"));
+  }
   if (boot.isModerator) {
     links.append(el("a", { class: "edit-tool-link", href: "live/admin" }, "Live Admin"));
   }
   if (boot.isManager) {
     links.append(
+      el("a", { class: "edit-tool-link", href: "dashboard" }, "Dashboard"),
       el("a", { class: "edit-tool-link", href: "msg" }, "Msg"),
       el("a", { class: "edit-tool-link", href: "data" }, "Data"),
       el("a", { class: "edit-tool-link", href: "staff" }, "Staff"),
@@ -319,11 +259,11 @@ function availableTools(manage?: ManageContext, user?: { username: string }): To
   const tools: ToolId[] = ["new"];
   if (manage?.kind === "scene" && manage.scene && manage.canEdit) tools.unshift("page");
   if (manage?.kind === "artefact" && manage.artefact && manage.canEdit) tools.unshift("page");
-  if (manage?.kind === "scene" && manage.canEdit) tools.push("artefact");
+  if (manage?.kind === "scene" && (manage.canEdit || manage.canPlaceArtefact)) tools.push("artefact");
   if (manage?.kind === "scene" && manage.scene && (manage.canAddExit || user)) tools.push("exits");
   if (manage?.kind === "scene" && manage.canManage) tools.push("access");
   if (manage?.kind === "scene" && (manage.canManage || manage.isTopographer)) tools.push("organise");
-  if (manage?.canDelete) tools.push("danger");
+  if (manage?.canDelete || manage?.canEject) tools.push("danger");
   return tools;
 }
 
@@ -394,8 +334,8 @@ function sceneEditor(manage: ManageContext | undefined, inspector: HTMLElement):
         "detailWhenJson",
         6,
         scene.detailWhen ?? {},
-        '{\n  "secret": "q.secret",\n  "old door": "not.q.open"\n}',
-        "Map detail name → flag id.",
+        '{\n  "secret": "q.secret",\n  "old door": "not.q.open",\n  "keyhole": "holds:12"\n}',
+        "Map detail name → condition (flag, holds, badge).",
       ),
     ),
     el(
@@ -421,6 +361,16 @@ function sceneEditor(manage: ManageContext | undefined, inspector: HTMLElement):
         }),
         " Public junction",
       ),
+      el(
+        "label",
+        { class: "edit-check" },
+        el("input", {
+          type: "checkbox",
+          name: "isRepository",
+          ...(scene.isRepository ? { checked: true } : {}),
+        }),
+        " Public repository",
+      ),
     );
   }
   form.append(
@@ -443,6 +393,7 @@ function sceneEditor(manage: ManageContext | undefined, inspector: HTMLElement):
         whenDenied: inputValue(form, "whenDenied"),
         visibility: checked(form, "visibility") ? "public" : "private",
         isJunction: checked(form, "isJunction"),
+        isRepository: checked(form, "isRepository"),
         retainSnapshot: checked(form, "retainSnapshot"),
       });
       window.location.reload();
@@ -478,7 +429,7 @@ function artefactEditor(manage: ManageContext, inspector: HTMLElement): HTMLElem
         6,
         artefact.detailWhen ?? {},
         '{\n  "inscription": "q.read"\n}',
-        "Map detail name → flag id.",
+        "Map detail name → condition (flag, holds, badge).",
       ),
     ),
     el(
@@ -817,11 +768,61 @@ function exitsTool(
   });
 
   const wrap = el("div", { class: "stack" }, el("p", { class: "edit-kicker" }, "Add exit"), add, addBtn);
+  const allExits = manage.exits ?? [];
+  if (manage.canReorderExits && allExits.length > 1) {
+    wrap.append(orderExitsBlock(scene.id, allExits, inspector));
+  }
   if (editable.length) {
     wrap.append(el("p", { class: "edit-kicker" }, "Edit exits"), editList);
     wrap.append(el("p", { class: "edit-kicker" }, "Remove exits"), list, removeBtn);
   }
   return wrap;
+}
+
+function orderExitsBlock(
+  sceneId: number,
+  exits: Array<{ exitId: number; nickname: string; toSceneId: number; when?: string }>,
+  inspector: HTMLElement,
+): HTMLElement {
+  const list = el("ul", { class: "link-list manage-exit-order" });
+  for (const exit of exits) {
+    const item = el("li", {
+      class: "manage-exit-order-item",
+      "data-exit-id": String(exit.exitId),
+    });
+    const label = el(
+      "span",
+      { class: "exit-order-label" },
+      `${exit.nickname} `,
+      el("span", { class: "muted" }, `→ ${exit.toSceneId}`),
+    );
+    if (exit.when) label.append(el("span", { class: "muted" }, ` · ${exit.when}`));
+    const up = el("button", { type: "button", class: "editor-tool", title: "Move up" }, "↑");
+    const down = el("button", { type: "button", class: "editor-tool", title: "Move down" }, "↓");
+    up.addEventListener("click", () => {
+      const prev = item.previousElementSibling;
+      if (prev) list.insertBefore(item, prev);
+    });
+    down.addEventListener("click", () => {
+      const next = item.nextElementSibling;
+      if (next) list.insertBefore(next, item);
+    });
+    item.append(label, up, down);
+    list.append(item);
+  }
+  const save = el("button", { type: "button" }, "Save order");
+  save.addEventListener("click", async () => {
+    const exitIds = Array.from(list.querySelectorAll<HTMLElement>("[data-exit-id]")).map((node) =>
+      Number(node.dataset.exitId),
+    );
+    try {
+      await apiJson("POST", `s/${sceneId}/exits/reorder`, { exitIds });
+      window.location.reload();
+    } catch (err) {
+      setStatus(inspector, err instanceof Error ? err.message : "Could not reorder exits");
+    }
+  });
+  return el("div", { class: "stack" }, el("p", { class: "edit-kicker" }, "Order exits"), list, save);
 }
 
 function accessTool(manage: ManageContext | undefined, inspector: HTMLElement): HTMLElement {
@@ -1016,7 +1017,7 @@ function dangerTool(manage: ManageContext | undefined, inspector: HTMLElement): 
     btn.addEventListener("click", async () => {
       if (
         !window.confirm(
-          `Delete scene ${manage.scene!.id}? Homed artefacts and inbound exits will be removed.`,
+          `Delete scene ${manage.scene!.id}? Your homed artefacts here will be removed. Guest artefacts will be returned to their owners' home scenes.`,
         )
       ) {
         return;
@@ -1030,18 +1031,49 @@ function dangerTool(manage: ManageContext | undefined, inspector: HTMLElement): 
     });
     return el("div", { class: "stack" }, el("p", { class: "edit-kicker" }, "Delete scene"), btn);
   }
-  if (manage?.kind === "artefact" && manage.artefact && manage.canDelete) {
-    const btn = el("button", { type: "button", class: "edit-danger" }, "Delete artefact");
-    btn.addEventListener("click", async () => {
-      if (!window.confirm(`Delete artefact ${manage.artefact!.id}?`)) return;
-      try {
-        await apiJson("POST", `a/${manage.artefact!.id}/delete`);
-        window.location.href = "./";
-      } catch (err) {
-        setStatus(inspector, err instanceof Error ? err.message : "Delete failed");
-      }
-    });
-    return el("div", { class: "stack" }, el("p", { class: "edit-kicker" }, "Delete artefact"), btn);
+  if (manage?.kind === "artefact" && manage.artefact) {
+    const wrap = el("div", { class: "stack" });
+    if (manage.canEject) {
+      const ejectBtn = el("button", { type: "button" }, "Eject to owner home");
+      ejectBtn.addEventListener("click", async () => {
+        if (
+          !window.confirm(
+            `Return artefact ${manage.artefact!.id} to ${manage.artefact!.owner}'s home scene?`,
+          )
+        ) {
+          return;
+        }
+        try {
+          await apiJson("POST", `a/${manage.artefact!.id}/eject`);
+          window.location.reload();
+        } catch (err) {
+          setStatus(inspector, err instanceof Error ? err.message : "Eject failed");
+        }
+      });
+      wrap.append(
+        el("p", { class: "edit-kicker" }, "Eject artefact"),
+        el("p", { class: "muted" }, "Return this guest artefact to its owner's home scene."),
+        ejectBtn,
+      );
+    }
+    if (manage.canDelete) {
+      const btn = el("button", { type: "button", class: "edit-danger" }, "Delete artefact");
+      btn.addEventListener("click", async () => {
+        if (!window.confirm(`Delete artefact ${manage.artefact!.id}? This cannot be undone.`)) return;
+        try {
+          await apiJson("POST", `a/${manage.artefact!.id}/delete`);
+          window.location.href = "./";
+        } catch (err) {
+          setStatus(inspector, err instanceof Error ? err.message : "Delete failed");
+        }
+      });
+      wrap.append(
+        el("p", { class: "edit-kicker" }, "Delete artefact"),
+        el("p", { class: "muted" }, "Permanently remove this artefact."),
+        btn,
+      );
+    }
+    if (wrap.childNodes.length) return wrap;
   }
   return el("p", { class: "muted" }, "Nothing to delete here.");
 }

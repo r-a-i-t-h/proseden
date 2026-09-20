@@ -14,6 +14,7 @@ Restart=on-failure
 RestartSec=3
 # File-backed world; give writes a moment to finish on stop
 TimeoutStopSec=20
+MemoryAccounting=yes
 
 [Install]
 WantedBy=multi-user.target

@@ -148,9 +148,9 @@ export class PresenceStore {
 
   /**
    * Drop every connection for a userKey and emit leave immediately (no reconnect grace).
-   * Used for login guest handoff and moderator kick.
+   * Used for login guest handoff, logout, and moderator kick.
    */
-  kick(userKey: string): boolean {
+  kick(userKey: string, opts?: { reason?: "logout" }): boolean {
     const pending = this.takePendingLeave(userKey);
     const conns = this.connectionsForUser(userKey);
     const person = conns[0] ? this.toPerson(conns[0]) : pending?.person;
@@ -163,6 +163,7 @@ export class PresenceStore {
       ts: new Date().toISOString(),
       sceneId: person.sceneId,
       person,
+      ...(opts?.reason ? { leaveReason: opts.reason } : {}),
     });
     for (const conn of conns) this.runAbort(conn);
     return true;
@@ -218,6 +219,11 @@ export class PresenceStore {
 
   getConnection(connectionId: string): PresenceConnection | undefined {
     return this.connections.get(connectionId);
+  }
+
+  /** Open Live SSE sockets (tabs), not unique online users. */
+  connectionCount(): number {
+    return this.connections.size;
   }
 
   /** Fanout to connections subscribed to a scene (or all if sceneId omitted for shouts). */

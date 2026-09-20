@@ -1,6 +1,6 @@
 # Deploying Proseden on a Linux VPS
 
-Scripted install, update, and instance management for this app are provided by **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)** (NVK). Maintainers do not need to reinvent that path here; NVK already covers it.
+Scripted install, update, and instance management for this app **depend on** **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)** (NVK). This repo does not ship install/update scripts; NVK owns that path.
 
 This document is the **hand-install** walkthrough, kept as a reference for what a VPS layout looks like (systemd, nginx, HTTPS, per-instance updates, backups). Use it if you are unpacking a release yourself. You do **not** clone this git repo onto the VPS: download a ready-made release (compiled server, CSS/JS, seed world, and libraries), then wire up systemd and nginx.
 
@@ -213,7 +213,7 @@ certbot edits the nginx site files and renews certificates automatically. Sessio
 
 ## 8. Updating one instance (not the others)
 
-When a new GitHub Release exists, update **one** instance at a time. Try `test` first.
+When a new GitHub Release exists, update **one** instance at a time. Try `test` first. Scripted updates are **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)** (`sudo proseden-update -Name test`). The rest of this section is the hand-unpack equivalent.
 
 **First** archive that instance’s `data/` (abort if this fails):
 
@@ -252,7 +252,7 @@ sudo -u proseden env \
 sudo systemctl restart proseden-test
 ```
 
-`post-update.sh` applies `deploy/migrations/NNN-*.sh` where `NNN` is greater than `schemaVersion` in `data/meta.json` (missing or non-numeric = **0**). `001` stamps `schemaVersion: 1`. `002` rewrites `pedia:`/`srch:`/`media:` link prefixes in scene and artefact prose (including history snapshots) and stamps `2`. `003` creates `quests/` and `alchemy/` if needed, copies default seed quests `builders` and `proseden` (and empty alchemy recipes) when those files are absent, and stamps `3`. Existing quest/recipe files are left alone. A failed hook should stop you before restart.
+`post-update.sh` applies `deploy/migrations/NNN-*.sh` where `NNN` is greater than `schemaVersion` in `data/meta.json` (missing or non-numeric = **0**). `001` stamps `schemaVersion: 1`. `002` rewrites `pedia:`/`srch:`/`media:` link prefixes in scene and artefact prose (including history snapshots) and stamps `2`. `003` creates `quests/` and `alchemy/` if needed, copies default seed quests `builders` and `proseden` (and empty alchemy recipes) when those files are absent, and stamps `3`. Existing quest/recipe files are left alone. `004` rewrites `data/users/*.badges.json` from a string-id array to `{ badge, grantTime? }` objects (does not invent `grantTime`) and stamps `4`. `005` rewrites personal quest namespaces from `<username>.*` to `user.<username>.*` (quest files, that user’s flags/vars/badges, and FlagRefs on scenes/artefacts/exits for known questors), fails if `quests/user.json` exists, and stamps `5`. `006` creates a private `{username} home` scene for every user, sets `homeSceneId` on their account JSON, and stamps `6`. A failed hook should stop you before restart. A planned restart keeps cookies for anyone still using the app (so a save after the update still authenticates). Idle sessions and a second restart without a visit may still log out.
 
 Updates:
 
@@ -274,7 +274,7 @@ When `test` looks good, repeat the same steps for `www`, pinning the same tag yo
 
 Archives are **data only** (never the app). They accumulate under `backup/`; nothing deletes them automatically.
 
-**From Data** (signed in as a manager): open `/data`, **Backup now**, then Download or Delete.
+**From Data** (signed in as a manager): open `/data`, **Backup now**, then Download, Restore, or Delete. Restore replaces all of `data/` from the chosen archive and writes a safety backup of the current data first.
 
 **From SSH** (same files the Data page lists):
 
@@ -292,7 +292,7 @@ sudo chown -R proseden:proseden /opt/proseden/www/backup
 
 Set `PROSEDEN_DATA` (and optionally `PROSEDEN_BACKUP`) when calling `backup-data.sh` if this instance’s `env` uses non-default paths. The helper defaults `PROSEDEN_BACKUP` to the `backup` sibling of the data directory.
 
-**Restore** is not in the web UI. Stop the service, replace `data/` from an archive, start again:
+**Restore from SSH** (stop the service first if you want a clean process restart):
 
 ```bash
 sudo systemctl stop proseden-www
@@ -303,6 +303,8 @@ sudo tar -xzf /opt/proseden/www/backup/2026-08-11T201530Z.tar.gz \
 sudo chown -R proseden:proseden /opt/proseden/www/data
 sudo systemctl start proseden-www
 ```
+
+To copy production into a new test instance: create or download a backup on production, copy the `.tar.gz` into the test instance’s `backup/` directory, sign in as a manager on the test instance, open `/data`, and **Restore**. Or use the SSH steps above on the test host.
 
 Rolling the app `current` symlink back does not undo a data migration. Restore a pre-update archive if the files in `data/` no longer match the older app.
 
@@ -373,6 +375,48 @@ The Proseden site is not enabled, or another `default_server` wins. Check `ls /e
 
 **Styles missing / 404 on `/assets/`**  
 The process is running from a tree that was not packed with `public/assets`. Re-install from an official Release tarball, not a git clone.
+
+**A page load takes many seconds**  
+Scene HTML is served from RAM. A 10s wait usually means the **single Node event loop was busy**, nginx waited on something else, or the browser sat on Live/assets — not a missing index.
+
+1. From the VPS, time `/health` (use the instance’s path prefix if it is a path mount):
+
+   ```bash
+   time curl -sS http://127.0.0.1:3336/health
+   ```
+
+   If this also takes many seconds, the process was stalled. `lagMaxMs` in the JSON is event-loop delay over the last 10s (thousands of ms = the loop was busy). `rssMb` is process RAM.
+
+2. Host vs CPU: `free -h`, `uptime`, and
+
+   ```bash
+   pid=$(systemctl show -p MainPID --value proseden-www)
+   ps -o rss,pcpu,cmd -p "$pid"
+   sudo journalctl -u proseden-www -g 'proseden:slow'
+   ```
+
+   RSS near total RAM plus `si`/`so` in `vmstat 1` is swap thrash. One `node` at ~100% CPU is a stall (backup gzip, reload, login scrypt).
+
+   `systemctl status proseden-www` shows memory when the unit has `MemoryAccounting=yes` (new installs). Existing units are not rewritten on app update; add that line under `[Service]` yourself if you want it.
+
+3. nginx vs Node: new installs log `rt=` (browser wait) and `urt=` (upstream) to `/var/log/nginx/proseden-<name>.access.log`. If `rt` is large and `urt` is tiny, look at Live SSE buffering or the client, not the world store.
+
+   Existing certbot-owned site files are not rewritten. To add the same log:
+
+   ```nginx
+   # /etc/nginx/conf.d/proseden-timed-log.conf  (http context; ships as deploy/nginx/timed-log.conf)
+   log_format timed '$remote_addr [$time_local] "$request" $status '
+                    'rt=$request_time urt=$upstream_response_time';
+   ```
+
+   ```nginx
+   # inside the server { } block
+   access_log /var/log/nginx/proseden-www.access.log timed;
+   ```
+
+   Then `sudo nginx -t && sudo systemctl reload nginx`.
+
+4. In the app: manager **Dashboard** (`/dashboard`) shows process stats and the last 20 slow requests (over 500ms, or `PROSEDEN_SLOW_MS`). Browser DevTools Timing shows `Server-Timing` (`app`, plus spans such as `ownedScenes`, `inbox`, `render`, `quests`, `scrypt`, `backup`, `reload`). A slow line with almost no spans but a large total is wait time on the event loop.
 
 **Live chat stuck on “Connecting…”**  
 The UI waits for the first SSE event. If nginx buffers `/live/events`, the browser never receives it (the Node process is fine — `/live/here` still works). Updating the app does **not** rewrite nginx site files (certbot owns them).

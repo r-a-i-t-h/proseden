@@ -14,6 +14,7 @@ async function createTestWorld(): Promise<{
   app: App;
   dataDir: string;
   tokens: Record<string, string>;
+  ids: { publicHall: number; privateStudy: number; bobGarden: number };
 }> {
   const dataDir = await mkdtemp(join(tmpdir(), "proseden-inbox-"));
   const world = new WorldStore(dataDir);
@@ -24,29 +25,27 @@ async function createTestWorld(): Promise<{
     await world.createUser(name, password.hash, password.salt);
   }
 
-  // alice owns public hall (1) and private study (2)
-  await world.createScene({
+  // alice owns public hall and private study; bob owns a garden
+  const publicHall = await world.createScene({
     owner: "alice",
     title: "Public Hall",
     body: "A public hall.",
     visibility: "public",
   });
-  await world.createScene({
+  const privateStudy = await world.createScene({
     owner: "alice",
     title: "Private Study",
     body: "Alice's study.",
     visibility: "private",
   });
-  // bob owns a garden (3)
-  await world.createScene({
+  const bobGarden = await world.createScene({
     owner: "bob",
     title: "Bob Garden",
     body: "Bob's garden.",
     visibility: "public",
   });
 
-  // carol may manage alice's hall (self-sufficient work), but not act on inbox
-  await world.updateSceneAccess(1, {
+  await world.updateSceneAccess(publicHall.id, {
     grants: [{ who: "carol", rights: ["manage"] }],
   });
 
@@ -57,7 +56,12 @@ async function createTestWorld(): Promise<{
   }
 
   const app = createApp({ world, sessions });
-  return { world, app, dataDir, tokens };
+  const ids = {
+    publicHall: publicHall.id,
+    privateStudy: privateStudy.id,
+    bobGarden: bobGarden.id,
+  };
+  return { world, app, dataDir, tokens, ids };
 }
 
 function auth(token: string): Record<string, string> {
@@ -73,9 +77,10 @@ describe("inbox / exit requests", () => {
   let app: App;
   let dataDir: string;
   let tokens: Record<string, string>;
+  let ids: { publicHall: number; privateStudy: number; bobGarden: number };
 
   beforeEach(async () => {
-    ({ world, app, dataDir, tokens } = await createTestWorld());
+    ({ world, app, dataDir, tokens, ids } = await createTestWorld());
   });
 
   afterEach(async () => {
@@ -83,10 +88,10 @@ describe("inbox / exit requests", () => {
   });
 
   it("rejects unauthenticated create and inbox", async () => {
-    const create = await app.request("/s/1/exit-requests", {
+    const create = await app.request(`/s/${ids.publicHall}/exit-requests`, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: "garden", toSceneId: 3 }),
+      body: JSON.stringify({ nickname: "garden", toSceneId: ids.bobGarden }),
     });
     expect(create.status).toBe(401);
 
@@ -96,10 +101,10 @@ describe("inbox / exit requests", () => {
 
   it("forbids request when caller can already add exits", async () => {
     // carol has manage on hall
-    const res = await app.request("/s/1/exit-requests", {
+    const res = await app.request(`/s/${ids.publicHall}/exit-requests`, {
       method: "POST",
       headers: auth(tokens.carol),
-      body: JSON.stringify({ nickname: "garden", toSceneId: 3 }),
+      body: JSON.stringify({ nickname: "garden", toSceneId: ids.bobGarden }),
     });
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -107,10 +112,10 @@ describe("inbox / exit requests", () => {
   });
 
   it("creates an owner-only exit request", async () => {
-    const res = await app.request("/s/1/exit-requests", {
+    const res = await app.request(`/s/${ids.publicHall}/exit-requests`, {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ nickname: "garden", toSceneId: 3, note: "Please link us." }),
+      body: JSON.stringify({ nickname: "garden", toSceneId: ids.bobGarden, note: "Please link us." }),
     });
     expect(res.status).toBe(201);
     const msg = await res.json();
@@ -136,35 +141,35 @@ describe("inbox / exit requests", () => {
   });
 
   it("rejects destination the requester does not own", async () => {
-    const res = await app.request("/s/1/exit-requests", {
+    const res = await app.request(`/s/${ids.publicHall}/exit-requests`, {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ nickname: "study", toSceneId: 2 }),
+      body: JSON.stringify({ nickname: "study", toSceneId: ids.privateStudy }),
     });
     expect(res.status).toBe(403);
   });
 
   it("rejects duplicate pending requests", async () => {
-    const first = await app.request("/s/1/exit-requests", {
+    const first = await app.request(`/s/${ids.publicHall}/exit-requests`, {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ nickname: "Garden", toSceneId: 3 }),
+      body: JSON.stringify({ nickname: "Garden", toSceneId: ids.bobGarden }),
     });
     expect(first.status).toBe(201);
 
-    const second = await app.request("/s/1/exit-requests", {
+    const second = await app.request(`/s/${ids.publicHall}/exit-requests`, {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ nickname: "garden", toSceneId: 3 }),
+      body: JSON.stringify({ nickname: "garden", toSceneId: ids.bobGarden }),
     });
     expect(second.status).toBe(400);
   });
 
   it("confirm adds exit, removes request, and notifies requester", async () => {
-    const created = await app.request("/s/1/exit-requests", {
+    const created = await app.request(`/s/${ids.publicHall}/exit-requests`, {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ nickname: "garden", toSceneId: 3 }),
+      body: JSON.stringify({ nickname: "garden", toSceneId: ids.bobGarden }),
     });
     const msg = await created.json();
 
@@ -182,21 +187,21 @@ describe("inbox / exit requests", () => {
     expect(confirm.status).toBe(200);
     const result = await confirm.json();
     expect(result.exit.nickname).toBe("garden");
-    expect(result.exit.toSceneId).toBe(3);
+    expect(result.exit.toSceneId).toBe(ids.bobGarden);
     expect(result.notice.type).toBe("notice");
     expect(result.notice.toUser).toBe("bob");
 
-    expect(world.findExit(1, "garden")?.toSceneId).toBe(3);
+    expect(world.findExit(ids.publicHall, "garden")?.toSceneId).toBe(ids.bobGarden);
     expect(world.getInboxMessage(msg.id)).toBeUndefined();
     expect(world.listInboxFor("bob")).toHaveLength(1);
     expect(world.listInboxFor("alice")).toHaveLength(0);
   });
 
   it("delete removes without creating an exit", async () => {
-    const created = await app.request("/s/1/exit-requests", {
+    const created = await app.request(`/s/${ids.publicHall}/exit-requests`, {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ nickname: "garden", toSceneId: 3 }),
+      body: JSON.stringify({ nickname: "garden", toSceneId: ids.bobGarden }),
     });
     const msg = await created.json();
 
@@ -211,10 +216,10 @@ describe("inbox / exit requests", () => {
   });
 
   it("shows inbox count in the header", async () => {
-    await app.request("/s/1/exit-requests", {
+    await app.request(`/s/${ids.publicHall}/exit-requests`, {
       method: "POST",
       headers: auth(tokens.bob),
-      body: JSON.stringify({ nickname: "garden", toSceneId: 3 }),
+      body: JSON.stringify({ nickname: "garden", toSceneId: ids.bobGarden }),
     });
 
     const page = await app.request("/inbox", {
@@ -234,9 +239,10 @@ describe("inbox / view invites", () => {
   let app: App;
   let dataDir: string;
   let tokens: Record<string, string>;
+  let ids: { publicHall: number; privateStudy: number; bobGarden: number };
 
   beforeEach(async () => {
-    ({ world, app, dataDir, tokens } = await createTestWorld());
+    ({ world, app, dataDir, tokens, ids } = await createTestWorld());
   });
 
   afterEach(async () => {
@@ -244,7 +250,7 @@ describe("inbox / view invites", () => {
   });
 
   it("rejects unauthenticated invites", async () => {
-    const res = await app.request("/s/1/view-invites", {
+    const res = await app.request(`/s/${ids.publicHall}/view-invites`, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({ uid: "alice" }),
@@ -253,7 +259,7 @@ describe("inbox / view invites", () => {
   });
 
   it("creates an invite from a scene you do not own", async () => {
-    const res = await app.request("/s/1/view-invites", {
+    const res = await app.request(`/s/${ids.publicHall}/view-invites`, {
       method: "POST",
       headers: auth(tokens.bob),
       body: JSON.stringify({ uid: "carol" }),
@@ -263,7 +269,7 @@ describe("inbox / view invites", () => {
     expect(msg.type).toBe("invite_to_view");
     expect(msg.toUser).toBe("carol");
     expect(msg.fromUser).toBe("bob");
-    expect(msg.sceneId).toBe(1);
+    expect(msg.sceneId).toBe(ids.publicHall);
     expect(msg.body).toBe(
       "bob has invited you to view the scene, Public Hall. It's either new or has been updated recently.",
     );
@@ -278,21 +284,21 @@ describe("inbox / view invites", () => {
   });
 
   it("rejects inviting yourself, a missing user, or an unreachable scene", async () => {
-    const self = await app.request("/s/1/view-invites", {
+    const self = await app.request(`/s/${ids.publicHall}/view-invites`, {
       method: "POST",
       headers: auth(tokens.bob),
       body: JSON.stringify({ uid: "bob" }),
     });
     expect(self.status).toBe(400);
 
-    const missing = await app.request("/s/1/view-invites", {
+    const missing = await app.request(`/s/${ids.publicHall}/view-invites`, {
       method: "POST",
       headers: auth(tokens.bob),
       body: JSON.stringify({ uid: "nobody" }),
     });
     expect(missing.status).toBe(404);
 
-    const privateScene = await app.request("/s/2/view-invites", {
+    const privateScene = await app.request(`/s/${ids.privateStudy}/view-invites`, {
       method: "POST",
       headers: auth(tokens.bob),
       body: JSON.stringify({ uid: "carol" }),
@@ -301,7 +307,7 @@ describe("inbox / view invites", () => {
   });
 
   it("refreshes a pending invite instead of stacking a duplicate", async () => {
-    const first = await app.request("/s/1/view-invites", {
+    const first = await app.request(`/s/${ids.publicHall}/view-invites`, {
       method: "POST",
       headers: auth(tokens.bob),
       body: JSON.stringify({ uid: "carol" }),
@@ -309,7 +315,7 @@ describe("inbox / view invites", () => {
     expect(first.status).toBe(201);
     const original = await first.json();
 
-    const second = await app.request("/s/1/view-invites", {
+    const second = await app.request(`/s/${ids.publicHall}/view-invites`, {
       method: "POST",
       headers: auth(tokens.bob),
       body: JSON.stringify({ uid: "carol" }),
@@ -321,7 +327,7 @@ describe("inbox / view invites", () => {
   });
 
   it("shows the invite in the inbox HTML with a scene link", async () => {
-    await app.request("/s/3/view-invites", {
+    await app.request(`/s/${ids.bobGarden}/view-invites`, {
       method: "POST",
       headers: auth(tokens.alice),
       body: JSON.stringify({ uid: "bob" }),
@@ -335,7 +341,7 @@ describe("inbox / view invites", () => {
     expect(html).toContain("Messages (1)");
     expect(html).toContain("Invite to view: Bob Garden");
     expect(html).toContain("alice has invited you to view the scene, Bob Garden.");
-    expect(html).toContain('href="s/3"');
+    expect(html).toContain(`href="s/${ids.bobGarden}"`);
     expect(html).toContain("View scene");
     expect(html).not.toContain("Confirm");
   });
@@ -346,9 +352,10 @@ describe("inbox / peer messages", () => {
   let app: App;
   let dataDir: string;
   let tokens: Record<string, string>;
+  let ids: { publicHall: number; privateStudy: number; bobGarden: number };
 
   beforeEach(async () => {
-    ({ world, app, dataDir, tokens } = await createTestWorld());
+    ({ world, app, dataDir, tokens, ids } = await createTestWorld());
   });
 
   afterEach(async () => {

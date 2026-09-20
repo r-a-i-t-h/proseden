@@ -2,6 +2,7 @@ import type { SessionStore } from "./auth/sessions.js";
 import type { SceneHub } from "./live/hub.js";
 import type { LocationTracker } from "./live/location.js";
 import type { PresenceStore } from "./live/presence.js";
+import type { RequestTimer } from "./observe.js";
 import type { RateLimitConfig } from "./rate-limit/limits.js";
 import type { RateLimiter } from "./rate-limit/limiter.js";
 import type { WorldStore } from "./store/world.js";
@@ -11,6 +12,8 @@ export type AppVariables = {
   world: WorldStore;
   sessions: SessionStore;
   user?: UserRecord;
+  /** Per-request timing bag for Server-Timing and the slow log. */
+  timer?: RequestTimer;
   /** Normalized URL prefix, e.g. "" or "/proseden" */
   assetBase: string;
   /** Cookie name scoped to assetBase so multiple mounts on one domain do not clash */

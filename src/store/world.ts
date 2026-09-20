@@ -2,16 +2,24 @@ import { cp, mkdir, readdir, access, rename, rm, unlink } from "node:fs/promises
 import { join } from "node:path";
 import { canManage, canRead, type AccessWorld } from "../access/permissions.js";
 import { normalizeDenies, normalizeGrants, stripLegacyInvites } from "../access/acl.js";
-import type { AlchemyRecipe, FlagValue, QuestFile } from "../model/logic.js";
+import { userHomeSceneBody, userHomeSceneTitle } from "../user-home.js";
+import type { AlchemyRecipe, FlagValue, QuestFile, QuestWake } from "../model/logic.js";
 import {
   alchemyGivesIds,
   alchemyRecipesForDisk,
   badgeDefsById,
   evaluateQuests,
+  isManagerQuestName,
   parseAlchemyRecipes,
   parseQuestFile,
+  questFileForDisk,
+  questGiveArtefactIds,
   QuestValidationError,
+  sanitizeUserFlags,
+  sanitizeUserVars,
+  userQuestNamespace,
 } from "../logic/quests.js";
+import { normalizeInputPhrase } from "../logic/pred.js";
 import type {
   ArtefactMeta,
   ArtefactRecord,
@@ -35,6 +43,8 @@ import type {
   SettingsFile,
   StaffFile,
   StaffRole,
+  UserBadge,
+  UserCache,
   UserRecord,
 } from "../model/types.js";
 import type { FlagRef } from "../model/logic.js";
@@ -42,6 +52,22 @@ import { appendLineAtomic, readJson, readText, writeJsonAtomic, writeTextAtomic 
 import { parseProseDocument, serializeProseDocument } from "./markdown.js";
 import { parseDetailWhenMap, parseOptionalFlagRef } from "../logic/pred.js";
 import { logQuestFault } from "../logic/log.js";
+import { mergeGrantedBadges, parseUserBadges } from "./user-badges.js";
+
+export type WorldOverviewCounts = {
+  users: number;
+  scenes: number;
+  artefacts: number;
+  exits: number;
+  groups: number;
+  entranceGroups: number;
+  quests: number;
+  userQuestFiles: number;
+  alchemyRecipes: number;
+  userAlchemyFiles: number;
+  inbox: number;
+  staff: number;
+};
 
 export class WorldStore implements AccessWorld {
   readonly dataDir: string;
@@ -63,11 +89,18 @@ export class WorldStore implements AccessWorld {
   entranceGroups = new Map<string, EntranceGroupRecord>();
   inbox = new Map<number, InboxMessage>();
   staff: StaffFile = { roles: {} };
-  settings: SettingsFile = { peerMessagingEnabled: true };
+  settings: SettingsFile = defaultSettings();
   /** username → flags */
   userFlags = new Map<string, Record<string, FlagValue>>();
-  /** username → badge ids */
-  userBadges = new Map<string, string[]>();
+  /** username → numeric quest vars */
+  userVars = new Map<string, Record<string, number>>();
+  /** username → held badges */
+  userBadges = new Map<string, UserBadge[]>();
+  /** Manager `quests/<name>.json` files (simple names; not `user` / `user.*`). */
+  masterQuests: QuestFile[] = [];
+  /** Per-user `quests/users/<username>.json` file contents (name is `user.<username>`). */
+  userQuestFiles = new Map<string, QuestFile>();
+  /** Merged manager-first + personal (`user.<username>.*`) for eval (user quests have author set). */
   quests: QuestFile[] = [];
   /** Master `alchemy/recipes.json` (file content; unrestricted gives). */
   masterAlchemyRecipes: AlchemyRecipe[] = [];
@@ -91,7 +124,7 @@ export class WorldStore implements AccessWorld {
       entranceSceneId: 1,
     };
     this.staff = { roles: {} };
-    this.settings = { peerMessagingEnabled: true };
+    this.settings = defaultSettings();
     this.users.clear();
     this.scenes.clear();
     this.exits.clear();
@@ -102,6 +135,8 @@ export class WorldStore implements AccessWorld {
     this.inbox.clear();
     this.userFlags.clear();
     this.userBadges.clear();
+    this.masterQuests = [];
+    this.userQuestFiles.clear();
     this.quests = [];
     this.masterAlchemyRecipes = [];
     this.userAlchemyFiles.clear();
@@ -126,6 +161,7 @@ export class WorldStore implements AccessWorld {
     await mkdir(join(this.dataDir, "entrance-groups"), { recursive: true });
     await mkdir(join(this.dataDir, "inbox"), { recursive: true });
     await mkdir(join(this.dataDir, "quests"), { recursive: true });
+    await mkdir(join(this.dataDir, "quests", "users"), { recursive: true });
     await mkdir(join(this.dataDir, "alchemy"), { recursive: true });
     await mkdir(join(this.dataDir, "alchemy", "users"), { recursive: true });
 
@@ -142,11 +178,17 @@ export class WorldStore implements AccessWorld {
     if (await exists(settingsPath)) {
       this.settings = normalizeSettings(await readJson<Record<string, unknown>>(settingsPath));
     } else {
-      this.settings = { peerMessagingEnabled: true };
+      this.settings = defaultSettings();
     }
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".json")) {
-      if (file.endsWith(".flags.json") || file.endsWith(".badges.json")) continue;
+      if (
+        file.endsWith(".flags.json") ||
+        file.endsWith(".badges.json") ||
+        file.endsWith(".vars.json")
+      ) {
+        continue;
+      }
       const raw = await readJson<Record<string, unknown>>(join(this.dataDir, "users", file));
       const user = normalizeUser(raw);
       this.users.set(user.username, user);
@@ -154,20 +196,21 @@ export class WorldStore implements AccessWorld {
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".flags.json")) {
       const username = file.replace(/\.flags\.json$/, "");
-      const raw = await readJson<Record<string, FlagValue>>(join(this.dataDir, "users", file));
-      this.userFlags.set(username, raw && typeof raw === "object" ? raw : {});
+      const raw = await readJson<unknown>(join(this.dataDir, "users", file));
+      this.userFlags.set(username, sanitizeUserFlags(raw));
+    }
+
+    for (const file of await listFiles(join(this.dataDir, "users"), ".vars.json")) {
+      const username = file.replace(/\.vars\.json$/, "");
+      const raw = await readJson<unknown>(join(this.dataDir, "users", file));
+      this.userVars.set(username, sanitizeUserVars(raw));
     }
 
     for (const file of await listFiles(join(this.dataDir, "users"), ".badges.json")) {
       const username = file.replace(/\.badges\.json$/, "");
       const raw = await readJson<unknown>(join(this.dataDir, "users", file));
-      this.userBadges.set(
-        username,
-        Array.isArray(raw) ? raw.map(String) : [],
-      );
+      this.userBadges.set(username, parseUserBadges(raw));
     }
-
-    await this.loadLogicFiles();
 
     const bootstrapped = this.applyManagerBootstrap();
     if (bootstrapped || !(await exists(staffPath))) {
@@ -227,6 +270,9 @@ export class WorldStore implements AccessWorld {
       this.entranceGroups.set(eg.id, eg);
     }
 
+    // After scenes/artefacts/groups: user quest/alchemy grant ACL needs them.
+    await this.loadLogicFiles();
+
     for (const file of await listFiles(join(this.dataDir, "inbox"), ".json")) {
       const id = Number(file.replace(/\.json$/, ""));
       if (!Number.isFinite(id)) continue;
@@ -279,26 +325,76 @@ export class WorldStore implements AccessWorld {
     return this.users.get(username);
   }
 
+  /** In-memory cache bag on the user; created empty on first access. */
+  private userCache(username: string): UserCache | undefined {
+    const user = this.users.get(username);
+    if (!user) return undefined;
+    if (!user.cache) user.cache = {};
+    return user.cache;
+  }
+
+  private cachedNumber(
+    username: string,
+    key: keyof UserCache,
+    compute: () => number,
+  ): number {
+    const bag = this.userCache(username);
+    if (!bag) return compute();
+    const cur = bag[key];
+    if (typeof cur === "number") return cur;
+    const n = compute();
+    bag[key] = n;
+    return n;
+  }
+
+  private bumpCachedNumber(username: string, key: keyof UserCache, delta: number): void {
+    const bag = this.users.get(username)?.cache;
+    const cur = bag?.[key];
+    if (!bag || typeof cur !== "number") return;
+    bag[key] = cur + delta;
+  }
+
+  /** Owner-only scene count. Fills `user.cache.scenesOwned` on first get. */
+  scenesOwned(username: string): number {
+    return this.cachedNumber(username, "scenesOwned", () => {
+      let n = 0;
+      for (const s of this.scenes.values()) {
+        if (s.owner === username) n += 1;
+      }
+      return n;
+    });
+  }
+
   async saveMeta(): Promise<void> {
     await writeJsonAtomic(join(this.dataDir, "meta.json"), this.meta);
   }
 
   async saveUser(user: UserRecord): Promise<void> {
+    const { cache: incomingCache, ...rest } = user;
+    const existing = this.users.get(user.username);
     const toSave: UserRecord = {
-      ...user,
-      description: user.description ?? "",
-      details: user.details ?? {},
+      ...rest,
+      description: rest.description ?? "",
+      details: rest.details ?? {},
     };
+    const nextCache = incomingCache ?? existing?.cache;
+    if (nextCache) toSave.cache = nextCache;
     this.users.set(toSave.username, toSave);
-    await writeJsonAtomic(join(this.dataDir, "users", `${toSave.username}.json`), toSave);
+    const onDisk: UserRecord = { ...toSave };
+    delete onDisk.cache;
+    await writeJsonAtomic(join(this.dataDir, "users", `${toSave.username}.json`), onDisk);
   }
 
   getUserFlags(username: string): Record<string, FlagValue> {
     return { ...(this.userFlags.get(username) ?? {}) };
   }
 
-  getUserBadges(username: string): string[] {
-    return [...(this.userBadges.get(username) ?? [])];
+  getUserVars(username: string): Record<string, number> {
+    return { ...(this.userVars.get(username) ?? {}) };
+  }
+
+  getUserBadges(username: string): UserBadge[] {
+    return (this.userBadges.get(username) ?? []).map((b) => ({ ...b }));
   }
 
   async saveUserFlags(username: string, flags: Record<string, FlagValue>): Promise<void> {
@@ -306,8 +402,14 @@ export class WorldStore implements AccessWorld {
     await writeJsonAtomic(join(this.dataDir, "users", `${username}.flags.json`), flags);
   }
 
-  async saveUserBadges(username: string, badges: string[]): Promise<void> {
-    this.userBadges.set(username, badges);
+  async saveUserVars(username: string, vars: Record<string, number>): Promise<void> {
+    const clean = sanitizeUserVars(vars);
+    this.userVars.set(username, clean);
+    await writeJsonAtomic(join(this.dataDir, "users", `${username}.vars.json`), clean);
+  }
+
+  async saveUserBadges(username: string, badges: UserBadge[]): Promise<void> {
+    this.userBadges.set(username, badges.map((b) => ({ ...b })));
     await writeJsonAtomic(join(this.dataDir, "users", `${username}.badges.json`), badges);
   }
 
@@ -315,8 +417,45 @@ export class WorldStore implements AccessWorld {
     return [...this.quests];
   }
 
+  /** Manager quest files only (`quests/<name>.json`). */
+  listMasterQuests(): QuestFile[] {
+    return [...this.masterQuests];
+  }
+
   getQuest(name: string): QuestFile | undefined {
     return this.quests.find((q) => q.name === name);
+  }
+
+  getMasterQuest(name: string): QuestFile | undefined {
+    return this.masterQuests.find((q) => q.name === name);
+  }
+
+  /** Raw on-disk text for a manager quest file (preserves author formatting). */
+  async readMasterQuestText(name: string): Promise<string | undefined> {
+    const path = join(this.dataDir, "quests", `${name}.json`);
+    if (!(await exists(path))) return undefined;
+    return readText(path);
+  }
+
+  /** Raw on-disk text for a user quest file. */
+  async readUserQuestText(username: string): Promise<string | undefined> {
+    const path = join(this.dataDir, "quests", "users", `${username}.json`);
+    if (!(await exists(path))) return undefined;
+    return readText(path);
+  }
+
+  /** Raw on-disk text for master alchemy recipes. */
+  async readAlchemyRecipesText(): Promise<string | undefined> {
+    const path = join(this.dataDir, "alchemy", "recipes.json");
+    if (!(await exists(path))) return undefined;
+    return readText(path);
+  }
+
+  /** Raw on-disk text for a user alchemy file. */
+  async readUserAlchemyText(username: string): Promise<string | undefined> {
+    const path = join(this.dataDir, "alchemy", "users", `${username}.json`);
+    if (!(await exists(path))) return undefined;
+    return readText(path);
   }
 
   badgeTitle(id: string): string {
@@ -324,16 +463,59 @@ export class WorldStore implements AccessWorld {
   }
 
   async loadLogicFiles(): Promise<void> {
-    const quests: QuestFile[] = [];
+    await mkdir(join(this.dataDir, "quests"), { recursive: true });
+    await mkdir(join(this.dataDir, "quests", "users"), { recursive: true });
+
+    const master: QuestFile[] = [];
     for (const file of await listFiles(join(this.dataDir, "quests"), ".json")) {
       try {
         const raw = await readJson<unknown>(join(this.dataDir, "quests", file));
-        quests.push(parseQuestFile(raw));
+        const quest = parseQuestFile(raw);
+        if (!isManagerQuestName(quest.name)) {
+          logQuestFault(
+            `load quest ${file}`,
+            new Error(`manager quest name must be a simple identifier (got "${quest.name}")`),
+          );
+          continue;
+        }
+        master.push(quest);
       } catch (err) {
         logQuestFault(`load quest ${file}`, err);
       }
     }
-    this.quests = quests.sort((a, b) => a.name.localeCompare(b.name));
+    master.sort((a, b) => a.name.localeCompare(b.name));
+    this.masterQuests = master;
+
+    const userFiles = new Map<string, QuestFile>();
+    const merged: QuestFile[] = [...master];
+    const usersDir = join(this.dataDir, "quests", "users");
+    for (const file of await listFiles(usersDir, ".json")) {
+      const username = file.replace(/\.json$/, "");
+      const expectedName = userQuestNamespace(username);
+      try {
+        const parsed = parseQuestFile(await readJson<unknown>(join(usersDir, file)));
+        userFiles.set(username, parsed);
+        if (parsed.name !== expectedName) {
+          logQuestFault(
+            `quest user ${username}: name must be "${expectedName}"`,
+            new Error(`got "${parsed.name}"`),
+          );
+          continue;
+        }
+        if (!this.userQuestGrantsAllowed(username, parsed)) {
+          logQuestFault(
+            `quest user ${username}: grant not allowed`,
+            new Error("canManage required on home scene for each giveArtefact / quest alchemy gives"),
+          );
+          continue;
+        }
+        merged.push({ ...parsed, author: username });
+      } catch (err) {
+        logQuestFault(`load quests/users/${file}`, err);
+      }
+    }
+    this.userQuestFiles = userFiles;
+    this.quests = merged;
 
     await this.loadAlchemyFiles();
   }
@@ -357,8 +539,27 @@ export class WorldStore implements AccessWorld {
     }
     this.masterAlchemyRecipes = master;
 
-    const userFiles = new Map<string, AlchemyRecipe[]>();
     const merged: AlchemyRecipe[] = [...master];
+
+    // Quest-embedded recipes (manager + ACL-approved personal), after master.
+    for (const quest of this.quests) {
+      for (const recipe of quest.alchemy ?? []) {
+        if (quest.author && !this.userAlchemyRecipeGrantsAllowed(quest.author, recipe)) {
+          logQuestFault(
+            `alchemy quest ${quest.name} recipe ${recipe.id}: grant not allowed`,
+            new Error("canManage required on home scene for each gives artefact"),
+          );
+          continue;
+        }
+        merged.push({
+          ...recipe,
+          id: `${quest.name}/${recipe.id}`,
+          ...(quest.author ? { author: quest.author } : {}),
+        });
+      }
+    }
+
+    const userFiles = new Map<string, AlchemyRecipe[]>();
     const usersDir = join(this.dataDir, "alchemy", "users");
     for (const file of await listFiles(usersDir, ".json")) {
       const username = file.replace(/\.json$/, "");
@@ -383,7 +584,7 @@ export class WorldStore implements AccessWorld {
         logQuestFault(`load alchemy users/${file}`, err);
       }
     }
-    // Stable order among users (listFiles is sorted); master already first.
+    // Order: master → quests (this.quests order) → users (listFiles sorted).
     this.userAlchemyFiles = userFiles;
     this.alchemyRecipes = merged;
   }
@@ -433,9 +634,73 @@ export class WorldStore implements AccessWorld {
     return this.userAlchemyFiles.get(username) ?? [];
   }
 
-  async saveQuest(quest: QuestFile): Promise<void> {
-    parseQuestFile(quest);
-    await writeJsonAtomic(join(this.dataDir, "quests", `${quest.name}.json`), quest);
+  /** True when a (possibly user-authored) quest may grant its artefacts right now. */
+  userQuestGrantsAllowed(username: string, quest: QuestFile): boolean {
+    const author = this.getUser(username);
+    if (!author) return false;
+    for (const gid of questGiveArtefactIds(quest)) {
+      const artefact = this.getArtefact(gid);
+      if (!artefact) return false;
+      const home = this.getScene(artefact.homeSceneId);
+      if (!home || !canManage(author, home, this)) return false;
+    }
+    return true;
+  }
+
+  assertUserQuestGrants(username: string, quest: QuestFile): void {
+    const author = this.getUser(username);
+    if (!author) {
+      throw new QuestValidationError(`Unknown user ${username}`);
+    }
+    for (const gid of questGiveArtefactIds(quest)) {
+      const artefact = this.getArtefact(gid);
+      if (!artefact) {
+        throw new QuestValidationError(`grant artefact ${gid} does not exist`);
+      }
+      const home = this.getScene(artefact.homeSceneId);
+      if (!home || !canManage(author, home, this)) {
+        throw new QuestValidationError(
+          `can only grant artefact ${gid} if you own or manage its home scene`,
+        );
+      }
+    }
+  }
+
+  getUserQuest(username: string): QuestFile | undefined {
+    return this.userQuestFiles.get(username);
+  }
+
+  /** Usernames that have a personal quest file on disk (sorted). */
+  listUserQuestUsernames(): string[] {
+    return [...this.userQuestFiles.keys()].sort((a, b) => a.localeCompare(b));
+  }
+
+  emptyUserQuest(username: string): QuestFile {
+    const name = userQuestNamespace(username);
+    const shell = {
+      name,
+      title: `${username}'s quests`,
+      description:
+        "Personal quest namespace. Flags and badges must use user.<username> as prefix.",
+      rules: [] as [],
+    };
+    try {
+      return parseQuestFile(shell);
+    } catch {
+      // Username may contain characters invalid for personal quest names.
+      return shell;
+    }
+  }
+
+  async saveQuest(quest: QuestFile, sourceText?: string): Promise<void> {
+    const parsed = questFileForDisk(parseQuestFile(quest));
+    if (!isManagerQuestName(parsed.name)) {
+      throw new QuestValidationError(
+        `Manager quest name must be a simple identifier (not "${parsed.name}"; "user" is reserved for personal quests)`,
+      );
+    }
+    const path = join(this.dataDir, "quests", `${parsed.name}.json`);
+    await writeQuestOrAlchemySource(path, parsed, sourceText);
     await this.loadLogicFiles();
   }
 
@@ -445,52 +710,119 @@ export class WorldStore implements AccessWorld {
     await this.loadLogicFiles();
   }
 
+  /** Persist one user's quest file (namespace + ACL-checked) and rebuild the merge. */
+  async saveUserQuest(username: string, quest: QuestFile, sourceText?: string): Promise<void> {
+    const parsed = questFileForDisk(parseQuestFile(quest));
+    const expected = userQuestNamespace(username);
+    if (parsed.name !== expected) {
+      throw new QuestValidationError(`Quest name must be "${expected}"`);
+    }
+    this.assertUserQuestGrants(username, parsed);
+    await mkdir(join(this.dataDir, "quests", "users"), { recursive: true });
+    const path = join(this.dataDir, "quests", "users", `${username}.json`);
+    await writeQuestOrAlchemySource(path, parsed, sourceText);
+    await this.loadLogicFiles();
+  }
+
+  async deleteUserQuest(username: string): Promise<void> {
+    const path = join(this.dataDir, "quests", "users", `${username}.json`);
+    if (await exists(path)) await unlink(path);
+    await this.loadLogicFiles();
+  }
+
   /** Persist master alchemy file and rebuild the in-memory merge. */
-  async saveAlchemyRecipes(recipes: AlchemyRecipe[]): Promise<void> {
+  async saveAlchemyRecipes(recipes: AlchemyRecipe[], sourceText?: string): Promise<void> {
     const parsed = alchemyRecipesForDisk(parseAlchemyRecipes(recipes));
-    await writeJsonAtomic(join(this.dataDir, "alchemy", "recipes.json"), parsed);
+    const path = join(this.dataDir, "alchemy", "recipes.json");
+    await writeQuestOrAlchemySource(path, parsed, sourceText);
     await this.loadAlchemyFiles();
   }
 
   /** Persist one user's alchemy file (ACL-checked) and rebuild the in-memory merge. */
-  async saveUserAlchemy(username: string, recipes: AlchemyRecipe[]): Promise<void> {
+  async saveUserAlchemy(username: string, recipes: AlchemyRecipe[], sourceText?: string): Promise<void> {
     const parsed = alchemyRecipesForDisk(parseAlchemyRecipes(recipes));
     this.assertUserAlchemyGrants(username, parsed);
     await mkdir(join(this.dataDir, "alchemy", "users"), { recursive: true });
-    await writeJsonAtomic(join(this.dataDir, "alchemy", "users", `${username}.json`), parsed);
+    const path = join(this.dataDir, "alchemy", "users", `${username}.json`);
+    await writeQuestOrAlchemySource(path, parsed, sourceText);
     await this.loadAlchemyFiles();
   }
 
-  predContextFor(username: string, atSceneId?: number) {
+  predContextFor(
+    username: string,
+    atSceneId?: number,
+    extra?: { useArtefactId?: number; inputPhrase?: string },
+  ) {
     const user = this.getUser(username);
     const inventoryIds = new Set((user?.inventory ?? []).map((i) => i.artefactId));
     const artefactTags = new Map<number, readonly string[]>();
     for (const a of this.artefacts.values()) artefactTags.set(a.id, a.tags);
-    let scenesOwned = 0;
-    for (const s of this.scenes.values()) {
-      if (s.owner === username) scenesOwned += 1;
-    }
-    return { inventoryIds, artefactTags, atSceneId, scenesOwned };
+    return {
+      inventoryIds,
+      artefactTags,
+      atSceneId,
+      scenesOwned: this.scenesOwned(username),
+      useArtefactId: extra?.useArtefactId,
+      inputPhrase: extra?.inputPhrase,
+    };
   }
 
   /**
-   * Run quest evaluation for a user (cascade). Persists flags/badges and grants artefacts.
-   * Never throws to callers — faults are logged for operators.
+   * Run a single-pass quest evaluation. Persists flags/vars/badges and grants artefacts.
+   * Newly earned badges get an inbox notice. Never throws to callers — faults are logged.
    */
-  async evaluateQuestsForUser(username: string, atSceneId?: number): Promise<UserRecord | undefined> {
+  async evaluateQuestsForUser(
+    username: string,
+    atSceneId?: number,
+    evalOpts?: {
+      wake?: QuestWake;
+      useArtefactId?: number;
+      inputPhrase?: string;
+      wakeGained?: number[];
+      wakeDropped?: number[];
+    },
+  ): Promise<{ user: UserRecord; actionMatched: boolean; actionOk?: string } | undefined> {
     const user = this.getUser(username);
     if (!user) return undefined;
     try {
       const sceneId = atSceneId ?? user.lastSceneId;
+      const priorBadges = this.getUserBadges(username);
+      const priorIds = priorBadges.map((b) => b.badge);
+      const wake = evalOpts?.wake ?? "always";
+      const inputPhrase =
+        evalOpts?.inputPhrase !== undefined
+          ? normalizeInputPhrase(evalOpts.inputPhrase)
+          : undefined;
       const result = evaluateQuests({
         quests: this.quests,
         flags: this.getUserFlags(username),
-        badges: this.getUserBadges(username),
-        predContext: this.predContextFor(username, sceneId),
+        vars: this.getUserVars(username),
+        badges: priorIds,
+        wake,
+        wakeGained: evalOpts?.wakeGained,
+        wakeDropped: evalOpts?.wakeDropped,
+        canGiveArtefact: (id) => Boolean(this.getArtefact(id)),
+        predContext: this.predContextFor(username, sceneId, {
+          useArtefactId: evalOpts?.useArtefactId,
+          inputPhrase,
+        }),
       });
       await this.saveUserFlags(username, result.flags);
-      await this.saveUserBadges(username, result.badges);
-      let updated = user;
+      await this.saveUserVars(username, result.vars);
+      await this.saveUserBadges(
+        username,
+        mergeGrantedBadges(priorBadges, result.badges, nowIso()),
+      );
+      const hadBadge = new Set(priorIds);
+      for (const badgeId of result.badges) {
+        if (hadBadge.has(badgeId)) continue;
+        try {
+          await this.notifyBadgeEarned(username, badgeId);
+        } catch (err) {
+          logQuestFault(`badge notice ${badgeId} for ${username}`, err);
+        }
+      }
+      let updated = this.getUser(username) ?? user;
       for (const artefactId of result.grantedArtefactIds) {
         try {
           if (!this.getArtefact(artefactId)) continue;
@@ -500,15 +832,41 @@ export class WorldStore implements AccessWorld {
           logQuestFault(`giveArtefact ${artefactId} to ${username}`, err);
         }
       }
-      return this.getUser(username) ?? updated;
+      const next = this.getUser(username) ?? updated;
+      return {
+        user: next,
+        actionMatched: result.actionMatched,
+        actionOk: result.actionOk,
+      };
     } catch (err) {
       logQuestFault(`evaluateQuestsForUser ${username}`, err);
-      return user;
+      return { user, actionMatched: false };
     }
   }
 
+  /** Inbox notice when a badge is newly granted via quest then. */
+  async notifyBadgeEarned(username: string, badgeId: string): Promise<InboxMessage> {
+    const def = badgeDefsById(this.quests).get(badgeId);
+    const title = def?.title ?? badgeId;
+    const description = def?.description?.trim() ?? "";
+    return this.createInboxMessage({
+      type: "notice",
+      toUser: username,
+      fromUser: "Proseden",
+      subject: `You've earned a badge ${title}`,
+      body: description,
+    });
+  }
+
   async saveScene(scene: SceneRecord): Promise<void> {
+    const prev = this.scenes.get(scene.id);
     this.scenes.set(scene.id, scene);
+    if (!prev) {
+      this.bumpCachedNumber(scene.owner, "scenesOwned", 1);
+    } else if (prev.owner !== scene.owner) {
+      this.bumpCachedNumber(prev.owner, "scenesOwned", -1);
+      this.bumpCachedNumber(scene.owner, "scenesOwned", 1);
+    }
     const { body, details, ...meta } = scene;
     const clean = stripLegacyInvites(meta);
     const raw = serializeProseDocument(clean, body, details);
@@ -529,6 +887,56 @@ export class WorldStore implements AccessWorld {
 
   async setPeerMessagingEnabled(enabled: boolean): Promise<SettingsFile> {
     this.settings = { ...this.settings, peerMessagingEnabled: enabled };
+    await this.saveSettings();
+    return this.settings;
+  }
+
+  isGuestLiveEnabled(): boolean {
+    return this.settings.guestLiveEnabled !== false;
+  }
+
+  async setGuestLiveEnabled(enabled: boolean): Promise<SettingsFile> {
+    this.settings = { ...this.settings, guestLiveEnabled: enabled };
+    await this.saveSettings();
+    return this.settings;
+  }
+
+  isLiveChatEnabled(): boolean {
+    return this.settings.liveChatEnabled !== false;
+  }
+
+  async setLiveChatEnabled(enabled: boolean): Promise<SettingsFile> {
+    this.settings = { ...this.settings, liveChatEnabled: enabled };
+    await this.saveSettings();
+    return this.settings;
+  }
+
+  isRegistrationEnabled(): boolean {
+    return this.settings.registrationEnabled !== false;
+  }
+
+  async setRegistrationEnabled(enabled: boolean): Promise<SettingsFile> {
+    this.settings = { ...this.settings, registrationEnabled: enabled };
+    await this.saveSettings();
+    return this.settings;
+  }
+
+  isNonManagerEditingEnabled(): boolean {
+    return this.settings.nonManagerEditingEnabled !== false;
+  }
+
+  async setNonManagerEditingEnabled(enabled: boolean): Promise<SettingsFile> {
+    this.settings = { ...this.settings, nonManagerEditingEnabled: enabled };
+    await this.saveSettings();
+    return this.settings;
+  }
+
+  isNonManagerViewEnabled(): boolean {
+    return this.settings.nonManagerViewEnabled !== false;
+  }
+
+  async setNonManagerViewEnabled(enabled: boolean): Promise<SettingsFile> {
+    this.settings = { ...this.settings, nonManagerViewEnabled: enabled };
     await this.saveSettings();
     return this.settings;
   }
@@ -880,6 +1288,26 @@ export class WorldStore implements AccessWorld {
     return [...this.users.values()].sort((a, b) => a.username.localeCompare(b.username));
   }
 
+  /** In-memory entity totals for the manager dashboard. */
+  overviewCounts(): WorldOverviewCounts {
+    let exits = 0;
+    for (const list of this.exits.values()) exits += list.length;
+    return {
+      users: this.users.size,
+      scenes: this.scenes.size,
+      artefacts: this.artefacts.size,
+      exits,
+      groups: this.groups.size,
+      entranceGroups: this.entranceGroups.size,
+      quests: this.masterQuests.length,
+      userQuestFiles: this.userQuestFiles.size,
+      alchemyRecipes: this.masterAlchemyRecipes.length,
+      userAlchemyFiles: this.userAlchemyFiles.size,
+      inbox: this.inbox.size,
+      staff: Object.keys(this.staff.roles).length,
+    };
+  }
+
   /**
    * Resolve teleport target: if destination is in an entrance group and the
    * requester is not already "inside" that group, redirect to the entrance.
@@ -922,7 +1350,8 @@ export class WorldStore implements AccessWorld {
   async setStaffRoles(username: string, roles: StaffRole[]): Promise<StaffFile> {
     if (!this.users.has(username)) throw new Error("User not found");
     const cleaned = [...new Set(roles)].filter(
-      (r): r is StaffRole => r === "moderator" || r === "topographer" || r === "manager",
+      (r): r is StaffRole =>
+        r === "moderator" || r === "topographer" || r === "manager" || r === "questor",
     );
     if (cleaned.length) this.staff.roles[username] = cleaned;
     else delete this.staff.roles[username];
@@ -938,6 +1367,9 @@ export class WorldStore implements AccessWorld {
   async deleteScene(id: number): Promise<void> {
     const scene = this.scenes.get(id);
     if (!scene) throw new Error("Scene not found");
+    if (this.isUserHomeScene(id)) {
+      throw new Error("Cannot delete a user's home scene");
+    }
     if (id === this.worldEntranceSceneId()) {
       throw new Error("Cannot delete the world entrance scene");
     }
@@ -959,7 +1391,15 @@ export class WorldStore implements AccessWorld {
     }
 
     for (const artefact of [...this.artefacts.values()].filter((a) => a.homeSceneId === id)) {
-      await this.deleteArtefact(artefact.id, { notify: false });
+      if (artefact.owner === scene.owner) {
+        await this.deleteArtefact(artefact.id, { notify: false });
+      } else {
+        const homeId = this.userHomeSceneId(artefact.owner);
+        if (!homeId) {
+          throw new Error(`User ${artefact.owner} has no home scene`);
+        }
+        await this.rehomeArtefact(artefact.id, homeId, { by: "system" });
+      }
     }
 
     for (const [fromId, exits] of [...this.exits.entries()]) {
@@ -973,6 +1413,7 @@ export class WorldStore implements AccessWorld {
     const groupId = scene.groupId;
     const egId = scene.entranceGroupId;
     this.scenes.delete(id);
+    this.bumpCachedNumber(scene.owner, "scenesOwned", -1);
     this.exits.delete(id);
     this.subscriptions.delete(id);
 
@@ -1167,7 +1608,55 @@ export class WorldStore implements AccessWorld {
       details: {},
     };
     await this.saveUser(user);
-    return user;
+    await this.createUserHomeScene(username);
+    return this.users.get(username)!;
+  }
+
+  /** Permanent home scene for ejected / orphaned guest artefacts. Idempotent if already set. */
+  async createUserHomeScene(username: string): Promise<number> {
+    const user = this.users.get(username);
+    if (!user) throw new Error("User not found");
+    const existing = user.homeSceneId;
+    if (existing !== undefined && this.scenes.has(existing)) return existing;
+
+    const scene = await this.createScene({
+      owner: username,
+      title: userHomeSceneTitle(username),
+      body: userHomeSceneBody(username),
+      visibility: "private",
+    });
+    const updated: UserRecord = { ...user, homeSceneId: scene.id };
+    await this.saveUser(updated);
+    return scene.id;
+  }
+
+  userHomeSceneId(username: string): number | undefined {
+    const id = this.users.get(username)?.homeSceneId;
+    return id !== undefined && Number.isFinite(id) && id > 0 && this.scenes.has(id) ? id : undefined;
+  }
+
+  isUserHomeScene(sceneId: number): boolean {
+    for (const user of this.users.values()) {
+      if (user.homeSceneId === sceneId) return true;
+    }
+    return false;
+  }
+
+  async rehomeArtefact(
+    id: number,
+    homeSceneId: number,
+    opts?: { by?: string },
+  ): Promise<ArtefactRecord> {
+    if (!this.scenes.has(homeSceneId)) throw new Error("Home scene not found");
+    return this.updateArtefact(id, { homeSceneId }, { by: opts?.by ?? "unknown" });
+  }
+
+  async ejectArtefact(id: number, by: string): Promise<ArtefactRecord> {
+    const artefact = this.artefacts.get(id);
+    if (!artefact) throw new Error("Artefact not found");
+    const homeId = this.userHomeSceneId(artefact.owner);
+    if (!homeId) throw new Error(`User ${artefact.owner} has no home scene`);
+    return this.rehomeArtefact(id, homeId, { by });
   }
 
   async updatePassword(
@@ -1218,6 +1707,7 @@ export class WorldStore implements AccessWorld {
         | "details"
         | "visibility"
         | "isJunction"
+        | "isRepository"
         | "when"
         | "whenDenied"
         | "detailWhen"
@@ -1357,6 +1847,7 @@ export class WorldStore implements AccessWorld {
         details: snap.details,
         visibility: snap.visibility,
         isJunction: snap.isJunction,
+        isRepository: snap.isRepository,
       },
       { by, retainSnapshot: false },
     );
@@ -1474,6 +1965,18 @@ export class WorldStore implements AccessWorld {
     const exits = this.getExits(fromSceneId).filter((e) => e.exitId !== exit.exitId);
     await this.saveExits(fromSceneId, exits);
     return exit;
+  }
+
+  async reorderExits(fromSceneId: number, orderedIds: number[]): Promise<ExitRecord[]> {
+    if (!this.scenes.has(fromSceneId)) throw new Error("From scene not found");
+    const current = this.getExits(fromSceneId);
+    if (!isExitIdPermutation(orderedIds, current)) {
+      throw new Error("exitIds must be a permutation of the current exits");
+    }
+    const byId = new Map(current.map((e) => [e.exitId, e]));
+    const exits = orderedIds.map((id) => byId.get(id)!);
+    await this.saveExits(fromSceneId, exits);
+    return exits;
   }
 
   async createArtefact(input: {
@@ -1724,8 +2227,10 @@ function normalizeMeta(raw: Record<string, unknown>): MetaFile {
   return meta;
 }
 
+/** Persistable user fields only. Disk `cache` (if present) is ignored. */
 function normalizeUser(raw: Record<string, unknown>): UserRecord {
   const lastSceneId = Number(raw.lastSceneId);
+  const homeSceneId = Number(raw.homeSceneId);
   return {
     username: String(raw.username ?? ""),
     passwordHash: String(raw.passwordHash ?? ""),
@@ -1741,6 +2246,8 @@ function normalizeUser(raw: Record<string, unknown>): UserRecord {
     grants: normalizeGrants(raw.grants),
     denies: normalizeDenies(raw.denies),
     lastSceneId: Number.isFinite(lastSceneId) && lastSceneId > 0 ? lastSceneId : undefined,
+    homeSceneId:
+      Number.isFinite(homeSceneId) && homeSceneId > 0 ? homeSceneId : undefined,
     lastSeenAt: raw.lastSeenAt !== undefined ? String(raw.lastSeenAt) : undefined,
   };
 }
@@ -1772,6 +2279,7 @@ function normalizeSceneMeta(raw: Record<string, unknown>, id: number): SceneMeta
         ? String(raw.entranceGroupId)
         : null,
     isJunction: Boolean(raw.isJunction),
+    isRepository: Boolean(raw.isRepository),
     when: parseOptionalFlagRef(raw.when),
     whenDenied: raw.whenDenied !== undefined ? String(raw.whenDenied) : undefined,
     detailWhen: parseDetailWhenMap(raw.detailWhen),
@@ -1859,9 +2367,25 @@ function normalizeInboxMessage(
   return undefined;
 }
 
+function defaultSettings(): SettingsFile {
+  return {
+    peerMessagingEnabled: true,
+    guestLiveEnabled: true,
+    liveChatEnabled: true,
+    registrationEnabled: true,
+    nonManagerEditingEnabled: true,
+    nonManagerViewEnabled: true,
+  };
+}
+
 function normalizeSettings(raw: Record<string, unknown>): SettingsFile {
   return {
     peerMessagingEnabled: raw.peerMessagingEnabled !== false,
+    guestLiveEnabled: raw.guestLiveEnabled !== false,
+    liveChatEnabled: raw.liveChatEnabled !== false,
+    registrationEnabled: raw.registrationEnabled !== false,
+    nonManagerEditingEnabled: raw.nonManagerEditingEnabled !== false,
+    nonManagerViewEnabled: raw.nonManagerViewEnabled !== false,
   };
 }
 
@@ -1878,7 +2402,14 @@ function normalizeStaff(raw: Record<string, unknown>): StaffFile {
     for (const r of list) {
       const s = String(r);
       if (s === "organiser") cleaned.push("topographer");
-      else if (s === "moderator" || s === "topographer" || s === "manager") cleaned.push(s);
+      else if (
+        s === "moderator" ||
+        s === "topographer" ||
+        s === "manager" ||
+        s === "questor"
+      ) {
+        cleaned.push(s);
+      }
     }
     if (cleaned.length) roles[username] = [...new Set(cleaned)];
   }
@@ -2004,6 +2535,17 @@ function sceneTitleForNotice(scene: { id: number; title?: string }): string {
   return title || `scene ${scene.id}`;
 }
 
+function isExitIdPermutation(orderedIds: number[], current: ExitRecord[]): boolean {
+  if (orderedIds.length !== current.length) return false;
+  const currentIds = new Set(current.map((e) => e.exitId));
+  const seen = new Set<number>();
+  for (const id of orderedIds) {
+    if (!Number.isInteger(id) || !currentIds.has(id) || seen.has(id)) return false;
+    seen.add(id);
+  }
+  return true;
+}
+
 function definedEntries<T extends object>(patch: T): Partial<T> {
   const out: Partial<T> = {};
   for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
@@ -2021,6 +2563,20 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Prefer validated source text so compact author formatting is preserved. */
+async function writeQuestOrAlchemySource(
+  path: string,
+  value: unknown,
+  sourceText?: string,
+): Promise<void> {
+  if (sourceText !== undefined) {
+    const body = sourceText.endsWith("\n") ? sourceText : `${sourceText}\n`;
+    await writeTextAtomic(path, body);
+    return;
+  }
+  await writeJsonAtomic(path, value);
 }
 
 async function listFiles(dir: string, ext: string): Promise<string[]> {

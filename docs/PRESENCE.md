@@ -9,7 +9,7 @@ There is **no `isActive` flag**.
 | Term | Meaning |
 |------|---------|
 | **Live / here / online** | Listed by `PresenceStore.here(scene)` / `online()` because the person has at least one open SSE connection **or** a **pending leave** still inside reconnect grace |
-| **Arrives / leaves** | Chat system lines (`"Name arrives."` / `"Name leaves."`) produced by `SceneHub` when it hears `presence.join` / `leave` / `move` |
+| **Arrives / leaves** | Chat system lines (`"Name arrives."` / `"Name leaves."` / `"Name logged out."`) produced by `SceneHub` when it hears `presence.join` / `leave` / `move` |
 | **Profile last seen** | Persisted `UserRecord.lastSeenAt` (debounced scene visits via `LocationTracker`) — **not** live presence |
 
 Identity keys: `u:<username>` or `g:<hex guest id>`. Multiple tabs for the same key coalesce to one who’s-here / online row.
@@ -91,6 +91,7 @@ Detail views (`/s/:id?card`) and artefact pages (`/a/:id`) keep you present in t
 | Use-case | Outcome |
 |----------|---------|
 | Login / register / logout while guest was live | Kick `g:` presence **immediately** (no grace) |
+| Logout while signed-in user was live | Kick `u:` presence immediately → `"X logged out."` |
 | Failed login | Guest presence untouched |
 | Moderator kick | Immediate leave; no second leave after grace |
 

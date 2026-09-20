@@ -1,16 +1,22 @@
 import type {
   AlchemyRecipe,
   BadgeDef,
-  FlagEffect,
   FlagValue,
-  KnockOn,
   Pred,
   QuestFile,
   QuestRule,
+  QuestRuleOn,
+  QuestWake,
+  ThenEffect,
 } from "../model/logic.js";
-import { QUEST_EVAL_MAX_ITERATIONS } from "../model/logic.js";
 import { logQuestFault } from "./log.js";
-import { evaluatePred, isFlagOnlyPred, type PredContext } from "./pred.js";
+import {
+  evaluatePred,
+  isFlagOnlyPred,
+  normalizeInputPhrase,
+  rollUniform1ToN,
+  type PredContext,
+} from "./pred.js";
 
 export class QuestValidationError extends Error {
   constructor(message: string) {
@@ -19,24 +25,72 @@ export class QuestValidationError extends Error {
   }
 }
 
+/** Keep only set flags (`true`); drop false, numbers, strings, and other leftovers. */
+export function sanitizeUserFlags(raw: unknown): Record<string, FlagValue> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, FlagValue> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (v === true) out[k] = true;
+  }
+  return out;
+}
+
+/** Keep finite numbers (including 0); drop non-numbers. Unset keys still read as 0. */
+export function sanitizeUserVars(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "number" && Number.isFinite(v)) out[k] = v;
+  }
+  return out;
+}
+
+/** Write namespace for a personal questor file (`user.<username>.*`). */
+export function userQuestNamespace(username: string): string {
+  return `user.${username}`;
+}
+
+const MANAGER_QUEST_NAME = /^[a-z][a-z0-9_-]*$/i;
+const PERSONAL_QUEST_NAME = /^user\.[a-z0-9_-]+$/i;
+
+/** True when `name` is a valid manager quest id (not the reserved `user` root). */
+export function isManagerQuestName(name: string): boolean {
+  return MANAGER_QUEST_NAME.test(name) && name.toLowerCase() !== "user";
+}
+
+/** True when `name` is a personal-style quest id (`user.<id>`). */
+export function isPersonalQuestName(name: string): boolean {
+  return PERSONAL_QUEST_NAME.test(name);
+}
+
 export function parseQuestFile(raw: unknown): QuestFile {
   if (!raw || typeof raw !== "object") throw new QuestValidationError("Quest must be an object");
   const o = raw as Record<string, unknown>;
   const name = String(o.name ?? "").trim();
-  if (!name || !/^[a-z][a-z0-9_-]*$/i.test(name)) {
-    throw new QuestValidationError("Quest name must be a simple identifier");
+  if (!name || (!isManagerQuestName(name) && !isPersonalQuestName(name))) {
+    throw new QuestValidationError(
+      'Quest name must be a simple identifier, or personal form "user.<username>" (not "user")',
+    );
   }
   if (!Array.isArray(o.rules)) throw new QuestValidationError("Quest rules must be an array");
-  const rules = o.rules.map((r, i) => parseRule(r, name, i));
-  const onFlag = o.onFlag !== undefined ? parseOnFlag(o.onFlag, name) : undefined;
+  const rules: QuestRule[] = [];
+  for (let i = 0; i < o.rules.length; i++) {
+    try {
+      rules.push(parseRule(o.rules[i], name, i));
+    } catch (err) {
+      logQuestFault(`quest ${name} skip rule[${i}]`, err);
+    }
+  }
   const badges = o.badges !== undefined ? parseBadges(o.badges, name) : undefined;
+  const alchemy =
+    o.alchemy !== undefined ? parseAlchemyRecipes(o.alchemy) : undefined;
   return {
     name,
     title: o.title !== undefined ? String(o.title) : undefined,
     description: o.description !== undefined ? String(o.description) : undefined,
     rules,
-    onFlag,
     badges,
+    ...(alchemy && alchemy.length > 0 ? { alchemy } : {}),
   };
 }
 
@@ -47,69 +101,206 @@ function parseRule(raw: unknown, questName: string, index: number): QuestRule {
   const o = raw as Record<string, unknown>;
   const id = String(o.id ?? `rule-${index}`);
   if (!o.when) throw new QuestValidationError(`Rule ${id}: when required`);
-  const when = o.when as Pred;
-  assertPredShape(when, `Rule ${id} when`);
+  const on = parseRuleOn(o.on, `Rule ${id}`);
+  const when = parsePred(o.when, `Rule ${id} when`, on);
   if (!Array.isArray(o.then) || !o.then.length) {
     throw new QuestValidationError(`Rule ${id}: then must be a non-empty array`);
   }
-  const then = o.then.map((t, i) => parseFlagEffect(t, questName, `${id}.then[${i}]`));
-  return { id, when, then };
+  const then = o.then.map((t, i) => parseThenEffect(t, questName, `${id}.then[${i}]`));
+  const okRaw = o.ok !== undefined ? String(o.ok).trim() : "";
+  return {
+    id,
+    when,
+    then,
+    ...(on !== undefined ? { on } : {}),
+    ...(okRaw ? { ok: okRaw } : {}),
+  };
 }
 
-function parseFlagEffect(raw: unknown, questName: string, label: string): FlagEffect {
+function parseRuleOn(raw: unknown, label: string): QuestRuleOn | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    if ("flag" in o) {
+      const flag = String(o.flag ?? "").trim();
+      if (!flag) throw new QuestValidationError(`${label}: on.flag must be non-empty`);
+      return { flag };
+    }
+    if ("clearFlag" in o) {
+      const flag = String(o.clearFlag ?? "").trim();
+      if (!flag) throw new QuestValidationError(`${label}: on.clearFlag must be non-empty`);
+      return { clearFlag: flag };
+    }
+    throw new QuestValidationError(`${label}: on object must be { flag } or { clearFlag }`);
+  }
+  const on = String(raw);
+  if (on === "always") {
+    throw new QuestValidationError(`${label}: omit on for always (do not write "always")`);
+  }
+  if (on === "use" || on === "input" || on === "gain" || on === "drop") return on;
+  throw new QuestValidationError(`${label}: on must be use, input, gain, drop, or { flag|clearFlag }`);
+}
+
+function parsePred(raw: unknown, label: string, on: QuestRuleOn | undefined): Pred {
+  const pred = raw as Pred;
+  assertPredShape(pred, label);
+  const rewritten = rewritePred(pred);
+  assertPredAtomsForOn(rewritten, on, label);
+  return rewritten;
+}
+
+function rewritePred(pred: Pred): Pred {
+  if ("not" in pred) return { not: rewritePred(pred.not) };
+  if ("all" in pred) return { all: pred.all.map(rewritePred) };
+  if ("any" in pred) return { any: pred.any.map(rewritePred) };
+  if ("input" in pred) return { input: normalizeInputPhrase(pred.input) };
+  if ("use" in pred) return { use: Number(pred.use) };
+  if ("gain" in pred) return { gain: Number(pred.gain) };
+  if ("drop" in pred) return { drop: Number(pred.drop) };
+  if ("scenesOwned" in pred) return { scenesOwned: Number(pred.scenesOwned) };
+  if ("var" in pred) {
+    const id = String(pred.var).trim();
+    if ("=" in pred) return { var: id, "=": Number(pred["="]) };
+    if ("!=" in pred) return { var: id, "!=": Number(pred["!="]) };
+    if (">" in pred) return { var: id, ">": Number(pred[">"]) };
+    if ("<" in pred) return { var: id, "<": Number(pred["<"]) };
+  }
+  return pred;
+}
+
+function assertPredAtomsForOn(pred: Pred, on: QuestRuleOn | undefined, label: string): void {
+  let hasUse = false;
+  let hasInput = false;
+  let hasGain = false;
+  let hasDrop = false;
+  walkPredAtoms(pred, (atom) => {
+    if ("use" in atom) {
+      if (on !== "use") throw new QuestValidationError(`${label}: use is only valid on use rules`);
+      hasUse = true;
+    }
+    if ("input" in atom) {
+      if (on !== "input") throw new QuestValidationError(`${label}: input is only valid on input rules`);
+      hasInput = true;
+    }
+    if ("gain" in atom) {
+      if (on !== "gain") throw new QuestValidationError(`${label}: gain is only valid on gain rules`);
+      hasGain = true;
+    }
+    if ("drop" in atom) {
+      if (on !== "drop") throw new QuestValidationError(`${label}: drop is only valid on drop rules`);
+      hasDrop = true;
+    }
+  });
+  if (on === "use" && !hasUse) {
+    throw new QuestValidationError(`${label}: use rules must include { use }`);
+  }
+  if (on === "input" && !hasInput) {
+    throw new QuestValidationError(`${label}: input rules must include { input }`);
+  }
+  if (on === "gain" && !hasGain) {
+    throw new QuestValidationError(`${label}: gain rules must include { gain }`);
+  }
+  if (on === "drop" && !hasDrop) {
+    throw new QuestValidationError(`${label}: drop rules must include { drop }`);
+  }
+}
+
+function walkPredAtoms(pred: Pred, visit: (atom: Pred) => void): void {
+  if ("not" in pred) {
+    walkPredAtoms(pred.not, visit);
+    return;
+  }
+  if ("all" in pred) {
+    for (const p of pred.all) walkPredAtoms(p, visit);
+    return;
+  }
+  if ("any" in pred) {
+    for (const p of pred.any) walkPredAtoms(p, visit);
+    return;
+  }
+  visit(pred);
+}
+
+function parseThenEffect(raw: unknown, questName: string, label: string): ThenEffect {
   if (!raw || typeof raw !== "object") throw new QuestValidationError(`${label}: invalid effect`);
   const o = raw as Record<string, unknown>;
   if ("setFlag" in o) {
     const flag = String(o.setFlag);
     assertNamespace(flag, questName, label);
-    const to = o.to !== undefined ? (o.to as FlagValue) : true;
-    return { setFlag: flag, to };
+    if (o.to !== undefined) {
+      if (o.to === false) {
+        throw new QuestValidationError(`${label}: use clearFlag instead of setFlag to false`);
+      }
+      if (o.to !== true) {
+        throw new QuestValidationError(`${label}: setFlag to must be true if present`);
+      }
+    }
+    return { setFlag: flag };
   }
   if ("clearFlag" in o) {
     const flag = String(o.clearFlag);
     assertNamespace(flag, questName, label);
     return { clearFlag: flag };
   }
-  throw new QuestValidationError(`${label}: only setFlag/clearFlag allowed`);
-}
-
-function parseOnFlag(
-  raw: unknown,
-  questName: string,
-): Record<string, { onTrue?: KnockOn[]; onFalse?: KnockOn[] }> {
-  if (!raw || typeof raw !== "object") throw new QuestValidationError("onFlag must be an object");
-  const out: Record<string, { onTrue?: KnockOn[]; onFalse?: KnockOn[] }> = {};
-  for (const [flag, body] of Object.entries(raw as Record<string, unknown>)) {
-    assertNamespace(flag, questName, `onFlag.${flag}`);
-    if (!body || typeof body !== "object") {
-      throw new QuestValidationError(`onFlag.${flag} must be an object`);
+  if ("setVar" in o) {
+    const id = String(o.setVar);
+    assertNamespace(id, questName, label);
+    const hasTo = "to" in o;
+    const hasRandom = "random" in o;
+    if (hasTo === hasRandom) {
+      throw new QuestValidationError(`${label}: setVar needs exactly one of to, random`);
     }
-    const b = body as Record<string, unknown>;
-    out[flag] = {
-      onTrue: b.onTrue !== undefined ? parseKnockOns(b.onTrue, questName, `onFlag.${flag}.onTrue`) : undefined,
-      onFalse: b.onFalse !== undefined ? parseKnockOns(b.onFalse, questName, `onFlag.${flag}.onFalse`) : undefined,
-    };
+    if (hasRandom) {
+      const n = Number(o.random);
+      if (!Number.isSafeInteger(n) || n < 1) {
+        throw new QuestValidationError(`${label}: setVar random must be a safe integer >= 1`);
+      }
+      return { setVar: id, random: n };
+    }
+    const to = Number(o.to);
+    if (!Number.isFinite(to)) {
+      throw new QuestValidationError(`${label}: setVar to must be a finite number`);
+    }
+    return { setVar: id, to };
   }
-  return out;
-}
-
-function parseKnockOns(raw: unknown, questName: string, label: string): KnockOn[] {
-  if (!Array.isArray(raw)) throw new QuestValidationError(`${label} must be an array`);
-  return raw.map((k, i) => {
-    if (!k || typeof k !== "object") throw new QuestValidationError(`${label}[${i}] invalid`);
-    const o = k as Record<string, unknown>;
-    if ("grantBadge" in o) {
-      const id = String(o.grantBadge);
-      assertNamespace(id, questName, `${label}[${i}]`);
-      return { grantBadge: id };
+  if ("incVar" in o) {
+    const id = String(o.incVar);
+    assertNamespace(id, questName, label);
+    const by = o.by === undefined ? 1 : Number(o.by);
+    if (!Number.isFinite(by) || by <= 0) {
+      throw new QuestValidationError(`${label}: incVar by must be a finite number > 0`);
     }
-    if ("giveArtefact" in o) {
-      const id = Number(o.giveArtefact);
-      if (!Number.isFinite(id)) throw new QuestValidationError(`${label}[${i}]: bad artefact id`);
-      return { giveArtefact: id };
+    return { incVar: id, by };
+  }
+  if ("decVar" in o) {
+    const id = String(o.decVar);
+    assertNamespace(id, questName, label);
+    const by = o.by === undefined ? 1 : Number(o.by);
+    if (!Number.isFinite(by) || by <= 0) {
+      throw new QuestValidationError(`${label}: decVar by must be a finite number > 0`);
     }
-    throw new QuestValidationError(`${label}[${i}]: only grantBadge/giveArtefact`);
-  });
+    return { decVar: id, by };
+  }
+  if ("clearVar" in o) {
+    const id = String(o.clearVar);
+    assertNamespace(id, questName, label);
+    return { clearVar: id };
+  }
+  if ("grantBadge" in o) {
+    const id = String(o.grantBadge);
+    assertNamespace(id, questName, label);
+    return { grantBadge: id };
+  }
+  if ("giveArtefact" in o) {
+    const id = Number(o.giveArtefact);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new QuestValidationError(`${label}: giveArtefact must be a finite artefact id`);
+    }
+    return { giveArtefact: id };
+  }
+  throw new QuestValidationError(
+    `${label}: only setFlag/clearFlag/setVar/incVar/decVar/clearVar/grantBadge/giveArtefact allowed`,
+  );
 }
 
 function parseBadges(raw: unknown, questName: string): BadgeDef[] {
@@ -134,6 +325,8 @@ function assertNamespace(id: string, questName: string, label: string): void {
   }
 }
 
+const VAR_OPS = ["=", "!=", ">", "<"] as const;
+
 function assertPredShape(pred: Pred, label: string): void {
   if (!pred || typeof pred !== "object") throw new QuestValidationError(`${label}: invalid pred`);
   if ("not" in pred) {
@@ -150,7 +343,84 @@ function assertPredShape(pred: Pred, label: string): void {
     pred.any.forEach((p, i) => assertPredShape(p, `${label}.any[${i}]`));
     return;
   }
-  if ("flag" in pred || "holds" in pred || "holdsTag" in pred || "hasBadge" in pred || "atScene" in pred || "scenesOwned" in pred) {
+  if ("flag" in pred) {
+    const rawFlag = pred as { flag: string; is?: unknown };
+    if ("is" in rawFlag) {
+      throw new QuestValidationError(
+        `${label}: flag "is" is not allowed; use "not." prefix or { not: { flag } }`,
+      );
+    }
+    const raw = String(rawFlag.flag).trim();
+    const invert = raw.startsWith("not.");
+    const id = invert ? raw.slice("not.".length).trim() : raw;
+    if (!id) {
+      throw new QuestValidationError(`${label}: flag id must be non-empty`);
+    }
+    return;
+  }
+  if ("holds" in pred || "holdsTag" in pred || "hasBadge" in pred || "atScene" in pred) {
+    return;
+  }
+  if ("scenesOwned" in pred) {
+    const n = Number((pred as { scenesOwned: unknown }).scenesOwned);
+    if (!Number.isFinite(n)) {
+      throw new QuestValidationError(`${label}: scenesOwned must be a number`);
+    }
+    if (typeof (pred as { scenesOwned: unknown }).scenesOwned === "object") {
+      throw new QuestValidationError(`${label}: scenesOwned must be a number (not { gte })`);
+    }
+    return;
+  }
+  if ("chance" in pred) {
+    const n = Number((pred as { chance: unknown }).chance);
+    if (!Number.isSafeInteger(n) || n < 1) {
+      throw new QuestValidationError(`${label}: chance must be a safe integer >= 1`);
+    }
+    return;
+  }
+  if ("use" in pred) {
+    const id = Number(pred.use);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new QuestValidationError(`${label}: use must be a finite artefact id`);
+    }
+    return;
+  }
+  if ("gain" in pred) {
+    const id = Number(pred.gain);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new QuestValidationError(`${label}: gain must be a finite artefact id`);
+    }
+    return;
+  }
+  if ("drop" in pred) {
+    const id = Number(pred.drop);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new QuestValidationError(`${label}: drop must be a finite artefact id`);
+    }
+    return;
+  }
+  if ("input" in pred) {
+    if (typeof pred.input !== "string") {
+      throw new QuestValidationError(`${label}: input must be a string`);
+    }
+    const normalized = normalizeInputPhrase(pred.input);
+    if (!normalized) {
+      throw new QuestValidationError(`${label}: input must be a non-empty phrase`);
+    }
+    return;
+  }
+  if ("var" in pred) {
+    const id = String(pred.var ?? "").trim();
+    if (!id) throw new QuestValidationError(`${label}: var id must be non-empty`);
+    const keys = VAR_OPS.filter((op) => op in pred);
+    if (keys.length !== 1) {
+      throw new QuestValidationError(`${label}: var needs exactly one of =, !=, >, <`);
+    }
+    const op = keys[0]!;
+    const n = Number((pred as Record<string, unknown>)[op]);
+    if (!Number.isFinite(n)) {
+      throw new QuestValidationError(`${label}: var ${op} must be a finite number`);
+    }
     return;
   }
   throw new QuestValidationError(`${label}: unknown predicate shape`);
@@ -200,48 +470,143 @@ export interface FlagChange {
   to: FlagValue | undefined;
 }
 
-export function applyFlagEffects(
+export function applyThenEffects(
   flags: Record<string, FlagValue>,
-  effects: FlagEffect[],
-): { flags: Record<string, FlagValue>; changes: FlagChange[] } {
-  const next = { ...flags };
-  const changes: FlagChange[] = [];
+  vars: Record<string, number>,
+  effects: ThenEffect[],
+  opts: {
+    inventoryIds: Set<number>;
+    canGiveArtefact: (id: number) => boolean;
+    badges?: string[];
+  },
+): {
+  flags: Record<string, FlagValue>;
+  vars: Record<string, number>;
+  badges: string[];
+  flagChanges: FlagChange[];
+  flagsSet: Set<string>;
+  flagsCleared: Set<string>;
+  gained: number[];
+  grantedArtefactIds: number[];
+} {
+  const nextFlags = { ...flags };
+  const nextVars = { ...vars };
+  const badges = [...(opts.badges ?? [])];
+  const flagChanges: FlagChange[] = [];
+  const flagsSet = new Set<string>();
+  const flagsCleared = new Set<string>();
+  const gained: number[] = [];
+  const grantedArtefactIds: number[] = [];
+
   for (const effect of effects) {
     if ("setFlag" in effect) {
-      const to = effect.to !== undefined ? effect.to : true;
-      const from = next[effect.setFlag];
-      if (from !== to) {
-        next[effect.setFlag] = to;
-        changes.push({ flag: effect.setFlag, from, to });
+      const from = nextFlags[effect.setFlag];
+      if (from !== true) {
+        nextFlags[effect.setFlag] = true;
+        flagChanges.push({ flag: effect.setFlag, from, to: true });
+        flagsSet.add(effect.setFlag);
       }
-    } else {
-      const from = next[effect.clearFlag];
+    } else if ("clearFlag" in effect) {
+      const from = nextFlags[effect.clearFlag];
       if (from !== undefined) {
-        delete next[effect.clearFlag];
-        changes.push({ flag: effect.clearFlag, from, to: undefined });
+        delete nextFlags[effect.clearFlag];
+        flagChanges.push({ flag: effect.clearFlag, from, to: undefined });
+        flagsCleared.add(effect.clearFlag);
       }
+    } else if ("setVar" in effect) {
+      let value: number;
+      if ("random" in effect) {
+        const rolled = rollUniform1ToN(effect.random);
+        if (rolled === undefined) continue;
+        value = rolled;
+      } else {
+        value = effect.to;
+      }
+      if (!(effect.setVar in nextVars) || nextVars[effect.setVar] !== value) {
+        nextVars[effect.setVar] = value;
+      }
+    } else if ("incVar" in effect) {
+      const cur = nextVars[effect.incVar] ?? 0;
+      nextVars[effect.incVar] = cur + effect.by;
+    } else if ("decVar" in effect) {
+      const cur = nextVars[effect.decVar] ?? 0;
+      nextVars[effect.decVar] = cur - effect.by;
+    } else if ("clearVar" in effect) {
+      if (effect.clearVar in nextVars) delete nextVars[effect.clearVar];
+    } else if ("grantBadge" in effect) {
+      if (!badges.includes(effect.grantBadge)) badges.push(effect.grantBadge);
+    } else if ("giveArtefact" in effect) {
+      const id = effect.giveArtefact;
+      if (opts.inventoryIds.has(id)) continue;
+      if (!opts.canGiveArtefact(id)) continue;
+      opts.inventoryIds.add(id);
+      gained.push(id);
+      grantedArtefactIds.push(id);
     }
   }
-  return { flags: next, changes };
+
+  return {
+    flags: nextFlags,
+    vars: nextVars,
+    badges,
+    flagChanges,
+    flagsSet,
+    flagsCleared,
+    gained,
+    grantedArtefactIds,
+  };
 }
 
 export interface EvalResult {
   flags: Record<string, FlagValue>;
+  vars: Record<string, number>;
   badges: string[];
   grantedArtefactIds: number[];
-  iterations: number;
+  actionMatched: boolean;
+  actionOk?: string;
+}
+
+export const QUEST_ACTION_DONE = "Done.";
+export const QUEST_ACTION_NOTHING = "Nothing happens.";
+
+export function questActionMessage(outcome: { actionMatched: boolean; actionOk?: string }): string {
+  if (!outcome.actionMatched) return QUEST_ACTION_NOTHING;
+  const ok = outcome.actionOk?.trim();
+  return ok || QUEST_ACTION_DONE;
+}
+
+export function ruleEligible(
+  rule: QuestRule,
+  wake: QuestWake,
+  edges: { flagsSet: ReadonlySet<string>; flagsCleared: ReadonlySet<string> },
+): boolean {
+  const on = rule.on;
+  if (on === undefined) return true;
+  if (on === "use") return wake === "use";
+  if (on === "input") return wake === "input";
+  if (on === "gain" || on === "drop") return true;
+  if ("flag" in on) return edges.flagsSet.has(on.flag);
+  if ("clearFlag" in on) return edges.flagsCleared.has(on.clearFlag);
+  return false;
 }
 
 /**
- * Evaluate all quest rules with cascade. Knock-ons run when flags change.
- * giveArtefact ids are returned for the caller to apply to inventory.
+ * Single-pass quest evaluation in document order.
+ * Mid-eval giveArtefact updates inventoryIds and the gained set immediately.
  * Never throws: bad rules are skipped and logged.
  */
 export function evaluateQuests(opts: {
   quests: QuestFile[];
   flags: Record<string, FlagValue>;
+  vars?: Record<string, number>;
   badges: string[];
-  predContext: Omit<PredContext, "flags" | "badges">;
+  predContext: Omit<PredContext, "flags" | "badges" | "vars">;
+  wake?: QuestWake;
+  /** Artefact ids already in the gained set at wake (e.g. collect). */
+  wakeGained?: Iterable<number>;
+  /** Artefact ids already in the dropped set at wake (e.g. player drop). */
+  wakeDropped?: Iterable<number>;
+  canGiveArtefact?: (id: number) => boolean;
 }): EvalResult {
   try {
     return evaluateQuestsUnsafe(opts);
@@ -249,9 +614,10 @@ export function evaluateQuests(opts: {
     logQuestFault("evaluateQuests", err);
     return {
       flags: { ...opts.flags },
+      vars: { ...(opts.vars ?? {}) },
       badges: [...opts.badges],
       grantedArtefactIds: [],
-      iterations: 0,
+      actionMatched: false,
     };
   }
 }
@@ -259,67 +625,104 @@ export function evaluateQuests(opts: {
 function evaluateQuestsUnsafe(opts: {
   quests: QuestFile[];
   flags: Record<string, FlagValue>;
+  vars?: Record<string, number>;
   badges: string[];
-  predContext: Omit<PredContext, "flags" | "badges">;
+  predContext: Omit<PredContext, "flags" | "badges" | "vars">;
+  wake?: QuestWake;
+  wakeGained?: Iterable<number>;
+  wakeDropped?: Iterable<number>;
+  canGiveArtefact?: (id: number) => boolean;
 }): EvalResult {
   let flags = { ...opts.flags };
+  let vars = { ...(opts.vars ?? {}) };
   let badges = [...opts.badges];
-  const badgeSet = () => new Set(badges);
+  const inventoryIds = new Set(opts.predContext.inventoryIds);
+  const gained = new Set<number>(opts.wakeGained ?? []);
+  const dropped = new Set<number>(opts.wakeDropped ?? []);
+  const flagsSet = new Set<string>();
+  const flagsCleared = new Set<string>();
   const grantedArtefactIds: number[] = [];
-  const quests = [...opts.quests].sort((a, b) => a.name.localeCompare(b.name));
+  const canGive = opts.canGiveArtefact ?? (() => true);
+  const wake = opts.wake ?? "always";
+  let actionMatched = false;
+  let actionOk: string | undefined;
 
-  let iterations = 0;
-  while (iterations < QUEST_EVAL_MAX_ITERATIONS) {
-    iterations += 1;
-    const passChanges: FlagChange[] = [];
-
-    for (const quest of quests) {
-      for (const rule of quest.rules ?? []) {
-        try {
-          const ctx: PredContext = {
-            ...opts.predContext,
-            flags,
-            badges: badgeSet(),
-          };
-          if (!evaluatePred(rule.when, ctx)) continue;
-          const applied = applyFlagEffects(flags, rule.then ?? []);
-          flags = applied.flags;
-          passChanges.push(...applied.changes);
-        } catch (err) {
-          logQuestFault(`quest ${quest.name} rule ${rule.id ?? "?"}`, err);
-        }
-      }
-    }
-
-    if (!passChanges.length) break;
-
-    for (const change of passChanges) {
+  for (const quest of opts.quests) {
+    for (const rule of quest.rules ?? []) {
       try {
-        const questName = change.flag.split(".")[0] ?? "";
-        const quest = quests.find((q) => q.name === questName);
-        const handlers = quest?.onFlag?.[change.flag];
-        if (!handlers) continue;
-        const knocks =
-          change.to === undefined || change.to === false ? handlers.onFalse : handlers.onTrue;
-        if (!knocks) continue;
-        for (const k of knocks) {
-          if ("grantBadge" in k) {
-            if (!badges.includes(k.grantBadge)) badges.push(k.grantBadge);
-          } else if (!grantedArtefactIds.includes(k.giveArtefact)) {
-            grantedArtefactIds.push(k.giveArtefact);
+        if (!ruleEligible(rule, wake, { flagsSet, flagsCleared })) continue;
+        const ctx: PredContext = {
+          ...opts.predContext,
+          inventoryIds,
+          flags,
+          badges: new Set(badges),
+          vars,
+          gainedIds: gained,
+          droppedIds: dropped,
+        };
+        if (!evaluatePred(rule.when, ctx)) continue;
+        if ((rule.on === "use" || rule.on === "input") && rule.on === wake) {
+          actionMatched = true;
+          if (actionOk === undefined) {
+            const ok = rule.ok?.trim();
+            if (ok) actionOk = ok;
           }
         }
+        const applied = applyThenEffects(flags, vars, rule.then ?? [], {
+          inventoryIds,
+          canGiveArtefact: canGive,
+          badges,
+        });
+        flags = applied.flags;
+        vars = applied.vars;
+        badges = applied.badges;
+        for (const f of applied.flagsSet) flagsSet.add(f);
+        for (const f of applied.flagsCleared) flagsCleared.add(f);
+        for (const id of applied.gained) gained.add(id);
+        for (const id of applied.grantedArtefactIds) {
+          if (!grantedArtefactIds.includes(id)) grantedArtefactIds.push(id);
+        }
       } catch (err) {
-        logQuestFault(`onFlag ${change.flag}`, err);
+        logQuestFault(`quest ${quest.name} rule ${rule.id ?? "?"}`, err);
       }
     }
   }
 
-  return { flags, badges, grantedArtefactIds, iterations };
+  return { flags, vars, badges, grantedArtefactIds, actionMatched, actionOk };
 }
 
 export function alchemyGivesIds(recipe: AlchemyRecipe): number[] {
   return Array.isArray(recipe.gives) ? recipe.gives : [recipe.gives];
+}
+
+/**
+ * Artefact ids a quest may grant via `giveArtefact` or quest-embedded alchemy
+ * `gives` (used for personal-quest ACL).
+ */
+export function questGiveArtefactIds(quest: QuestFile): number[] {
+  const ids: number[] = [];
+  for (const rule of quest.rules ?? []) {
+    for (const effect of rule.then ?? []) {
+      if ("giveArtefact" in effect) ids.push(effect.giveArtefact);
+    }
+  }
+  for (const recipe of quest.alchemy ?? []) {
+    ids.push(...alchemyGivesIds(recipe));
+  }
+  return ids;
+}
+
+/** Strip in-memory-only fields before writing a quest file. */
+export function questFileForDisk(quest: QuestFile): QuestFile {
+  const { author: _author, ...rest } = quest;
+  if (!rest.alchemy?.length) {
+    const { alchemy: _alchemy, ...withoutAlchemy } = rest;
+    return withoutAlchemy;
+  }
+  return {
+    ...rest,
+    alchemy: alchemyRecipesForDisk(rest.alchemy),
+  };
 }
 
 /** Strip in-memory-only fields before writing a recipe file. */

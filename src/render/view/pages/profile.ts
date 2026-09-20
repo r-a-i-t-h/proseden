@@ -1,10 +1,7 @@
 import { formatAccessSummary } from "../../../access/acl.js";
+import { grantTimeLabel } from "../../relative-age.js";
 import type { Deny, Grant } from "../../../model/types.js";
-import {
-  DENIES_EXAMPLE,
-  DETAILS_EXAMPLE,
-  GRANTS_EXAMPLE,
-} from "../examples.js";
+import { DETAILS_EXAMPLE } from "../examples.js";
 import {
   button,
   byline,
@@ -23,38 +20,13 @@ import {
   textOnly,
 } from "../factories.js";
 import type { Node, PageView } from "../types.js";
+import { accessForm } from "./access.js";
 
 export type PageBackLink = { href: string; label: string; history?: boolean };
 
 function backCrumb(back?: PageBackLink): Node | undefined {
   if (!back) return undefined;
   return crumb(back.href, back.label, back.history);
-}
-
-function accessForm(
-  action: string,
-  grants: Grant[] | undefined,
-  denies: Deny[] | undefined,
-  submit: string,
-): Node {
-  return form(
-    { method: "post", action, class: "access-form" },
-    jsonField(
-      "Grants",
-      "grantsJson",
-      grants ?? [],
-      GRANTS_EXAMPLE,
-      "Array of { who, rights }.",
-    ),
-    jsonField(
-      "Denies",
-      "deniesJson",
-      denies ?? [],
-      DENIES_EXAMPLE,
-      "Array of { who, rights? }. Omit rights to deny all.",
-    ),
-    button(submit),
-  );
 }
 
 export function profilePageView(opts: {
@@ -66,7 +38,7 @@ export function profilePageView(opts: {
   denies?: Deny[];
   back?: PageBackLink;
   openSection?: "appearance" | "password" | "sharing";
-  badges?: Array<{ id: string; title: string }>;
+  badges?: Array<{ id: string; title: string; grantTime?: string }>;
 }): PageView {
   const open = opts.openSection ?? "appearance";
   const accessAction = `u/${encodeURIComponent(opts.username)}/access`;
@@ -83,7 +55,9 @@ export function profilePageView(opts: {
   }
   if (badges.length) {
     textLines.push("Badges:");
-    for (const b of badges) textLines.push(`  - ${b.title} (${b.id})`);
+    for (const b of badges) {
+      textLines.push(`  - ${b.title} (${b.id}) · ${grantTimeLabel(b.grantTime)}`);
+    }
     textLines.push("", "  POST {base}/profile/badges/:id/drop", "");
   }
   textLines.push("Appearance:");
@@ -120,7 +94,10 @@ export function profilePageView(opts: {
               action: `profile/badges/${encodeURIComponent(b.id)}/drop`,
               class: "badge-row",
             },
-            muted(`${b.title} (${b.id})`),
+            muted(
+              `${b.title} (${b.id}) · `,
+              b.grantTime ? { type: "relativeAge", iso: b.grantTime } : "unknown",
+            ),
             button("drop"),
           ),
         );
@@ -211,4 +188,4 @@ export function profilePageView(opts: {
   );
 }
 
-export { accessForm, backCrumb };
+export { backCrumb };

@@ -14,6 +14,7 @@ async function createTestWorld(): Promise<{
   app: App;
   dataDir: string;
   tokens: Record<string, string>;
+  ids: { publicHall: number; privateStudy: number };
 }> {
   const dataDir = await mkdtemp(join(tmpdir(), "proseden-subs-"));
   const world = new WorldStore(dataDir);
@@ -24,13 +25,13 @@ async function createTestWorld(): Promise<{
     await world.createUser(name, password.hash, password.salt);
   }
 
-  await world.createScene({
+  const publicHall = await world.createScene({
     owner: "alice",
     title: "Public Hall",
     body: "A public hall.",
     visibility: "public",
   });
-  await world.createScene({
+  const privateStudy = await world.createScene({
     owner: "alice",
     title: "Private Study",
     body: "Alice's study.",
@@ -44,7 +45,8 @@ async function createTestWorld(): Promise<{
   }
 
   const app = createApp({ world, sessions });
-  return { world, app, dataDir, tokens };
+  const ids = { publicHall: publicHall.id, privateStudy: privateStudy.id };
+  return { world, app, dataDir, tokens, ids };
 }
 
 function auth(token: string): Record<string, string> {
@@ -60,9 +62,10 @@ describe("scene subscriptions", () => {
   let app: App;
   let dataDir: string;
   let tokens: Record<string, string>;
+  let ids: { publicHall: number; privateStudy: number };
 
   beforeEach(async () => {
-    ({ world, app, dataDir, tokens } = await createTestWorld());
+    ({ world, app, dataDir, tokens, ids } = await createTestWorld());
   });
 
   afterEach(async () => {
@@ -70,7 +73,7 @@ describe("scene subscriptions", () => {
   });
 
   it("toggles subscription and persists sidecars", async () => {
-    const sub = await app.request("/s/1/subscribe", {
+    const sub = await app.request(`/s/${ids.publicHall}/subscribe`, {
       method: "POST",
       headers: auth(tokens.bob),
     });
@@ -78,25 +81,25 @@ describe("scene subscriptions", () => {
     const body = await sub.json();
     expect(body.subscribed).toBe(true);
     expect(body.subscribers).toContain("bob");
-    expect(world.isSubscribed(1, "bob")).toBe(true);
+    expect(world.isSubscribed(ids.publicHall, "bob")).toBe(true);
 
-    const drop = await app.request("/s/1/subscribe/drop", {
+    const drop = await app.request(`/s/${ids.publicHall}/subscribe/drop`, {
       method: "POST",
       headers: auth(tokens.bob),
     });
     expect(drop.status).toBe(200);
     expect((await drop.json()).subscribed).toBe(false);
-    expect(world.isSubscribed(1, "bob")).toBe(false);
+    expect(world.isSubscribed(ids.publicHall, "bob")).toBe(false);
   });
 
   it("rejects unauthenticated and unreachable subscribe", async () => {
-    const anon = await app.request("/s/1/subscribe", {
+    const anon = await app.request(`/s/${ids.publicHall}/subscribe`, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
     });
     expect(anon.status).toBe(401);
 
-    const privateScene = await app.request("/s/2/subscribe", {
+    const privateScene = await app.request(`/s/${ids.privateStudy}/subscribe`, {
       method: "POST",
       headers: auth(tokens.bob),
     });
@@ -104,9 +107,9 @@ describe("scene subscriptions", () => {
   });
 
   it("notifies on title/description/details and merges kinds", async () => {
-    await world.subscribeScene(1, "bob");
+    await world.subscribeScene(ids.publicHall, "bob");
 
-    await app.request("/s/1", {
+    await app.request(`/s/${ids.publicHall}`, {
       method: "POST",
       headers: auth(tokens.alice),
       body: JSON.stringify({ title: "Hall Renamed", body: "A public hall." }),
@@ -115,13 +118,13 @@ describe("scene subscriptions", () => {
     expect(inbox).toHaveLength(1);
     expect(inbox[0].type).toBe("scene_update");
     if (inbox[0].type === "scene_update") {
-      expect(inbox[0].sceneId).toBe(1);
+      expect(inbox[0].sceneId).toBe(ids.publicHall);
       expect(inbox[0].changeKinds).toEqual(["title"]);
       expect(inbox[0].subject).toBe("Subscribed scene change: Hall Renamed");
       expect(inbox[0].body).toBe("Changed: title");
     }
 
-    await app.request("/s/1", {
+    await app.request(`/s/${ids.publicHall}`, {
       method: "POST",
       headers: auth(tokens.alice),
       body: JSON.stringify({
@@ -139,10 +142,10 @@ describe("scene subscriptions", () => {
   });
 
   it("skips the editor and does not notify on visibility/exits/ACL", async () => {
-    await world.subscribeScene(1, "alice");
-    await world.subscribeScene(1, "bob");
+    await world.subscribeScene(ids.publicHall, "alice");
+    await world.subscribeScene(ids.publicHall, "bob");
 
-    await app.request("/s/1", {
+    await app.request(`/s/${ids.publicHall}`, {
       method: "POST",
       headers: auth(tokens.alice),
       body: JSON.stringify({ title: "Public Hall", body: "Edited by alice.", visibility: "public" }),
@@ -151,7 +154,7 @@ describe("scene subscriptions", () => {
     expect(world.listInboxFor("bob")).toHaveLength(1);
 
     const before = world.listInboxFor("bob").length;
-    await app.request("/s/1", {
+    await app.request(`/s/${ids.publicHall}`, {
       method: "POST",
       headers: auth(tokens.alice),
       body: JSON.stringify({
@@ -164,17 +167,17 @@ describe("scene subscriptions", () => {
     // Re-save with same prose after visibility flip: if only visibility changed, no notify.
     expect(world.listInboxFor("bob").length).toBe(before);
 
-    await world.updateScene(1, { visibility: "public" }, { by: "alice" });
+    await world.updateScene(ids.publicHall, { visibility: "public" }, { by: "alice" });
     expect(world.listInboxFor("bob").length).toBe(before);
 
-    await app.request("/s/1/exits", {
+    await app.request(`/s/${ids.publicHall}/exits`, {
       method: "POST",
       headers: auth(tokens.alice),
-      body: JSON.stringify({ nickname: "study", toSceneId: 2 }),
+      body: JSON.stringify({ nickname: "study", toSceneId: ids.privateStudy }),
     });
     expect(world.listInboxFor("bob").length).toBe(before);
 
-    await app.request("/s/1/access", {
+    await app.request(`/s/${ids.publicHall}/access`, {
       method: "POST",
       headers: auth(tokens.alice),
       body: JSON.stringify({ grants: [{ who: "carol", rights: ["read"] }] }),
@@ -183,13 +186,13 @@ describe("scene subscriptions", () => {
   });
 
   it("notifies on artefact create/update/delete", async () => {
-    await world.subscribeScene(1, "bob");
+    await world.subscribeScene(ids.publicHall, "bob");
 
     const created = await app.request("/a", {
       method: "POST",
       headers: auth(tokens.alice),
       body: JSON.stringify({
-        homeSceneId: 1,
+        homeSceneId: ids.publicHall,
         title: "Lamp",
         body: "A brass lamp.",
       }),
@@ -222,21 +225,21 @@ describe("scene subscriptions", () => {
   });
 
   it("prunes subscribers who lost read access", async () => {
-    await world.updateSceneAccess(1, {
+    await world.updateSceneAccess(ids.publicHall, {
       grants: [{ who: "bob", rights: ["read"] }],
     });
-    await world.updateScene(1, { visibility: "private" }, { by: "alice" });
-    await world.subscribeScene(1, "bob");
+    await world.updateScene(ids.publicHall, { visibility: "private" }, { by: "alice" });
+    await world.subscribeScene(ids.publicHall, "bob");
 
-    await world.updateSceneAccess(1, { grants: [] });
-    await world.updateScene(1, { body: "Still private." }, { by: "alice" });
+    await world.updateSceneAccess(ids.publicHall, { grants: [] });
+    await world.updateScene(ids.publicHall, { body: "Still private." }, { by: "alice" });
 
     expect(world.listInboxFor("bob")).toHaveLength(0);
-    expect(world.isSubscribed(1, "bob")).toBe(false);
+    expect(world.isSubscribed(ids.publicHall, "bob")).toBe(false);
   });
 
   it("removes subs file when scene is deleted", async () => {
-    await world.subscribeScene(1, "bob");
+    await world.subscribeScene(ids.publicHall, "bob");
     const scene = await world.createScene({
       owner: "alice",
       title: "Temp",
@@ -253,28 +256,28 @@ describe("scene subscriptions", () => {
   });
 
   it("shows subscribe control when signed in", async () => {
-    const res = await app.request("/s/1", {
+    const res = await app.request(`/s/${ids.publicHall}`, {
       headers: { Authorization: `Bearer ${tokens.bob}`, Accept: "text/html" },
     });
     const html = await res.text();
     expect(html).toContain(">Subscribe</button>");
-    expect(html).toContain(`action="s/1/subscribe"`);
+    expect(html).toContain(`action="s/${ids.publicHall}/subscribe"`);
     expect(html).toContain("0 subscribers");
 
-    await world.subscribeScene(1, "bob");
-    await world.subscribeScene(1, "carol");
-    const again = await app.request("/s/1", {
+    await world.subscribeScene(ids.publicHall, "bob");
+    await world.subscribeScene(ids.publicHall, "carol");
+    const again = await app.request(`/s/${ids.publicHall}`, {
       headers: { Authorization: `Bearer ${tokens.bob}`, Accept: "text/html" },
     });
     const html2 = await again.text();
     expect(html2).toContain(">Unsubscribe</button>");
-    expect(html2).toContain(`action="s/1/subscribe/drop"`);
+    expect(html2).toContain(`action="s/${ids.publicHall}/subscribe/drop"`);
     expect(html2).toContain("2 subscribers");
   });
 
   it("renders scene_update in the inbox", async () => {
-    await world.subscribeScene(1, "bob");
-    await world.updateScene(1, { title: "Ping" }, { by: "alice" });
+    await world.subscribeScene(ids.publicHall, "bob");
+    await world.updateScene(ids.publicHall, { title: "Ping" }, { by: "alice" });
 
     const res = await app.request("/inbox", {
       headers: { Authorization: `Bearer ${tokens.bob}`, Accept: "text/html" },
@@ -282,6 +285,6 @@ describe("scene subscriptions", () => {
     const html = await res.text();
     expect(html).toContain("Subscribed scene change: Ping");
     expect(html).toContain("Changed: title");
-    expect(html).toContain('href="s/1">View scene</a>');
+    expect(html).toContain(`href="s/${ids.publicHall}">View scene</a>`);
   });
 });

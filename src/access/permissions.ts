@@ -1,14 +1,55 @@
 import type {
   ArtefactRecord,
+  Deny,
   EntranceGroupRecord,
   ExitRecord,
+  Grant,
   GroupRecord,
   Right,
   SceneRecord,
   StaffRole,
   UserRecord,
+  Visibility,
 } from "../model/types.js";
 import { grantCovers, matchesDeny } from "./acl.js";
+
+/** Owner + grants/denies, with optional public-read and inherited bags. */
+export interface AclSubject {
+  owner: string;
+  grants?: Grant[];
+  denies?: Deny[];
+  /** When set, anonymous/`*` readers get this visibility's public-read. */
+  visibility?: Visibility;
+  /** Inherited ACL bags: group, then owner share-all (deny walks reverse). */
+  parents?: Array<{ grants?: Grant[]; denies?: Deny[] }>;
+}
+
+export function sceneAclSubject(scene: SceneRecord, world: AccessWorld): AclSubject {
+  const parents: NonNullable<AclSubject["parents"]> = [];
+  if (scene.groupId) {
+    const group = world.getGroup(scene.groupId);
+    if (group) parents.push({ grants: group.grants, denies: group.denies });
+  }
+  const owner = world.getUser(scene.owner);
+  if (owner) parents.push({ grants: owner.grants, denies: owner.denies });
+  return {
+    owner: scene.owner,
+    grants: scene.grants,
+    denies: scene.denies,
+    visibility: scene.visibility,
+    parents,
+  };
+}
+
+export function groupAclSubject(group: GroupRecord, world: AccessWorld): AclSubject {
+  const owner = world.getUser(group.owner);
+  return {
+    owner: group.owner,
+    grants: group.grants,
+    denies: group.denies,
+    parents: owner ? [{ grants: owner.grants, denies: owner.denies }] : [],
+  };
+}
 
 /**
  * Lookup surface for access evaluation.
@@ -29,18 +70,27 @@ export interface AccessWorld {
  * 4. public (read only)
  * 5. staff roles
  */
+export function hasRightOn(
+  user: UserRecord | undefined,
+  subject: AclSubject,
+  right: Right,
+  world: AccessWorld,
+): boolean {
+  if (isDeniedSubject(user, subject, right)) return false;
+  if (user && user.username === subject.owner) return true;
+  if (isGrantedSubject(user, subject, right)) return true;
+  if (right === "read" && subject.visibility === "public") return true;
+  if (user && staffCovers(user, right, world)) return true;
+  return false;
+}
+
 export function hasRight(
   user: UserRecord | undefined,
   scene: SceneRecord,
   right: Right,
   world: AccessWorld,
 ): boolean {
-  if (isDenied(user, scene, right, world)) return false;
-  if (user && user.username === scene.owner) return true;
-  if (isGranted(user, scene, right, world)) return true;
-  if (right === "read" && scene.visibility === "public") return true;
-  if (user && staffCovers(user, right, world)) return true;
-  return false;
+  return hasRightOn(user, sceneAclSubject(scene, world), right, world);
 }
 
 export function canRead(
@@ -101,6 +151,19 @@ export function canRemoveExit(
   return !!dest && dest.owner === user.username;
 }
 
+/**
+ * Reorder the origin’s full exit list. Same gate as editing every exit
+ * (manage or topographer) — not junction visitors with partial rights.
+ */
+export function canReorderExits(
+  user: UserRecord | undefined,
+  scene: SceneRecord,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  return canManage(user, scene, world) || isTopographer(user, world);
+}
+
 export function canReadArtefact(
   user: UserRecord | undefined,
   artefact: ArtefactRecord,
@@ -119,6 +182,35 @@ export function canEditArtefact(
   if (!user) return false;
   if (user.username === artefact.owner) return true;
   return canEdit(user, home, world);
+}
+
+/**
+ * Create an artefact in or move one to `scene`.
+ * Edit rights on the scene, or any signed-in user when the scene is a public repository.
+ */
+export function canPlaceArtefact(
+  user: UserRecord | undefined,
+  scene: SceneRecord,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  if (canEdit(user, scene, world)) return true;
+  return Boolean(scene.isRepository && scene.visibility === "public");
+}
+
+/**
+ * Return a guest artefact to its owner's home scene.
+ * Home-scene managers may eject; artefact owners use re-home instead.
+ */
+export function canEjectArtefact(
+  user: UserRecord | undefined,
+  artefact: ArtefactRecord,
+  home: SceneRecord,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  if (user.username === artefact.owner) return false;
+  return canManage(user, home, world);
 }
 
 /** Owner or staff manager — a manage grant is not enough. */
@@ -148,28 +240,7 @@ export function canManageGroup(
   world: AccessWorld,
 ): boolean {
   if (!user) return false;
-  if (user.username === group.owner) return true;
-  if (matchesDeny(world.getUser(group.owner)?.denies, user.username, "manage")) return false;
-  if (matchesDeny(group.denies, user.username, "manage")) return false;
-  if (grantCovers(group.grants, user.username, "manage")) return true;
-  if (grantCovers(world.getUser(group.owner)?.grants, user.username, "manage")) return true;
-  if (staffCovers(user, "manage", world)) return true;
-  return false;
-}
-
-export function canEditGroup(
-  user: UserRecord | undefined,
-  group: GroupRecord,
-  world: AccessWorld,
-): boolean {
-  if (!user) return false;
-  if (user.username === group.owner) return true;
-  if (matchesDeny(world.getUser(group.owner)?.denies, user.username, "edit")) return false;
-  if (matchesDeny(group.denies, user.username, "edit")) return false;
-  if (grantCovers(group.grants, user.username, "edit")) return true;
-  if (grantCovers(world.getUser(group.owner)?.grants, user.username, "edit")) return true;
-  if (staffCovers(user, "edit", world)) return true;
-  return false;
+  return hasRightOn(user, groupAclSubject(group, world), "manage", world);
 }
 
 export function canReadGroup(
@@ -177,46 +248,53 @@ export function canReadGroup(
   group: GroupRecord,
   world: AccessWorld,
 ): boolean {
-  if (user && user.username === group.owner) return true;
-  if (user && matchesDeny(world.getUser(group.owner)?.denies, user.username, "read")) return false;
-  if (user && matchesDeny(group.denies, user.username, "read")) return false;
-  if (grantCovers(group.grants, user?.username, "read")) return true;
-  if (grantCovers(world.getUser(group.owner)?.grants, user?.username, "read")) return true;
-  if (user && staffCovers(user, "read", world)) return true;
-  return false;
+  return hasRightOn(user, groupAclSubject(group, world), "read", world);
 }
 
-function isDenied(
+/** Scene owner, manage grant, or moderator. */
+export function canDeleteScene(
   user: UserRecord | undefined,
   scene: SceneRecord,
-  right: Right,
   world: AccessWorld,
 ): boolean {
   if (!user) return false;
-  const owner = world.getUser(scene.owner);
-  if (matchesDeny(owner?.denies, user.username, right)) return true;
-  if (scene.groupId) {
-    const group = world.getGroup(scene.groupId);
-    if (group && matchesDeny(group.denies, user.username, right)) return true;
+  return canManage(user, scene, world) || isModerator(user, world);
+}
+
+/** Artefact owner, home-scene manager, or moderator. */
+export function canDeleteArtefact(
+  user: UserRecord | undefined,
+  artefact: ArtefactRecord,
+  home: SceneRecord | undefined,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  if (user.username === artefact.owner) return true;
+  if (isModerator(user, world)) return true;
+  return !!home && canManage(user, home, world);
+}
+
+function isDeniedSubject(user: UserRecord | undefined, subject: AclSubject, right: Right): boolean {
+  if (!user) return false;
+  // Deny walks inherited bags in reverse of grant order (owner → group → subject).
+  const bags = [...(subject.parents ?? [])].reverse();
+  bags.push({ denies: subject.denies });
+  for (const bag of bags) {
+    if (matchesDeny(bag.denies, user.username, right)) return true;
   }
-  if (matchesDeny(scene.denies, user.username, right)) return true;
   return false;
 }
 
-function isGranted(
+function isGrantedSubject(
   user: UserRecord | undefined,
-  scene: SceneRecord,
+  subject: AclSubject,
   right: Right,
-  world: AccessWorld,
 ): boolean {
   const who = user?.username;
-  if (grantCovers(scene.grants, who, right)) return true;
-  if (scene.groupId) {
-    const group = world.getGroup(scene.groupId);
-    if (group && grantCovers(group.grants, who, right)) return true;
+  if (grantCovers(subject.grants, who, right)) return true;
+  for (const parent of subject.parents ?? []) {
+    if (grantCovers(parent.grants, who, right)) return true;
   }
-  const owner = world.getUser(scene.owner);
-  if (grantCovers(owner?.grants, who, right)) return true;
   return false;
 }
 
@@ -224,7 +302,8 @@ function isGranted(
  * Staff roles:
  * - moderator: edit (prose) worldwide; may delete unacceptable content
  * - topographer: graph structure via isTopographer (not prose edit / ACL manage / delete)
- * - manager: full manage + personnel APIs (superset of moderator + topographer)
+ * - questor: edit own `quests/users/<username>.json` (personal `user.<username>.*` namespace)
+ * - manager: full manage + personnel APIs (superset of moderator + topographer + questor)
  */
 function staffCovers(user: UserRecord, right: Right, world: AccessWorld): boolean {
   const roles = world.rolesFor(user.username) ?? [];
@@ -266,4 +345,14 @@ export function isManager(
 ): boolean {
   if (!user) return false;
   return world.rolesFor(user.username).includes("manager");
+}
+
+/** Questors (and managers) may edit their personal quest file. */
+export function isQuestor(
+  user: UserRecord | undefined,
+  world: AccessWorld,
+): boolean {
+  if (!user) return false;
+  const roles = world.rolesFor(user.username) ?? [];
+  return roles.includes("questor") || roles.includes("manager");
 }

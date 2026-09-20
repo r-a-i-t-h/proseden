@@ -4,6 +4,7 @@ import type {
   MetaPart,
   Node,
   PageView,
+  StatListItem,
 } from "./types.js";
 
 export function fragment(...children: Node[]): Node {
@@ -50,12 +51,16 @@ export function byline(username: string): Node {
   return { type: "byline", username };
 }
 
+export function userLink(username: string): Node {
+  return { type: "userLink", username };
+}
+
 export function prose(text: string): Node {
   return { type: "prose", text };
 }
 
-export function muted(text: string): Node {
-  return { type: "muted", text };
+export function muted(...parts: MetaPart[]): Node {
+  return { type: "muted", parts };
 }
 
 export function notice(
@@ -77,6 +82,10 @@ export function linkList(items: LinkListItem[]): Node {
   return { type: "linkList", items };
 }
 
+export function statList(items: StatListItem[]): Node {
+  return { type: "statList", items };
+}
+
 export function section(title: string, children: Node[], channel?: "html" | "text" | "both"): Node {
   return { type: "section", title, children, channel };
 }
@@ -84,13 +93,14 @@ export function section(title: string, children: Node[], channel?: "html" | "tex
 export function detailsSection(
   summary: string,
   children: Node[],
-  opts?: { open?: boolean; class?: string },
+  opts?: { open?: boolean; class?: string; attrs?: Record<string, string> },
 ): Node {
   return {
     type: "details",
     summary,
     open: opts?.open,
     class: opts?.class,
+    attrs: opts?.attrs,
     children,
   };
 }
@@ -127,8 +137,23 @@ export function jsonField(
   example: string,
   note: string,
   rows = 10,
+  text?: string,
 ): Node {
-  return { type: "jsonField", label, name, rows, value, example, note };
+  return { type: "jsonField", label, name, rows, value, example, note, text };
+}
+
+export function table(
+  headers: string[],
+  rows: Array<{ cells: Node[]; class?: string }>,
+  opts?: { class?: string; empty?: string },
+): Node {
+  return {
+    type: "table",
+    headers,
+    rows,
+    class: opts?.class,
+    empty: opts?.empty,
+  };
 }
 
 export function button(label: string, opts?: { class?: string; buttonType?: "submit" | "button" }): Node {

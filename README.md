@@ -38,7 +38,7 @@ Seed login: **admin** / **admin**. Change it from **Profile** after you log in.
 
 Hand-install walkthrough (DNS, Node, nginx, systemd, HTTPS, updates): **[DEPLOY.md](DEPLOY.md)**.
 
-For scripted installation and instance management, use **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)**.
+Scripted install and update **depend on** **[node-vps-kit](https://github.com/r-a-i-t-h/node-vps-kit)** (NVK). This repo no longer ships install/update scripts.
 
 Each instance keeps its own app copy and `data/` directory. Releases are GitHub Release tarballs (`npm run release` then CI `npm run pack` on tag `v*`), not a live git checkout — see **[RELEASE.md](docs/RELEASE.md)**.
 
@@ -88,6 +88,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `POST` | `/inbox/send` | Peer free-text message (auth; when peer messaging enabled) |
 | `POST` | `/inbox/:id/confirm` | Confirm exit request (recipient) |
 | `POST`/`DELETE` | `/inbox/:id/delete` or `/inbox/:id` | Delete inbox message (recipient) |
+| `GET` | `/dashboard` | World overview counts (manager) |
 | `GET` | `/msg` | Manager notices + peer-messaging controls (manager) |
 | `POST` | `/msg` | Send free-text notice to one user or all (manager) |
 | `POST` | `/msg/peer-messaging` | Enable/disable peer messaging (manager) |
@@ -104,6 +105,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `DELETE`/`POST` | `/s/:id/subscribe` or `/subscribe/drop` | Unsubscribe |
 | `DELETE`/`POST` | `/s/:id/exits/:exit/delete` | Remove one exit (manage/organise any; on a public junction, also exits to scenes you own) |
 | `POST` | `/s/:id/exits/delete` | Remove one or more exits (`exitId` / `exitIds`) |
+| `POST` | `/s/:id/exits/reorder` | Reorder exits (`exitIds` permutation; manage/topographer) |
 | `GET`/`PUT`/`POST` | `/s/:id/access` | Scene grants/denies (manage) |
 | `POST` | `/s/:id/transfer` | Transfer ungrouped scene (+ owner's homed artefacts); owner or staff manager |
 | `GET`/`PUT`/`POST` | `/u/:username/access` | User-level share-all (self or manager) |
@@ -120,19 +122,33 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Accept: text/plain' \
 | `DELETE`/`POST` | `/a/:id/delete` | Delete artefact (owner/manage/moderator) |
 | `GET` | `/staff` | List staff roles (manager) |
 | `PUT`/`POST` | `/staff/:username` | Set roles (manager) |
-| `GET` | `/data` | Data: backups list + endpoint index (manager) |
+| `GET`/`POST` | `/alchemy` | Edit own alchemy recipes (signed-in) |
+| `GET`/`POST` | `/quests` | Edit own personal quest file (questor or manager) |
+| `POST` | `/quests/flags` | Edit own flags JSON (questor or manager) |
+| `POST` | `/quests/badges` | Edit own badges JSON (questor or manager) |
+| `GET` | `/data` | Data admin: backups, reload, links to quests/alchemy (manager) |
+| `GET`/`POST` | `/data/quests` | List/create manager quest JSON files; list personal quest files (manager) |
+| `GET`/`POST` | `/data/quests/:name` | View/save a manager quest file (manager) |
+| `POST` | `/data/quests/:name/delete` | Delete a manager quest file (manager) |
+| `GET`/`POST` | `/data/quests/users/:username` | View/save a personal quest file (manager) |
+| `POST` | `/data/quests/users/:username/delete` | Delete a personal quest file (manager) |
+| `GET`/`POST` | `/data/alchemy` | Edit world alchemy `recipes.json` (manager) |
 | `POST` | `/data/backup` | Archive `data/` into `backup/` (manager) |
 | `GET` | `/data/backup/:name` | Download a data archive (manager) |
 | `POST` | `/data/backup/:name/delete` | Delete a data archive (manager) |
+| `POST` | `/data/backup/:name/restore` | Replace `data/` from a data archive (manager) |
 | `POST` | `/data/reload` | Reload in-memory world cache from disk (manager) |
 | `GET` | `/s/:id/history` | Edit log (readers) |
 | `GET` | `/s/:id/history/:version` | View retained snapshot |
 | `POST` | `/s/:id/history/:version/restore` | Restore snapshot (manage) |
 | `GET` | `/a/:id/history` … | Same for artefacts |
-| `POST` | `/a` | Create artefact (auth, edit rights on home) |
+| `POST` | `/a` | Create artefact (auth; edit on home scene or public repository) |
 | `PUT`/`POST` | `/a/:id` | Update artefact |
+| `POST` | `/a/:id/eject` | Return guest artefact to owner home (manage on home scene) |
+| `POST` | `/s/:id/input` | Phrase box (auth); private, not Live chat |
 | `POST` | `/a/:id/collect` | Collect (inventory link) |
 | `DELETE` | `/a/:id/collect` | Drop from inventory |
+| `POST` | `/a/:id/use` | Use a held artefact (auth; does not drop) |
 
 ## Storage
 
@@ -142,7 +158,12 @@ On boot the server loads `data/` into memory and write-throughs on every mutatio
 data/
   meta.json
   staff.json
+  .sessions.json          # ephemeral SIGTERM handoff; not in tarballs
   users/<username>.json
+  quests/<name>.json
+  quests/users/<username>.json
+  alchemy/recipes.json
+  alchemy/users/<username>.json
   groups/<id>.json
   entrance-groups/<id>.json
   inbox/<id>.json
@@ -154,11 +175,17 @@ backup/
   2026-08-11T201530Z.tar.gz   # data/ only; sibling of data/, never nested inside it
 ```
 
-Managers can create, download, and delete archives from **Data**. Back up `data/` before swapping a release. See [DEPLOY.md](DEPLOY.md) for the SSH helper and restore notes.
+Managers can create, download, restore, and delete archives from **Data**. Restore fully replaces `data/` and archives the previous contents first. NVK (`proseden-update`) writes one snapshot before it touches the app; a hand update should run `deploy/backup-data.sh` first. See [DEPLOY.md](DEPLOY.md) for the SSH helper and restore notes.
+
+A planned stop (SIGTERM) writes SHA-256 hashes of live session tokens to `data/.sessions.json` (mode 0600). The next boot loads that file as a one-shot fallback and deletes it, so a save after an update still authenticates. Idle cookies, crashes, and a second restart without a visit may still log people out. The handoff file is not included in data tarballs.
+
+Staff roles: `moderator`, `topographer`, `manager`, `questor`. Questors edit personal quest JSON under `quests/users/` (namespace `user.<username>.*`); managers register official named quests under Data → Quests and can edit any personal quest file from that page.
 
 Prose files use YAML frontmatter plus `## detail:<slug>` sections. Hash-leading lines in body/detail text are saved escaped (`\#`, `\##`) so they cannot be mistaken for section markers.
 
 **Collect** adds an inventory link to the artefact; it does not remove it from its home scene. Multiple readers may collect the same artefact.
+
+Each user has a permanent **home scene** (created at registration) where ejected or orphaned guest artefacts are returned. Home scenes cannot be deleted. **Public repository** scenes allow any signed-in user to place artefacts when the scene is public.
 
 **Subscribe** on a scene (signed-in readers) watches title, description, details, and artefacts at that scene. Changes deliver a coalesced `scene_update` inbox notice (kinds merge; no prose text). Exits and ACL edits do not notify.
 

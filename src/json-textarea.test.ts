@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatJsonTextarea, prepareJsonTextarea } from "./json-textarea.js";
+import {
+  displayJsonTextarea,
+  formatJsonTextarea,
+  prepareJsonTextarea,
+} from "./json-textarea.js";
 
 describe("formatJsonTextarea", () => {
   it("pretty-prints and turns in-string \\n into real line breaks", () => {
@@ -15,6 +19,25 @@ describe("formatJsonTextarea", () => {
   it("does not treat \\\\n as a line break", () => {
     const formatted = formatJsonTextarea({ raw: "\\n" });
     expect(formatted).toBe(`{\n  "raw": "\\\\n"\n}`);
+  });
+});
+
+describe("displayJsonTextarea", () => {
+  it("keeps compact structural layout and only unescapes in-string \\n", () => {
+    const source = `{
+  "rules": [
+    { "id": "hamlet", "when": { "all": [{ "scenesOwned": 5 }] } }
+  ],
+  "card": "line1\\nline2"
+}
+`;
+    expect(displayJsonTextarea(source)).toBe(`{
+  "rules": [
+    { "id": "hamlet", "when": { "all": [{ "scenesOwned": 5 }] } }
+  ],
+  "card": "line1
+line2"
+}`);
   });
 });
 

@@ -3,7 +3,7 @@ export type Visibility = "public" | "private";
 /** Hierarchical: manage ⊃ edit ⊃ read */
 export type Right = "read" | "edit" | "manage";
 
-export type StaffRole = "moderator" | "topographer" | "manager";
+export type StaffRole = "moderator" | "topographer" | "manager" | "questor";
 
 export interface Grant {
   /** Username or `"*"` for everyone (still subject to deny). */
@@ -19,6 +19,19 @@ export interface Deny {
 
 export interface InventoryItem {
   artefactId: number;
+}
+
+/** Held badge on a reader’s shelf (`data/users/<name>.badges.json`). */
+export interface UserBadge {
+  badge: string;
+  /** ISO timestamp. Omitted when unknown. */
+  grantTime?: string;
+}
+
+/** Derived, memory-only profile numbers. Absent key = not evaluated yet (not zero). */
+export interface UserCache {
+  /** Owner-only scene count (`Scene.owner === username`). */
+  scenesOwned?: number;
 }
 
 export interface UserRecord {
@@ -37,8 +50,12 @@ export interface UserRecord {
   denies?: Deny[];
   /** Last successfully rendered scene (resume-on-login). */
   lastSceneId?: number;
+  /** Permanent home scene for ejected / orphaned guest artefacts. Immutable after creation. */
+  homeSceneId?: number;
   /** ISO timestamp of last location note / presence flush. */
   lastSeenAt?: string;
+  /** Derived, memory-only. Never persist. */
+  cache?: UserCache;
 }
 
 export interface SceneMeta {
@@ -54,15 +71,17 @@ export interface SceneMeta {
   entranceGroupId?: string | null;
   /** Public junction: any signed-in user may add exits originating from this scene. */
   isJunction?: boolean;
+  /** Public repository: any signed-in user may place artefacts in this scene. */
+  isRepository?: boolean;
   /** @deprecated migrated to grants on load */
   invites?: string[];
   /**
-   * Scene access gate (FlagRef). Body is never gated; teleport/go/join must
-   * pass this after ACL unless owner/edit/manage/staff.
+   * Scene access gate (FlagRef condition). Body is never gated; teleport/go/join
+   * must pass this after ACL unless owner/edit/manage/staff.
    */
   when?: import("./logic.js").FlagRef;
   whenDenied?: string;
-  /** Per detail name: FlagRef (hide when false). */
+  /** Per detail name: FlagRef condition (hide when false). */
   detailWhen?: Record<string, import("./logic.js").FlagRef>;
   /** @deprecated load-only; prefer inverse FlagRef pairs on detailWhen */
   detailSwap?: Record<string, string[]>;
@@ -78,7 +97,7 @@ export interface ExitRecord {
   nickname: string;
   toSceneId: number;
   createdAt: string;
-  /** FlagRef gate; missing flag == false. Prefix `not.` to invert. */
+  /** FlagRef condition; empty = ungated. Invert with `not.` on the payload. */
   when?: import("./logic.js").FlagRef;
   whenDenied?: string;
   /** Omit from exit lists until when is true. */
@@ -93,9 +112,9 @@ export interface ArtefactMeta {
   tags: string[];
   createdAt: string;
   modifiedAt: string[];
-  /** FlagRef: listed/collectable on home scene only when true. */
+  /** FlagRef condition: listed/collectable on home scene only when true. */
   when?: import("./logic.js").FlagRef;
-  /** Per detail name: FlagRef (hide when false). */
+  /** Per detail name: FlagRef condition (hide when false). */
   detailWhen?: Record<string, import("./logic.js").FlagRef>;
   /** @deprecated load-only; prefer inverse FlagRef pairs on detailWhen */
   detailSwap?: Record<string, string[]>;
@@ -132,6 +151,16 @@ export interface StaffFile {
 export interface SettingsFile {
   /** Peer free-text Messages compose. Missing file defaults to enabled. */
   peerMessagingEnabled: boolean;
+  /** Guests may open Live on public scenes. Missing defaults to enabled. */
+  guestLiveEnabled: boolean;
+  /** Say and shout in Live. Missing defaults to enabled. */
+  liveChatEnabled: boolean;
+  /** New account registration. Missing defaults to enabled. */
+  registrationEnabled: boolean;
+  /** Non-managers may edit scenes, artefacts, profile, etc. Missing defaults to enabled. */
+  nonManagerEditingEnabled: boolean;
+  /** Non-managers may view the site. Missing defaults to enabled. */
+  nonManagerViewEnabled: boolean;
 }
 
 export interface MetaFile {

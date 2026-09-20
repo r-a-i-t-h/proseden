@@ -292,7 +292,7 @@ describe("profile and password change", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("<h1>alice</h1>");
-    expect(html).toContain("0 scenes · 0 artefacts");
+    expect(html).toContain("1 scene · 0 artefacts");
     expect(html).toContain("A keeper of quiet gardens.");
     expect(html).toContain('href="u/alice?hands"');
     expect(html).toContain(">hands</a>");
@@ -352,7 +352,7 @@ describe("profile and password change", () => {
     const res = await app().request("/u/alice", { headers: { Accept: "text/html" } });
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("1 scene · 2 artefacts · last seen ");
+    expect(html).toContain("2 scenes · 2 artefacts · last seen ");
     expect(html).toMatch(/last seen <time datetime="[^"]+" title="[^"]+">1m ago<\/time>/);
     expect(html).not.toContain("Bob's rake");
   });
@@ -399,11 +399,49 @@ describe("profile and password change", () => {
       username: "alice",
       description: "Soft-spoken.",
       details: { coat: "Patched at the elbow." },
-      ownedScenes: 1,
+      cache: { scenesOwned: 2 },
       ownedArtefacts: 1,
       badges: [],
       lastSeenAt,
     });
+  });
+
+  it("shows badge grantTime and unknown when missing", async () => {
+    await world.saveQuest({
+      name: "demo",
+      rules: [],
+      badges: [{ id: "demo.winner", title: "Winner" }],
+    });
+    await world.saveUserBadges("alice", [
+      { badge: "demo.winner", grantTime: "2026-01-02T03:04:05.000Z" },
+      { badge: "demo.bare" },
+    ]);
+
+    const json = await app().request("/u/alice", {
+      headers: { Accept: "application/json" },
+    });
+    expect(json.status).toBe(200);
+    expect(await json.json()).toMatchObject({
+      badges: [
+        { id: "demo.winner", title: "Winner", grantTime: "2026-01-02T03:04:05.000Z" },
+        { id: "demo.bare", title: "demo.bare", grantTime: null },
+      ],
+    });
+
+    const html = await (await app().request("/u/alice", { headers: { Accept: "text/html" } })).text();
+    expect(html).toContain("Winner");
+    expect(html).toContain("unknown");
+    expect(html).toMatch(/<time datetime="2026-01-02T03:04:05\.000Z"/);
+
+    const own = await app().request("/profile", {
+      headers: { Accept: "text/html", ...auth() },
+    });
+    expect(own.status).toBe(200);
+    const ownHtml = await own.text();
+    expect(ownHtml).toMatch(
+      /Winner \(demo\.winner\) · <time datetime="2026-01-02T03:04:05\.000Z" title="2026-01-02T03:04:05\.000Z">/,
+    );
+    expect(ownHtml).toContain("demo.bare (demo.bare) · unknown");
   });
 
   it("returns 404 for an unknown user", async () => {

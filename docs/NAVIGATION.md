@@ -11,7 +11,7 @@ See [SPEC.md](SPEC.md) for the product rules; this document describes the v1 HTT
 | Teleport | `GET /s/:id` | Caller names a scene id directly |
 | Navigate (go) | `GET /s/:id/go/:exit` | Caller follows a directed exit from the current scene |
 
-Exits are stored per origin scene (`scenes/<id>.exits.json`) with an incremental `exitId`, a `nickname`, and `toSceneId`. `:exit` may be the numeric id or the nickname (case-insensitive).
+Exits are stored per origin scene (`scenes/<id>.exits.json`) with an incremental `exitId`, a `nickname`, and `toSceneId`. `:exit` may be the numeric id or the nickname (case-insensitive). Display order is the stored array order (creation order until the origin is reordered by manage/topographer via `POST /s/:id/exits/reorder`).
 
 HTML scene pages list exits under **Exits**, offer **Subscribe** / **Unsubscribe** with a subscriber count (signed-in readers), and expose an **Actions** section: teleport to a typed scene id (sending `?from=<current>`), and invite a signed-in user to view the current scene.
 
@@ -66,17 +66,17 @@ Ordinary Travel / `GET /s/:id` do **not** use `asJoin`. Skipping the entrance wh
 ### Teleport HTTP flow
 
 1. Resolve target with `from` / Referer.
-2. If redirected: require `canRead` on the **entrance**; if not readable → `401`/`403` with “Entrance to this area is not reachable.”; if readable and entrance FlagRef gate fails (non-bypass) → `401`/`403` with `whenDenied` or default; if ok → `302` to `/s/<entrance>`.
-3. If not redirected: require `canRead` on the requested scene; missing → `404`; unreadable → `401`/`403`; then FlagRef scene access gate (owner / edit / manage / staff bypass).
+2. If redirected: require `canRead` on the **entrance**; if not readable → `401`/`403` with “Entrance to this area is not reachable.”; if readable and entrance condition gate fails (non-bypass) → `401`/`403` with `whenDenied` or default; if ok → `302` to `/s/<entrance>`.
+3. If not redirected: require `canRead` on the requested scene; missing → `404`; unreadable → `401`/`403`; then FlagRef scene access condition (owner / edit / manage / staff bypass).
 
 ### Go HTTP flow
 
 1. Require `canRead` on the **from** scene (cannot leave an unreadable scene).
 2. Resolve the exit by id or nickname; missing → `404`.
-3. Require exit FlagRef gate (`exitAllowed`); fail → `403` with `whenDenied` or default.
+3. Require exit FlagRef condition (`exitAllowed`); fail → `403` with `whenDenied` or default.
 4. Resolve teleport target with `fromId` = current scene.
 5. Require `canRead` on the **resolved** destination; fail → `401`/`403`.
-6. Require destination FlagRef scene access gate (same bypass rules as teleport).
+6. Require destination FlagRef scene access condition (same bypass rules as teleport).
 7. `302` to `/s/<resolved>?from=<fromId>`.
 
 So an exit that points at an inner room still delivers an outsider to the group entrance, not past it. A locked exit plus a gated destination scene must both be authored explicitly (no auto-pairing).
@@ -92,6 +92,8 @@ When **adding** exits (`POST /s/:id/exits`):
 
 Public junctions let other writers attach outbound edges *from* a shared hub without managing that hub’s prose or ACL. Linking *to* a public scene never required junction status.
 
+**Public repositories** (`isRepository: true` and `visibility: "public"`) let any signed-in user place artefacts (create or re-home) without edit rights on the scene. Scene managers still control prose and ACL; repository status only opens placement.
+
 ## Exit requests
 
 When you can read a scene but cannot add exits from it, Edit → Exits offers **Request exit** instead of Add. That posts `POST /s/:id/exit-requests` with a nickname, a destination scene you own, and an optional note.
@@ -102,7 +104,7 @@ Exit requests and view invites remain world-building aids. Peer free-text notes 
 
 ## Peer messages
 
-When peer messaging is enabled (default), a signed-in user can compose on the Messages page (`POST /inbox/send` with `uid` and `body`, max 2000 characters; subject is always `Personal message from <sender>`). Recipients see a `message` entry and may Reply (prefills To) or Delete. Manager notices from `/msg` use subject `Manager message from <manager>`. There is no content filter; rate limits curb API spam. Managers can disable peer messaging or purge all inbox rows from a username on `/msg`.
+When peer messaging is enabled (default), a signed-in user can compose on the Messages page (`POST /inbox/send` with `uid` and `body`, max 2000 characters; subject is always `Personal message from <sender>`). Recipients see a `message` entry and may Reply (prefills To) or Delete. Manager notices from `/msg` use subject `Manager message from <manager>`. Quest badge grants deliver a `notice` from `Proseden` (`You've earned a badge …`, body = badge description when set). There is no content filter; rate limits curb API spam. Managers can disable peer messaging or purge all inbox rows from a username on `/msg`.
 
 ## Manager messages
 
@@ -149,6 +151,7 @@ Assume entrance group “Wing”: entrance = scene `2` (private, Bob may read), 
 | `POST` | `/inbox/send` | Peer free-text message (auth; when enabled) |
 | `POST` | `/inbox/:id/confirm` | Confirm exit request |
 | `POST` | `/inbox/:id/delete` | Delete inbox message |
+| `GET` | `/dashboard` | World overview counts (manager) |
 | `GET` | `/msg` | Manager notices + peer-messaging controls (manager) |
 | `POST` | `/msg` | Send to one user or all (manager) |
 | `POST` | `/msg/peer-messaging` | Enable/disable peer messaging (manager) |

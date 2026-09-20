@@ -1,3 +1,4 @@
+import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 
@@ -9,18 +10,21 @@ export function sessionCookieNameForBase(assetBase: string): string {
   return `proseden_${slug}_session`;
 }
 
+/** Bearer token or session cookie — same resolution as `loadUser`. */
+export function requestSessionToken(c: Context): string | undefined {
+  const header = c.req.header("authorization");
+  if (header?.toLowerCase().startsWith("bearer ")) {
+    const token = header.slice(7).trim();
+    return token || undefined;
+  }
+  const cookieName = c.get("sessionCookieName") || DEFAULT_COOKIE;
+  return getCookie(c, cookieName) || undefined;
+}
+
 export const loadUser = createMiddleware(async (c, next) => {
   const sessions = c.get("sessions");
   const world = c.get("world");
-  const cookieName = c.get("sessionCookieName") || DEFAULT_COOKIE;
-
-  const header = c.req.header("authorization");
-  let token: string | undefined;
-  if (header?.toLowerCase().startsWith("bearer ")) {
-    token = header.slice(7).trim();
-  } else {
-    token = getCookie(c, cookieName);
-  }
+  const token = requestSessionToken(c);
 
   const session = sessions.get(token);
   if (session) {

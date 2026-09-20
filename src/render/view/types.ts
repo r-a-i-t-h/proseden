@@ -7,6 +7,7 @@ export type EditorKind = "plain" | "prose" | "json";
 export type MetaPart =
   | string
   | { type: "relativeAge"; iso: string }
+  | { type: "labeledAge"; label: string; iso: string }
   | { type: "userLink"; username: string };
 
 export type LinkListItem = {
@@ -22,6 +23,13 @@ export type LinkListItem = {
   textId?: string | number;
 };
 
+export type StatListItem = {
+  label: string;
+  value: string | number;
+  /** Optional drill-down; label is linked when set. */
+  href?: string;
+};
+
 export type Control =
   | {
       type: "text";
@@ -32,6 +40,7 @@ export type Control =
       autocomplete?: string;
       placeholder?: string;
       inputMode?: string;
+      maxlength?: number;
     }
   | {
       type: "number";
@@ -99,17 +108,19 @@ export type Node =
   | { type: "crumb"; href: string; label: string; history?: boolean }
   | { type: "byline"; username: string }
   | { type: "prose"; text: string }
-  | { type: "muted"; text: string }
+  | { type: "muted"; parts: MetaPart[] }
   | { type: "notice"; text: string; kind?: "status" | "error" | "flash" }
   | { type: "para"; text: string; class?: string }
   | { type: "meta"; parts: MetaPart[] }
   | { type: "linkList"; items: LinkListItem[] }
+  | { type: "statList"; items: StatListItem[] }
   | { type: "section"; title: string; children: Node[]; channel?: Channel }
   | {
       type: "details";
       summary: string;
       open?: boolean;
       class?: string;
+      attrs?: Record<string, string>;
       children: Node[];
     }
   | { type: "userLink"; username: string }
@@ -132,6 +143,15 @@ export type Node =
       value: unknown;
       example: string;
       note: string;
+      /** When set, use this source text instead of pretty-printing `value`. */
+      text?: string;
+    }
+  | {
+      type: "table";
+      class?: string;
+      headers: string[];
+      rows: Array<{ cells: Node[]; class?: string }>;
+      empty?: string;
     }
   | { type: "button"; label: string; class?: string; buttonType?: "submit" | "button" }
   | { type: "pre"; text: string; class?: string }

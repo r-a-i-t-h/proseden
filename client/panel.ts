@@ -71,7 +71,8 @@ function bootPanel(): void {
   const root: HTMLElement = rootEl;
 
   const canLive = boot.liveSceneId !== undefined && !!(boot.user || boot.allowGuestLive);
-  const canEdit = !!boot.user;
+  const canEdit =
+    !!boot.user && (boot.isManager === true || boot.nonManagerEditingEnabled !== false);
 
   const livePane = el("div", { class: "panel-pane", id: "live-pane", hidden: true });
   const editPane = el("div", { class: "panel-pane", id: "edit-pane", hidden: true });
@@ -80,7 +81,6 @@ function bootPanel(): void {
   let live: LiveController | null = null;
   let editMounted = false;
   let editToolbar: HTMLElement | null = null;
-  let mode: PanelMode = "view";
 
   const headerLive = document.getElementById("panel-live");
   const headerEdit = document.getElementById("panel-edit");
@@ -118,7 +118,6 @@ function bootPanel(): void {
   function applyMode(next: PanelMode, persist = true): void {
     if (next === "edit" && !canEdit) next = canLive ? "live" : "view";
     if (next === "live" && !canLive) next = "view";
-    mode = next;
     if (persist) writeMode(next, !!boot.user);
 
     const open = next === "live" || next === "edit";
@@ -130,9 +129,11 @@ function bootPanel(): void {
     if (next === "live" || next === "edit") {
       ensureLive();
       if (canEdit) ensureEdit();
+      live?.setUiMode(next);
       live?.connect();
     } else {
       live?.disconnect();
+      live?.setUiMode(next);
     }
 
     livePane.hidden = next !== "live";
@@ -181,8 +182,10 @@ function bootPanel(): void {
 
 /** Focus username when Log in / Register details open (browser autofill target). */
 function wireAuthPanelFocus(): void {
-  for (const details of document.querySelectorAll<HTMLDetailsElement>(
-    "#auth-panel details.login, #auth-panel details.register",
+  for (const details of Array.from(
+    document.querySelectorAll<HTMLDetailsElement>(
+      "#auth-panel details.login, #auth-panel details.register",
+    ),
   )) {
     details.addEventListener("toggle", () => {
       if (!details.open) return;
@@ -195,24 +198,26 @@ function wireAuthPanelFocus(): void {
 }
 
 wireAuthPanelFocus();
-wireAlchemyPanel();
+wirePersistedDetails();
 bootPanel();
 
-const ALCHEMY_OPEN_KEY = "proseden-alchemy-open";
+/**
+ * Persist <details data-persist-open="storage-key"> open/closed across navigations.
+ * Stored "1"/"0" overrides the markup default; absent key leaves the server default.
+ */
+function wirePersistedDetails(): void {
+  for (const panel of Array.from(
+    document.querySelectorAll<HTMLDetailsElement>("details[data-persist-open]"),
+  )) {
+    const key = panel.getAttribute("data-persist-open");
+    if (!key) continue;
 
-/** Persist Inventory Alchemy <details> open state across combine redirects. */
-function wireAlchemyPanel(): void {
-  const panel = document.querySelector<HTMLDetailsElement>("details[data-alchemy-panel]");
-  if (!panel) return;
+    const stored = localStorage.getItem(key);
+    if (stored === "1") panel.open = true;
+    else if (stored === "0") panel.open = false;
 
-  if (panel.open) {
-    localStorage.setItem(ALCHEMY_OPEN_KEY, "1");
-  } else if (localStorage.getItem(ALCHEMY_OPEN_KEY) === "1") {
-    panel.open = true;
+    panel.addEventListener("toggle", () => {
+      localStorage.setItem(key, panel.open ? "1" : "0");
+    });
   }
-
-  panel.addEventListener("toggle", () => {
-    if (panel.open) localStorage.setItem(ALCHEMY_OPEN_KEY, "1");
-    else localStorage.removeItem(ALCHEMY_OPEN_KEY);
-  });
 }

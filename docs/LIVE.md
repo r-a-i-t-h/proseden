@@ -11,7 +11,7 @@ Detail views (`/s/:id?card`) and artefact pages (`/a/:id`) keep you present in t
 | Mode | UI | Presence |
 |---|---|---|
 | Live | Chat, who’s here, online + Join | Connected |
-| Edit | Existing editor (form state kept when switching to Live) | Connected (same as Live) |
+| Edit | Existing editor (form state kept when switching to Live) | Connected (same as Live); new says/shouts from others show a brief (~5s) toast with a **Live** switch |
 | View | Sidebar closed | Disconnected — not visible, not joinable |
 
 Preference: signed-in users store `localStorage` key `proseden-panel` = `live` \| `edit` (absent = View). Guests do **not** restore Live from localStorage — they must click Live; that choice lasts for the tab via `sessionStorage` `proseden-panel-guest-live`. Legacy `sessionStorage` `proseden-edit` migrates to Edit once. `?edit` still opens Edit.
@@ -23,7 +23,7 @@ Preference: signed-in users store `localStorage` key `proseden-panel` = `live` \
 - **POST** `/live/say`, `/live/shout` — require an active presence connection.
 - **POST** `/live/ping` — client proof-of-life (kept running in background tabs). Server SSE pings keep the proxy socket alive but do **not** count as presence.
 - After **3 minutes** without a client ping, idle sweep drops the connection. Reconnect grace is **60 seconds** so navigations and brief socket drops do not emit leave/arrive.
-- Guests get a short-lived guest cookie on public scenes; join requires sign-in. Login, register, and logout clear that cookie and kick the `g:` presence so it cannot linger next to the signed-in user.
+- Guests get a short-lived guest cookie on public scenes; join requires sign-in. Login, register, and logout clear that cookie and kick the `g:` presence so it cannot linger next to the signed-in user. Logout also kicks the signed-in `u:` presence immediately and posts `"Name logged out."` instead of a plain leave.
 
 ## Chat linger
 
@@ -45,7 +45,26 @@ Logged-in users get `lastSceneId` / `lastSeenAt` on `data/users/<name>.json` (de
 
 ## Staff
 
-Moderators/managers: `/live/admin` (recent users, buffer counts/ages, kick live presence, purge all).
+Moderators/managers: `/live/admin` (recent users, buffer counts/ages, kick live presence, purge all). Managers also get **Security** toggles persisted in `data/settings.json`:
+
+**Live**
+
+- **Guest live** — when off, only signed-in readers may connect to Live (SSE, say, shout).
+- **Live chat** — when off, say and shout return 403; presence and join still work.
+
+**Access**
+
+- **Registration** — when off, `POST /auth/register` is rejected and the register form is hidden.
+- **Non-manager editing** — when off, non-managers cannot mutate content (scenes, artefacts, exits, profile, etc.); gameplay, chat, and inbox still work.
+- **Non-manager view** — when off, only managers may view pages; others get a closed page with login.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/live/admin/guest-live` | `{ enabled }` manager |
+| POST | `/live/admin/live-chat` | `{ enabled }` manager |
+| POST | `/live/admin/registration` | `{ enabled }` manager |
+| POST | `/live/admin/non-manager-editing` | `{ enabled }` manager |
+| POST | `/live/admin/non-manager-view` | `{ enabled }` manager |
 
 ## API sketch
 
@@ -62,3 +81,8 @@ Moderators/managers: `/live/admin` (recent users, buffer counts/ages, kick live 
 | GET | `/live/admin` | HTML/JSON |
 | POST | `/live/admin/kick` | `{ userKey }` moderator — drop that presence now |
 | POST | `/live/admin/purge` | Clear all buffers |
+| POST | `/live/admin/guest-live` | `{ enabled }` manager |
+| POST | `/live/admin/live-chat` | `{ enabled }` manager |
+| POST | `/live/admin/registration` | `{ enabled }` manager |
+| POST | `/live/admin/non-manager-editing` | `{ enabled }` manager |
+| POST | `/live/admin/non-manager-view` | `{ enabled }` manager |

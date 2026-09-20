@@ -9,6 +9,14 @@ export function formatJsonTextarea(value: unknown): string {
   return transformJsonStringNewlines(JSON.stringify(value, null, 2), "unescape");
 }
 
+/**
+ * Show existing JSON source in a textarea without re-indenting.
+ * Only turns in-string `\n` escapes into real line breaks for editing.
+ */
+export function displayJsonTextarea(text: string): string {
+  return transformJsonStringNewlines(text.replace(/\n$/, ""), "unescape");
+}
+
 /** Rewrite in-string line breaks to `\n` so the text is valid for JSON.parse. */
 export function prepareJsonTextarea(text: string): string {
   return transformJsonStringNewlines(text, "escape");

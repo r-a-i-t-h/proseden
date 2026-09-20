@@ -2,8 +2,8 @@
 
 Decision record for how Proseden builds HTML and text responses, and how optional client editors may upgrade form controls.
 
-**Status:** implemented (document model + preference-gated editors)  
-**Related:** [SPEC.md](SPEC.md), [LIVE.md](LIVE.md), [NAVIGATION.md](NAVIGATION.md)
+**Status:** implemented (document model + preference-gated editors). PageView migration of remaining string pages is finished — see [ARCHITECTURE.md](ARCHITECTURE.md).  
+**Related:** [SPEC.md](SPEC.md), [ARCHITECTURE.md](ARCHITECTURE.md), [LIVE.md](LIVE.md), [NAVIGATION.md](NAVIGATION.md)
 
 ---
 
@@ -21,7 +21,7 @@ Decision record for how Proseden builds HTML and text responses, and how optiona
 
 Proseden is intentionally:
 
-- Hono + TypeScript SSR via string builders in `src/render/html.ts` and `src/render/text.ts`
+- Hono + TypeScript SSR via PageView composers (`src/render/view/`) serialized by `toHtml` / `toText`; `src/render/html.ts` is the site shell only
 - Format negotiation so curl gets text (`src/render/format.ts`)
 - Progressive enhancement for Live/Edit (`LIVE.md`, `client/panel.ts`) — without JavaScript, HTML stays hyperlinked text
 - No template engine and no UI framework — reuse is function-level
@@ -213,7 +213,7 @@ Even with JS enabled, a user may prefer old-school JSON/prose editing. Capabilit
 ### Highest-value upgrades
 
 1. **Prose** — toolbar/shortcuts for Proseden adornments (`_em_`, `*bold*`, links, headings) matching `formatProse`
-2. **JSON** — validate/format on blur; keep the existing “i” help `<details>`; reuse `formatJsonTextarea` / `prepareJsonTextarea`
+2. **JSON** — validate on blur (do not rewrite); optional **format** button for pretty-print; keep the existing “i” help `<details>`; reuse `formatJsonTextarea` / `prepareJsonTextarea` / `displayJsonTextarea`
 
 Do **not** turn crumbs, username links, or prose *output* into custom elements. Those stay ordinary HTML from `toHtml`.
 
